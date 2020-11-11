@@ -13,3 +13,18 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# vim
+*.swp
+*.swo
+
+# IntelliJ IDEA
+.idea
+sia.iml
+
+# VSCode debug files
+.vscode
+debug.test
+
+# OSX auto-generated file
+**/.DS_Store
