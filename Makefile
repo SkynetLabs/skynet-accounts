@@ -15,19 +15,21 @@ all: release
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./api ./build ./db ./user
+pkgs = ./api ./build ./database ./user
 
-# lockcheckpkgs are the packages that are checked for locking violations.
-lockcheckpkgs = ./api ./build ./db ./user
+# integration-pkgs defines the packages which contain integration tests
+integration-pkgs = ./test
 
 # fmt calls go fmt on all packages.
 fmt:
 	gofmt -s -l -w $(pkgs)
 
 # vet calls go vet on all packages.
+# We don't check composite literals because we need to use unkeyed fields for
+# MongoDB's BSONs and that sets vet off.
 # NOTE: go vet requires packages to be built in order to obtain type info.
 vet:
-	go vet $(pkgs)
+	go vet -composites=false $(pkgs)
 
 # markdown-spellcheck runs codespell on all markdown files that are not
 # vendored.
@@ -50,17 +52,24 @@ endif
 
 # lint-analyze runs the custom analyzers.
 lint-analyze:
-	analyze -lockcheck=false -- $(pkgs)
-	analyze -lockcheck -- $(lockcheckpkgs)
+	analyze -lockcheck -- $(pkgs)
 
-# spellcheck checks for misspelled words in comments or strings.
-spellcheck: markdown-spellcheck
-	golangci-lint run -c .golangci.yml -E misspell
+# start-mongo starts a local mongoDB container with no persistence.
+# The first command stops any running testing container but if there is none the
+# error is ignored.
+start-mongo:
+	docker stop skynet-accounts-mongo-test-db 2>/dev/null || true
+	docker run \
+     --rm \
+     --detach \
+     --name skynet-accounts-mongo-test-db \
+     -p 127.0.0.1:37017:27017 \
+     -e MONGO_INITDB_ROOT_USERNAME=admin \
+     -e MONGO_INITDB_ROOT_PASSWORD=ivolocalpass \
+     mongo
 
-# staticcheck runs the staticcheck tool
-# NOTE: this is not yet enabled in the CI system.
-staticcheck:
-	staticcheck $(pkgs)
+stop-mongo:
+	docker stop skynet-accounts-mongo-test-db
 
 # debug builds and installs debug binaries. This will also install the utils.
 debug:
@@ -82,13 +91,16 @@ release-race:
 release-util:
 	go install -tags='netgo' -ldflags='-s -w $(ldflags)' $(release-pkgs) $(util-pkgs)
 
-
 test:
-	go test -short -tags='debug testing netgo' -timeout=5s $(pkgs) -run=$(run) -count=$(count)
-test-v:
-	GORACE='$(racevars)' go test -race -v -short -tags='debug testing netgo' -timeout=15s $(pkgs) -run=$(run) -count=$(count)
+	go test -short -tags='debug testing netgo' -timeout=5s $(pkgs) -run=. -count=$(count)
 test-long: clean fmt vet lint-ci
 	@mkdir -p cover
-	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=3600s $(pkgs) -run=$(run) -count=$(count)
+	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=3600s $(pkgs) -run=. -count=$(count)
 
-.PHONY: all fmt install release clean test test-v test-long
+# test-int always returns a zero exit value! Only use it manually!
+test-int: clean fmt vet lint-ci start-mongo
+	@mkdir -p cover
+	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -tags='testing debug netgo' -timeout=3600s $(integration-pkgs) -run=. -count=$(count) ; \
+	make stop-mongo
+
+.PHONY: all fmt install release clean test test-int test-long stop-mongo

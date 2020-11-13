@@ -8,6 +8,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+// API is ...
 type API struct {
 	Router *httprouter.Router
 }
