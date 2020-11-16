@@ -4,19 +4,64 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/NebulousLabs/skynet-accounts/user"
+
+	"github.com/NebulousLabs/skynet-accounts/database"
+
 	"github.com/julienschmidt/httprouter"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 // userHandlerGET returns information about an existing user.
 func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	// TODO Implement
-	WriteJSON(w, struct{ msg string }{"Not implemented."})
+	// TODO Limit to the user themselves.
+	if err := req.ParseForm(); err != nil {
+		WriteError(w, errors.New("Failed to parse parameters."), http.StatusBadRequest)
+	}
+	email := req.Form.Get("email")
+	if email == "" {
+		WriteError(w, errors.New("No email provided."), http.StatusBadRequest)
+		return
+	}
+	users, err := api.DB.UserFindAllByField(req.Context(), "email", email)
+	if err != nil && err != database.ErrUserNotFound {
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if errors.Contains(err, database.ErrUserNotFound) || len(users) == 0 {
+		WriteError(w, database.ErrUserNotFound, http.StatusNotFound)
+		return
+	}
+	WriteJSON(w, users[0])
 }
 
 // userHandlerPOST creates a new user.
 func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	// TODO Implement
-	WriteJSON(w, struct{ msg string }{"Not implemented."})
+	if err := req.ParseMultipartForm(64 * 1_000_000); err != nil {
+		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
+		return
+	}
+	email := (user.Email)(req.PostFormValue("email"))
+	if !email.Validate() {
+		WriteError(w, user.ErrInvalidEmail, http.StatusBadRequest)
+		return
+	}
+	user := &user.User{
+		FirstName: req.PostFormValue("firstName"),
+		LastName:  req.PostFormValue("lastName"),
+		Email:     email,
+	}
+	ins, err := api.DB.UserSave(req.Context(), user)
+	if err != nil {
+		WriteError(w, errors.AddContext(err, "failed to save user"), http.StatusInternalServerError)
+		return
+	}
+	if ins {
+		w.WriteHeader(http.StatusCreated)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+	WriteJSON(w, user)
 }
 
 // userHandlerPUT updates an existing user.

@@ -6,27 +6,70 @@ import (
 	"reflect"
 	"testing"
 
-	"gitlab.com/NebulousLabs/errors"
-
 	"github.com/NebulousLabs/skynet-accounts/database"
-
 	"github.com/NebulousLabs/skynet-accounts/user"
+
+	"gitlab.com/NebulousLabs/errors"
 )
 
-// initEnv sets the environment variables to what we have defined in Makefile.
-func initEnv() {
-	e1 := os.Setenv("SKYNET_DB_HOST", "localhost")
-	e2 := os.Setenv("SKYNET_DB_PORT", "27017") // DEBUG
-	//e2 := os.Setenv("SKYNET_DB_PORT", "37017")
-	e3 := os.Setenv("SKYNET_DB_USER", "admin")
-	e4 := os.Setenv("SKYNET_DB_PASS", "ivolocalpass")
-	if err := errors.Compose(e1, e2, e3, e4); err != nil {
-		panic(err)
+// TestDatabase_UserFindAllByField ensures that UserFindAllByField works as expected.
+func TestDatabase_UserFindAllByField(t *testing.T) {
+	initEnv()
+	username := t.Name()
+	ctx := context.Background()
+
+	db, err := database.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add three users.
+	u := &user.User{
+		FirstName: username,
+		LastName:  "One",
+		Email:     (user.Email)(username + "_one@pratchett.com"),
+	}
+	if err = insertUser(db, u); err != nil {
+		t.Fatal(err)
+	}
+	defer func(uid string) {
+		_, _ = db.UserDeleteByID(nil, uid)
+	}(u.ID.Hex())
+	u = &user.User{
+		FirstName: username,
+		LastName:  "Two",
+		Email:     (user.Email)(username + "_two@pratchett.com"),
+	}
+	if err = insertUser(db, u); err != nil {
+		t.Fatal(err)
+	}
+	defer func(uid string) {
+		_, _ = db.UserDeleteByID(nil, uid)
+	}(u.ID.Hex())
+	u = &user.User{
+		FirstName: "John",
+		LastName:  "Smith",
+		Email:     "John@Smith.com",
+	}
+	if err = insertUser(db, u); err != nil {
+		t.Fatal(err)
+	}
+	defer func(uid string) {
+		_, _ = db.UserDeleteByID(nil, uid)
+	}(u.ID.Hex())
+
+	// Find all users with first name `username`. It should be two.
+	us, err := db.UserFindAllByField(nil, "firstName", username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(us) != 2 {
+		t.Fatalf("Expected to find two users, found %d\n", len(us))
 	}
 }
 
-// TestDB_UserFindByID ensures UserFindByID works as expected.
-func TestDB_UserFindByID(t *testing.T) {
+// TestDatabase_UserFindByID ensures UserFindByID works as expected.
+func TestDatabase_UserFindByID(t *testing.T) {
 	initEnv()
 	username := t.Name()
 	ctx := context.Background()
@@ -64,8 +107,8 @@ func TestDB_UserFindByID(t *testing.T) {
 	}
 }
 
-// TestDB_UserSave ensures UserSave works as expected.
-func TestDB_UserSave(t *testing.T) {
+// TestDatabase_UserSave ensures UserSave works as expected.
+func TestDatabase_UserSave(t *testing.T) {
 	initEnv()
 	username := t.Name()
 	ctx := context.Background()
@@ -141,8 +184,8 @@ func TestDB_UserSave(t *testing.T) {
 	}
 }
 
-// TestDB_UserDeleteByID ensures UserDeleteByID works as expected.
-func TestDB_UserDeleteByID(t *testing.T) {
+// TestDatabase_UserDeleteByID ensures UserDeleteByID works as expected.
+func TestDatabase_UserDeleteByID(t *testing.T) {
 	initEnv()
 	ctx := context.Background()
 
@@ -183,6 +226,17 @@ func TestDB_UserDeleteByID(t *testing.T) {
 	_, err = db.UserFindByID(ctx, u.ID.Hex())
 	if err != database.ErrUserNotFound {
 		t.Fatal(err)
+	}
+}
+
+// initEnv sets the environment variables to what we have defined in Makefile.
+func initEnv() {
+	e1 := os.Setenv("SKYNET_DB_HOST", "localhost")
+	e2 := os.Setenv("SKYNET_DB_PORT", "37017")
+	e3 := os.Setenv("SKYNET_DB_USER", "admin")
+	e4 := os.Setenv("SKYNET_DB_PASS", "ivolocalpass")
+	if err := errors.Compose(e1, e2, e3, e4); err != nil {
+		panic(err)
 	}
 }
 

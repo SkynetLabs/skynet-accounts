@@ -1,15 +1,21 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 
+	"github.com/NebulousLabs/skynet-accounts/database"
+
 	"github.com/NebulousLabs/skynet-accounts/build"
+
 	"github.com/julienschmidt/httprouter"
 )
 
 // API is ...
 type API struct {
+	DB     *database.DB
 	Router *httprouter.Router
 }
 
@@ -23,6 +29,15 @@ func New() *API {
 	}
 	api.buildHTTPRoutes()
 
+	db, err := database.New(context.Background())
+	api.DB = db
+	if err != nil {
+		log.Println("Failed to connect to the database! Running without a database.")
+		// Assign an empty database instance. In its methods we can check for
+		// the availability of the DB and return errors instead of crashing.
+		api.DB = &database.DB{}
+	}
+
 	return api
 }
 
@@ -30,6 +45,9 @@ func New() *API {
 func WriteError(w http.ResponseWriter, err error, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
+	if build.DEBUG {
+		log.Println(code, err)
+	}
 	encodingErr := json.NewEncoder(w).Encode(err)
 	if _, isJsonErr := encodingErr.(*json.SyntaxError); isJsonErr {
 		// Marshalling should only fail in the event of a developer error.

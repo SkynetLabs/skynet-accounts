@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
-
 	"github.com/NebulousLabs/skynet-accounts/user"
 
 	"gitlab.com/NebulousLabs/errors"
@@ -39,6 +38,8 @@ var (
 	// ErrEmailAlreadyUsed is returned when we try to use an email to either
 	// either create or update a user and another user already uses this email.
 	ErrEmailAlreadyUsed = errors.New("email already in use by another user")
+	// ErrNoDBConnection is returned when we can't connect to the database.
+	ErrNoDBConnection = errors.New("no connection to the database")
 
 	// True is a helper, so we can easily provide a *bool for UpdateOptions.
 	True = true
@@ -90,12 +91,18 @@ func (db *DB) Context() context.Context {
 
 // Disconnect closes the connection to the database in an orderly fashion.
 func (db *DB) Disconnect(ctx context.Context) error {
+	if db.db == nil {
+		return ErrNoDBConnection
+	}
 	return db.db.Client().Disconnect(ctx)
 }
 
 // UserDeleteByID deletes a user by their ID and returns `false` in case there
 // was an error or the user was not found.
 func (db *DB) UserDeleteByID(ctx context.Context, id string) (bool, error) {
+	if db.db == nil {
+		return false, ErrNoDBConnection
+	}
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return false, errors.AddContext(err, "failed to parse user ID")
@@ -108,8 +115,44 @@ func (db *DB) UserDeleteByID(ctx context.Context, id string) (bool, error) {
 	return dr.DeletedCount == 1, nil
 }
 
+// UserFindAllByField finds a user by their ID.
+func (db *DB) UserFindAllByField(ctx context.Context, fieldName, fieldValue string) ([]*user.User, error) {
+	if db.db == nil {
+		return nil, ErrNoDBConnection
+	}
+
+	// TODO SANITIZE THE INPUT!!!
+	// 	https://stackoverflow.com/questions/30585213/do-i-need-to-sanitize-user-input-before-inserting-in-mongodb-mongodbnode-js-co
+	// 	https://dev.to/katerakeren/data-sanitization-against-nosql-query-injection-in-mongodb-and-node-js-application-1eab
+	// 	https://severalnines.com/database-blog/securing-mongodb-external-injection-attacks
+
+	filter := bson.D{{fieldName, fieldValue}}
+	c, err := db.users.Find(ctx, filter)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to Find")
+	}
+	var users []*user.User
+	for c.Next(ctx) {
+		var u user.User
+		err = c.Decode(&u)
+		if err != nil {
+			fmt.Printf("UserFindByID: %+v\n", c.Current)
+			return nil, errors.AddContext(err, "failed to parse value from DB")
+		}
+		users = append(users, &u)
+	}
+	if len(users) == 0 {
+		return users, ErrUserNotFound
+	}
+	return users, nil
+}
+
 // UserFindByID finds a user by their ID.
 func (db *DB) UserFindByID(ctx context.Context, id string) (*user.User, error) {
+	if db.db == nil {
+		return nil, ErrNoDBConnection
+	}
+
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse user ID")
@@ -141,6 +184,9 @@ func (db *DB) UserFindByID(ctx context.Context, id string) (*user.User, error) {
 // We need the user object to be passed by reference because we need to be able
 // to update the ID of new users.
 func (db *DB) UserSave(ctx context.Context, u *user.User) (bool, error) {
+	if db.db == nil {
+		return false, ErrNoDBConnection
+	}
 	if !u.Email.Validate() {
 		return false, user.ErrInvalidEmail
 	}
