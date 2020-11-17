@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
@@ -25,6 +26,20 @@ var (
 	EnvDBUser = "SKYNET_DB_USER"
 	// EnvDBPass holds the name of the environment variable for DB password.
 	EnvDBPass = "SKYNET_DB_PASS"
+
+	// mongoCompressors defines the compressors we are going to use for the
+	// connection to MongoDB
+	mongoCompressors = "zstd,zlib,snappy"
+	// mongoReadPreference defines the DB's read preference. The options are:
+	// primary, primaryPreferred, secondary, secondaryPreferred, nearest.
+	// See https://docs.mongodb.com/manual/core/read-preference/
+	mongoReadPreference = "nearest"
+	// mongoWriteConcern describes the level of acknowledgment requested from
+	// MongoDB.
+	mongoWriteConcern = "majority"
+	// mongoWriteConcernTimeout specifies a time limit, in milliseconds, for
+	// the write concern to be satisfied.
+	mongoWriteConcernTimeout = "1000"
 
 	// DBName defines the name of Skynet's database.
 	DBName = "skynet"
@@ -65,7 +80,7 @@ func New(ctx context.Context) (*DB, error) {
 
 // NewCustom returns a new DB connection based on the passed parameters.
 func NewCustom(ctx context.Context, user, pass, host, port, dbname string) (*DB, error) {
-	connStr := fmt.Sprintf("mongodb://%s:%s@%s:%s/?compressors=zlib&gssapiServiceName=mongodb&readPreference=nearest", user, pass, host, port)
+	connStr := connectionString(user, pass, host, port)
 	c, err := mongo.NewClient(options.Client().ApplyURI(connStr))
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to create a new DB client")
@@ -265,4 +280,25 @@ func connectionOptionsFromEnv() (map[string]string, error) {
 		opts[varName] = val
 	}
 	return opts, nil
+}
+
+// connectionString is a helper that returns a valid MongoDB connection string
+// based on the passed credentials and a set of constants. The connection string
+// is using the standalone approach because the service is supposed to talk to
+// the replica set only via the local node.
+// See https://docs.mongodb.com/manual/reference/connection-string/
+func connectionString(user, pass, host, port string) string {
+	// There are some symbols in usernames and passwords that need to be escaped.
+	// See https://docs.mongodb.com/manual/reference/connection-string/#components
+	return fmt.Sprintf(
+		"mongodb://%s:%s@%s:%s/?compressors=%s&readPreference=%s&w=%s&wtimeoutMS=%s",
+		url.QueryEscape(user),
+		url.QueryEscape(pass),
+		host,
+		port,
+		mongoCompressors,
+		mongoReadPreference,
+		mongoWriteConcern,
+		mongoWriteConcernTimeout,
+	)
 }
