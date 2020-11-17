@@ -14,7 +14,10 @@ func main() {
 	if !ok {
 		port = "3000"
 	}
-	server := api.New()
+	server, err := api.New()
+	if err != nil {
+		log.Fatal(err)
+	}
 	fmt.Println("Listening on port " + port)
-	log.Fatal(http.ListenAndServe(":"+port, server.Router))
+	log.Fatal(http.ListenAndServe(":"+port, server.Router()))
 }

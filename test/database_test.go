@@ -1,4 +1,4 @@
-package test
+package database
 
 import (
 	"context"
@@ -12,64 +12,9 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-// TestDatabase_UserFindAllByField ensures that UserFindAllByField works as expected.
-func TestDatabase_UserFindAllByField(t *testing.T) {
-	initEnv()
-	username := t.Name()
-	ctx := context.Background()
-
-	db, err := database.New(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Add three users.
-	u := &user.User{
-		FirstName: username,
-		LastName:  "One",
-		Email:     (user.Email)(username + "_one@pratchett.com"),
-	}
-	if err = insertUser(db, u); err != nil {
-		t.Fatal(err)
-	}
-	defer func(uid string) {
-		_, _ = db.UserDeleteByID(nil, uid)
-	}(u.ID.Hex())
-	u = &user.User{
-		FirstName: username,
-		LastName:  "Two",
-		Email:     (user.Email)(username + "_two@pratchett.com"),
-	}
-	if err = insertUser(db, u); err != nil {
-		t.Fatal(err)
-	}
-	defer func(uid string) {
-		_, _ = db.UserDeleteByID(nil, uid)
-	}(u.ID.Hex())
-	u = &user.User{
-		FirstName: "John",
-		LastName:  "Smith",
-		Email:     "John@Smith.com",
-	}
-	if err = insertUser(db, u); err != nil {
-		t.Fatal(err)
-	}
-	defer func(uid string) {
-		_, _ = db.UserDeleteByID(nil, uid)
-	}(u.ID.Hex())
-
-	// Find all users with first name `username`. It should be two.
-	us, err := db.UserFindAllByField(nil, "firstName", username)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(us) != 2 {
-		t.Fatalf("Expected to find two users, found %d\n", len(us))
-	}
-}
-
-// TestDatabase_UserFindByID ensures UserFindByID works as expected.
-func TestDatabase_UserFindByID(t *testing.T) {
+// TestDatabase_UserByEmail ensures UserByEmail works as expected.
+// This method also test UserCreate.
+func TestDatabase_UserByEmail(t *testing.T) {
 	initEnv()
 	username := t.Name()
 	ctx := context.Background()
@@ -79,7 +24,7 @@ func TestDatabase_UserFindByID(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Test finding a non-existent user. This should fail.
-	_, err = db.UserFindByID(ctx, "5fac383fdafc482e510627c3")
+	_, err = db.UserByEmail(ctx, "noexist@foo.bar")
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error ErrUserNotFound, got %v\n", err)
 	}
@@ -90,15 +35,15 @@ func TestDatabase_UserFindByID(t *testing.T) {
 		LastName:  "Pratchett",
 		Email:     (user.Email)(username + "@pratchett.com"),
 	}
-	if err = insertUser(db, u); err != nil {
+	if err = db.UserCreate(nil, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(uid string) {
-		_, _ = db.UserDeleteByID(nil, uid)
-	}(u.ID.Hex())
+	defer func(user *user.User) {
+		_ = db.UserDelete(nil, user)
+	}(u)
 
 	// Test finding an existent user. This should pass.
-	u1, err := db.UserFindByID(ctx, u.ID.Hex())
+	u1, err := db.UserByEmail(ctx, u.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,8 +52,47 @@ func TestDatabase_UserFindByID(t *testing.T) {
 	}
 }
 
-// TestDatabase_UserSave ensures UserSave works as expected.
-func TestDatabase_UserSave(t *testing.T) {
+// TestDatabase_UserByID ensures UserByID works as expected.
+func TestDatabase_UserByID(t *testing.T) {
+	initEnv()
+	username := t.Name()
+	ctx := context.Background()
+
+	db, err := database.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Test finding a non-existent user. This should fail.
+	_, err = db.UserByID(ctx, "5fac383fdafc482e510627c3")
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error ErrUserNotFound, got %v\n", err)
+	}
+
+	// Add a user to find.
+	u := &user.User{
+		FirstName: username,
+		LastName:  "Pratchett",
+		Email:     (user.Email)(username + "@pratchett.com"),
+	}
+	if err = db.UserCreate(nil, u); err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *user.User) {
+		_ = db.UserDelete(nil, user)
+	}(u)
+
+	// Test finding an existent user. This should pass.
+	u1, err := db.UserByID(ctx, u.ID.Hex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(u, u1) {
+		t.Fatalf("User not equal to original: %v vs %v\n", u, u1)
+	}
+}
+
+// TestDatabase_UserUpdate ensures UserUpdate works as expected.
+func TestDatabase_UserUpdate(t *testing.T) {
 	initEnv()
 	username := t.Name()
 	ctx := context.Background()
@@ -123,24 +107,21 @@ func TestDatabase_UserSave(t *testing.T) {
 		LastName:  "Pratchett",
 		Email:     (user.Email)(username + "@pratchett.com"),
 	}
-	if err = insertUser(db, u); err != nil {
+	if err = db.UserCreate(nil, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(uid string) {
-		_, _ = db.UserDeleteByID(nil, uid)
-	}(u.ID.Hex())
+	defer func(user *user.User) {
+		_ = db.UserDelete(nil, user)
+	}(u)
 
 	// Test changing the user's names.
 	u.FirstName += "_changed"
 	u.LastName += "_also_changed"
-	ins, err := db.UserSave(ctx, u)
+	err = db.UserUpdate(ctx, u)
 	if err != nil {
 		t.Fatal("Failed to update user:", err)
 	}
-	if ins {
-		t.Fatal("Did not expect a new user to be created.")
-	}
-	u1, err := db.UserFindByID(ctx, u.ID.Hex())
+	u1, err := db.UserByID(ctx, u.ID.Hex())
 	if err != nil {
 		t.Fatal("Failed to load user:", err)
 	}
@@ -150,14 +131,11 @@ func TestDatabase_UserSave(t *testing.T) {
 
 	// Test changing the user's email to a non-existent email. This should work.
 	u.Email = "new@email.com"
-	ins, err = db.UserSave(ctx, u)
+	err = db.UserUpdate(ctx, u)
 	if err != nil {
 		t.Fatal("Failed to update user:", err)
 	}
-	if ins {
-		t.Fatal("Did not expect a new user to be created.")
-	}
-	u1, err = db.UserFindByID(ctx, u.ID.Hex())
+	u1, err = db.UserByID(ctx, u.ID.Hex())
 	if err != nil {
 		t.Fatal("Failed to load user:", err)
 	}
@@ -171,21 +149,21 @@ func TestDatabase_UserSave(t *testing.T) {
 		LastName:  "Guy",
 		Email:     "existing@email.com",
 	}
-	if err = insertUser(db, nu); err != nil {
+	if err = db.UserCreate(nil, nu); err != nil {
 		t.Fatal(err)
 	}
-	defer func(uid string) {
-		_, _ = db.UserDeleteByID(nil, uid)
-	}(nu.ID.Hex())
+	defer func(user *user.User) {
+		_ = db.UserDelete(nil, user)
+	}(u)
 	u.Email = nu.Email
-	_, err = db.UserSave(ctx, u)
+	err = db.UserCreate(ctx, u)
 	if !errors.Contains(err, database.ErrEmailAlreadyUsed) {
 		t.Fatalf("Expected error ErrEmailAlreadyUsed but got %v\n", err)
 	}
 }
 
-// TestDatabase_UserDeleteByID ensures UserDeleteByID works as expected.
-func TestDatabase_UserDeleteByID(t *testing.T) {
+// TestDatabase_UserDelete ensures UserDelete works as expected.
+func TestDatabase_UserDelete(t *testing.T) {
 	initEnv()
 	ctx := context.Background()
 
@@ -200,14 +178,14 @@ func TestDatabase_UserDeleteByID(t *testing.T) {
 		LastName:  "Novakov",
 		Email:     "ivaylo@nebulous.tech",
 	}
-	if err = insertUser(db, u); err != nil {
+	if err = db.UserCreate(nil, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(uid string) {
-		_, _ = db.UserDeleteByID(nil, uid)
-	}(u.ID.Hex())
+	defer func(user *user.User) {
+		_ = db.UserDelete(nil, user)
+	}(u)
 	// Make sure the user is there.
-	fu, err := db.UserFindByID(ctx, u.ID.Hex())
+	fu, err := db.UserByID(ctx, u.ID.Hex())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,16 +193,13 @@ func TestDatabase_UserDeleteByID(t *testing.T) {
 		t.Fatal("expected to find a user but didn't")
 	}
 	// Delete the user.
-	ok, err := db.UserDeleteByID(ctx, u.ID.Hex())
+	err = db.UserDelete(ctx, u)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ok {
-		t.Fatal("expected to be able to delete user but it was not found")
-	}
 	// Make sure the user is not there anymore.
-	_, err = db.UserFindByID(ctx, u.ID.Hex())
-	if err != database.ErrUserNotFound {
+	_, err = db.UserByID(ctx, u.ID.Hex())
+	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatal(err)
 	}
 }
@@ -238,16 +213,4 @@ func initEnv() {
 	if err := errors.Compose(e1, e2, e3, e4); err != nil {
 		panic(err)
 	}
-}
-
-// insertUser is a helper that inserts a new user.
-func insertUser(db *database.DB, u *user.User) error {
-	ins, err := db.UserSave(nil, u)
-	if err != nil {
-		return err
-	}
-	if !ins {
-		return errors.New("Expected a new user to be created.")
-	}
-	return nil
 }

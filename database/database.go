@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
@@ -18,28 +17,30 @@ import (
 )
 
 var (
-	// SkynetDBHostEV holds the name of the environment variable for DB host.
-	SkynetDBHostEV = "SKYNET_DB_HOST"
-	// SkynetDBPortEV holds the name of the environment variable for DB port.
-	SkynetDBPortEV = "SKYNET_DB_PORT"
-	// SkynetDBUserEV holds the name of the environment variable for DB username.
-	SkynetDBUserEV = "SKYNET_DB_USER"
-	// SkynetDBPassEV holds the name of the environment variable for DB password.
-	SkynetDBPassEV = "SKYNET_DB_PASS"
+	// EnvDBHost holds the name of the environment variable for DB host.
+	EnvDBHost = "SKYNET_DB_HOST"
+	// EnvDBPort holds the name of the environment variable for DB port.
+	EnvDBPort = "SKYNET_DB_PORT"
+	// EnvDBUser holds the name of the environment variable for DB username.
+	EnvDBUser = "SKYNET_DB_USER"
+	// EnvDBPass holds the name of the environment variable for DB password.
+	EnvDBPass = "SKYNET_DB_PASS"
 
-	// SkynetDBName defines the name of Skynet's database.
-	SkynetDBName = "skynet"
-	// SkynetDBUsersCollection defines the name of the "users" collection within
+	// DBName defines the name of Skynet's database.
+	DBName = "skynet"
+	// DBUsersCollection defines the name of the "users" collection within
 	// skynet's database.
-	SkynetDBUsersCollection = "users"
+	DBUsersCollection = "users"
 
 	// ErrUserNotFound is returned when we can't find the user in question.
 	ErrUserNotFound = errors.New("user not found")
 	// ErrEmailAlreadyUsed is returned when we try to use an email to either
-	// either create or update a user and another user already uses this email.
+	// create or update a user and another user already uses this email.
 	ErrEmailAlreadyUsed = errors.New("email already in use by another user")
-	// ErrNoDBConnection is returned when we can't connect to the database.
-	ErrNoDBConnection = errors.New("no connection to the database")
+	// ErrGeneralInternalFailure is returned when we do not want to disclose
+	// what kind of error occurred. This should always be coupled with another
+	// error output for internal use.
+	ErrGeneralInternalFailure = errors.New("general internal failure")
 
 	// True is a helper, so we can easily provide a *bool for UpdateOptions.
 	True = true
@@ -49,9 +50,8 @@ var (
 
 // DB represents a MongoDB database connection.
 type DB struct {
-	ctx   context.Context
-	db    *mongo.Database
-	users *mongo.Collection
+	staticDB    *mongo.Database
+	staticUsers *mongo.Collection
 }
 
 // New returns a new DB connection based on the environment variables.
@@ -60,7 +60,7 @@ func New(ctx context.Context) (*DB, error) {
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to get all necessary connection parameters")
 	}
-	return NewCustom(ctx, opts[SkynetDBUserEV], opts[SkynetDBPassEV], opts[SkynetDBHostEV], opts[SkynetDBPortEV], SkynetDBName)
+	return NewCustom(ctx, opts[EnvDBUser], opts[EnvDBPass], opts[EnvDBHost], opts[EnvDBPort], DBName)
 }
 
 // NewCustom returns a new DB connection based on the passed parameters.
@@ -75,90 +75,47 @@ func NewCustom(ctx context.Context, user, pass, host, port, dbname string) (*DB,
 		return nil, errors.AddContext(err, "failed to connect to DB")
 	}
 	database := c.Database(dbname)
-	users := database.Collection(SkynetDBUsersCollection)
+	users := database.Collection(DBUsersCollection)
 	db := &DB{
-		ctx:   ctx,
-		db:    database,
-		users: users,
+		staticDB:    database,
+		staticUsers: users,
 	}
 	return db, nil
 }
 
-// Context returns the DB's internal context, so we can build upon it.
-func (db *DB) Context() context.Context {
-	return db.ctx
-}
-
 // Disconnect closes the connection to the database in an orderly fashion.
 func (db *DB) Disconnect(ctx context.Context) error {
-	if db.db == nil {
-		return ErrNoDBConnection
-	}
-	return db.db.Client().Disconnect(ctx)
+	return db.staticDB.Client().Disconnect(ctx)
 }
 
-// UserDeleteByID deletes a user by their ID and returns `false` in case there
-// was an error or the user was not found.
-func (db *DB) UserDeleteByID(ctx context.Context, id string) (bool, error) {
-	if db.db == nil {
-		return false, ErrNoDBConnection
+// UserByEmail returns the user with the given email or nil.
+func (db *DB) UserByEmail(ctx context.Context, email user.Email) (*user.User, error) {
+	if !email.Validate() {
+		return nil, user.ErrInvalidEmail
 	}
-	oid, err := primitive.ObjectIDFromHex(id)
+	users, err := db.managedUsersByField(ctx, "email", string(email))
 	if err != nil {
-		return false, errors.AddContext(err, "failed to parse user ID")
+		return nil, err
 	}
-	filter := bson.D{{"_id", oid}}
-	dr, err := db.users.DeleteOne(ctx, filter)
-	if err != nil {
-		return false, errors.AddContext(err, "failed to Delete")
+	// Emails must be unique. If we hit this then we have a serious
+	// programmer error which endangers customer's data and finances.
+	// We should error out in order to prevent exposing the wrong user data.
+	if len(users) > 1 {
+		build.Critical(fmt.Sprintf("More than one user found for email '%s'!", email))
+		// The error message is intentionally cryptic.
+		return nil, ErrGeneralInternalFailure
 	}
-	return dr.DeletedCount == 1, nil
+	return users[0], nil
 }
 
-// UserFindAllByField finds a user by their ID.
-func (db *DB) UserFindAllByField(ctx context.Context, fieldName, fieldValue string) ([]*user.User, error) {
-	if db.db == nil {
-		return nil, ErrNoDBConnection
-	}
-
-	// TODO SANITIZE THE INPUT!!!
-	// 	https://stackoverflow.com/questions/30585213/do-i-need-to-sanitize-user-input-before-inserting-in-mongodb-mongodbnode-js-co
-	// 	https://dev.to/katerakeren/data-sanitization-against-nosql-query-injection-in-mongodb-and-node-js-application-1eab
-	// 	https://severalnines.com/database-blog/securing-mongodb-external-injection-attacks
-
-	filter := bson.D{{fieldName, fieldValue}}
-	c, err := db.users.Find(ctx, filter)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to Find")
-	}
-	var users []*user.User
-	for c.Next(ctx) {
-		var u user.User
-		err = c.Decode(&u)
-		if err != nil {
-			fmt.Printf("UserFindByID: %+v\n", c.Current)
-			return nil, errors.AddContext(err, "failed to parse value from DB")
-		}
-		users = append(users, &u)
-	}
-	if len(users) == 0 {
-		return users, ErrUserNotFound
-	}
-	return users, nil
-}
-
-// UserFindByID finds a user by their ID.
-func (db *DB) UserFindByID(ctx context.Context, id string) (*user.User, error) {
-	if db.db == nil {
-		return nil, ErrNoDBConnection
-	}
-
+// UserByID finds a user by their ID.
+func (db *DB) UserByID(ctx context.Context, id string) (*user.User, error) {
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse user ID")
 	}
 	filter := bson.D{{"_id", oid}}
-	c, err := db.users.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
@@ -173,78 +130,134 @@ func (db *DB) UserFindByID(ctx context.Context, id string) (*user.User, error) {
 	var u user.User
 	err = c.Decode(&u)
 	if err != nil {
-		fmt.Printf("UserFindByID: %+v\n", c.Current)
 		return nil, errors.AddContext(err, "failed to parse value from DB")
 	}
 	return &u, nil
 }
 
-// UserSave saves the user in the DB and returns `true` if the user was newly
-// inserted and `false` if it already existed before.
-// We need the user object to be passed by reference because we need to be able
-// to update the ID of new users.
-func (db *DB) UserSave(ctx context.Context, u *user.User) (bool, error) {
-	if db.db == nil {
-		return false, ErrNoDBConnection
-	}
+// UserCreate creates a new user in the DB. We need the user object to be passed
+// by reference because we need to be able to update the ID of new user.
+func (db *DB) UserCreate(ctx context.Context, u *user.User) error {
+	u.Lock()
+	defer u.Unlock()
 	if !u.Email.Validate() {
-		return false, user.ErrInvalidEmail
+		return user.ErrInvalidEmail
 	}
 	// Check for an existing user with this email.
-	filter := bson.M{"email": u.Email}
-	sr := db.users.FindOne(ctx, filter)
-	// ErrNoDocuments would mean that no user with this email is found.
-	// A nil error would mean that another user with this email is found.
-	// Any other error would be a failure to execute the query.
-	if sr.Err() != mongo.ErrNoDocuments {
-		if sr.Err() != nil {
-			return false, errors.AddContext(sr.Err(), "failed to query DB")
-		}
-		var u2 user.User
-		err := sr.Decode(&u2)
-		if err != nil {
-			baseErr := errors.AddContext(err, "failed to parse value from DB")
-			return false, errors.AddContext(baseErr, "cannot ensure email uniqueness")
-		}
-		if u.ID.IsZero() || !bytes.Equal(u.ID[:], u2.ID[:]) {
-			return false, ErrEmailAlreadyUsed
-		}
+	users, err := db.managedUsersByField(ctx, "email", string(u.Email))
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return errors.AddContext(err, "failed to query DB")
 	}
-	// Upsert the user.
+	if len(users) > 0 {
+		return ErrEmailAlreadyUsed
+	}
+	// Insert the user.
 	fields := bson.M{
 		"firstName": u.FirstName,
 		"lastName":  u.LastName,
 		"email":     u.Email,
 	}
-	if !u.ID.IsZero() {
-		fields["_id"] = u.ID
-		// If the user is new (u.ID is zero) then we can filer by email because
-		// we won't find anything and we'll insert a new user.
-		// If we're updating an existing user, though, we need to filter by
-		// their ID.
-		filter = bson.M{"_id": u.ID}
-	}
-	update := bson.M{"$set": fields}
-	ur, err := db.users.UpdateOne(ctx, filter, update, &options.UpdateOptions{Upsert: &True})
+	ir, err := db.staticUsers.InsertOne(ctx, fields)
 	if err != nil {
-		return false, errors.AddContext(err, "failed to Update")
+		return errors.AddContext(err, "failed to Insert")
 	}
-	if u.ID.IsZero() {
-		if ur.UpsertedID == nil {
-			log.Printf("Failed to Upsert a new user. UpsertResult: %+v\n", ur)
-			return false, errors.New("failed to upsert a new user")
+	u.ID = ir.InsertedID.(primitive.ObjectID)
+	// Sanity check because races exist.
+	users, err = db.managedUsersByField(ctx, "email", string(u.Email))
+	if len(users) > 1 {
+		// Race detected! Email no longer unique in DB. Delete new user.
+		err := db.UserDelete(ctx, u)
+		if err != nil {
+			build.Critical("Failed to delete new duplicate user! Needs to be cleaned out manually. Offending user id:", u.ID.Hex())
 		}
-		u.ID = ur.UpsertedID.(primitive.ObjectID)
+		return ErrEmailAlreadyUsed
 	}
-	insertedNewUser := ur.UpsertedCount == 1
-	return insertedNewUser, nil
+	return nil
+}
+
+// UserDelete deletes a user by their ID.
+func (db *DB) UserDelete(ctx context.Context, u *user.User) error {
+	u.Lock()
+	defer u.Unlock()
+	if u.ID.IsZero() {
+		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
+	}
+	filter := bson.D{{"_id", u.ID}}
+	dr, err := db.staticUsers.DeleteOne(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to Delete")
+	}
+	if dr.DeletedCount == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// UserUpdate saves the user in the DB.
+func (db *DB) UserUpdate(ctx context.Context, u *user.User) error {
+	u.Lock()
+	defer u.Unlock()
+	if !u.Email.Validate() {
+		return user.ErrInvalidEmail
+	}
+	// Check for an existing user with this email.
+	users, err := db.managedUsersByField(ctx, "email", string(u.Email))
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return errors.AddContext(err, "failed to query DB")
+	}
+	// Sanity check.
+	if len(users) > 1 {
+		build.Critical("More than one user found with email", u.Email)
+		return ErrEmailAlreadyUsed
+	}
+	if len(users) > 0 && !bytes.Equal(u.ID[:], users[0].ID[:]) {
+		return ErrEmailAlreadyUsed
+	}
+	// Update the user.
+	filter := bson.M{"_id": u.ID}
+	update := bson.M{"$set": bson.M{
+		"_id":       u.ID,
+		"firstName": u.FirstName,
+		"lastName":  u.LastName,
+		"email":     u.Email,
+	}}
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return errors.AddContext(err, "failed to Update")
+	}
+	if ur.UpsertedCount > 1 || ur.ModifiedCount > 1 {
+		build.Critical(fmt.Sprintf("updated more than one user! filter: %v, update: %v, update result:%v\n", filter, update, ur))
+	}
+	return nil
+}
+
+// managedUsersByField finds all users that have a given field value.
+// The calling method is responsible for the validation of the value.
+func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*user.User, error) {
+	filter := bson.D{{fieldName, fieldValue}}
+	c, err := db.staticUsers.Find(ctx, filter)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to Find")
+	}
+	var users []*user.User
+	for c.Next(ctx) {
+		var u user.User
+		if err = c.Decode(&u); err != nil {
+			return nil, errors.AddContext(err, "failed to parse value from DB")
+		}
+		users = append(users, &u)
+	}
+	if len(users) == 0 {
+		return users, ErrUserNotFound
+	}
+	return users, nil
 }
 
 // connectionOptionsFromEnv retrieves the DB connection credentials from the
 // environment and returns them in a map.
 func connectionOptionsFromEnv() (map[string]string, error) {
 	opts := make(map[string]string)
-	for _, varName := range []string{SkynetDBHostEV, SkynetDBPortEV, SkynetDBUserEV, SkynetDBPassEV} {
+	for _, varName := range []string{EnvDBHost, EnvDBPort, EnvDBUser, EnvDBPass} {
 		val, ok := os.LookupEnv(varName)
 		if !ok {
 			return nil, errors.New("missing env var " + varName)

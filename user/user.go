@@ -4,14 +4,15 @@ import (
 	"crypto/sha256"
 	"errors"
 	"regexp"
+	"sync"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 var (
-	// EmailValidatorRegEx checks if a string is a valid email address.
+	// emailValidatorRegEx checks if a string is a valid email address.
 	// See https://emailregex.com/
-	EmailValidatorRegEx = regexp.MustCompile(`^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}$`)
+	emailValidatorRegEx = regexp.MustCompile(`^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}$`)
 
 	// ErrInvalidEmail is returned when we encounter an invalid email value.
 	ErrInvalidEmail = errors.New("invalid email")
@@ -33,12 +34,22 @@ type (
 		LastName  string             `bson:"lastName" json:"lastName"`
 		Email     Email              `bson:"email" json:"email"`
 		password  Hash               `bson:"password"`
+		sync.Mutex
 	}
 )
 
+// NewEmail returns a new valid Email instance or an error.
+func NewEmail(email string) (Email, error) {
+	em := Email(email)
+	if !em.Validate() {
+		return "", ErrInvalidEmail
+	}
+	return em, nil
+}
+
 // Validate validates an email address.
 func (e Email) Validate() bool {
-	return EmailValidatorRegEx.MatchString(string(e))
+	return emailValidatorRegEx.MatchString(string(e))
 }
 
 // SetPassword sets the user's password.

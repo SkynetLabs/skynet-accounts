@@ -13,32 +13,44 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+const (
+	// DefaultTimeoutDB defines the longest a DB operation can take before
+	// triggering a timeout. In seconds.
+	DefaultTimeoutDB = 10
+	// DefaultTimeoutRequest defines the longest an API request can take before
+	// triggering a timeout. In seconds.
+	DefaultTimeoutRequest = 30
+)
+
 // API is ...
 type API struct {
-	DB     *database.DB
-	Router *httprouter.Router
+	staticDB     *database.DB
+	staticRouter *httprouter.Router
 }
 
 // New returns a new initialised API.
-func New() *API {
+func New() (*API, error) {
 	router := httprouter.New()
 	router.RedirectTrailingSlash = true
 
 	api := &API{
-		Router: router,
+		staticRouter: router,
 	}
 	api.buildHTTPRoutes()
 
-	db, err := database.New(context.Background())
-	api.DB = db
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeoutDB)
+	defer cancel()
+	db, err := database.New(ctx)
 	if err != nil {
-		log.Println("Failed to connect to the database! Running without a database.")
-		// Assign an empty database instance. In its methods we can check for
-		// the availability of the DB and return errors instead of crashing.
-		api.DB = &database.DB{}
+		return nil, err
 	}
+	api.staticDB = db
+	return api, nil
+}
 
-	return api
+// Router exposed the internal httprouter struct.
+func (api *API) Router() *httprouter.Router {
+	return api.staticRouter
 }
 
 // WriteError an error to the API caller.

@@ -15,7 +15,7 @@ all: release
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./api ./build ./database ./user
+pkgs = ./ ./api ./build ./database ./user
 
 # integration-pkgs defines the packages which contain integration tests
 integration-pkgs = ./test
@@ -58,7 +58,7 @@ lint-analyze:
 # The first command stops any running testing container but if there is none the
 # error is ignored.
 start-mongo:
-	docker stop skynet-accounts-mongo-test-db 2>/dev/null || true
+	-docker stop skynet-accounts-mongo-test-db
 	docker run \
      --rm \
      --detach \

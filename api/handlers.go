@@ -12,32 +12,31 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
+const (
+	// MaxMultipartMem defines the maximum amount of memory to be used for
+	// parsing the request's multipart form. In bytes.
+	MaxMultipartMem = 64_000_000
+)
+
 // userHandlerGET returns information about an existing user.
 func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// TODO Limit to the user themselves.
-	if err := req.ParseForm(); err != nil {
-		WriteError(w, errors.New("Failed to parse parameters."), http.StatusBadRequest)
-	}
-	email := req.Form.Get("email")
-	if email == "" {
-		WriteError(w, errors.New("No email provided."), http.StatusBadRequest)
-		return
-	}
-	users, err := api.DB.UserFindAllByField(req.Context(), "email", email)
-	if err != nil && err != database.ErrUserNotFound {
-		WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	if errors.Contains(err, database.ErrUserNotFound) || len(users) == 0 {
+	id := ps.ByName("id")
+	u, err := api.staticDB.UserByID(req.Context(), id)
+	if errors.Contains(err, database.ErrUserNotFound) {
 		WriteError(w, database.ErrUserNotFound, http.StatusNotFound)
 		return
 	}
-	WriteJSON(w, users[0])
+	if err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	WriteJSON(w, u)
 }
 
 // userHandlerPOST creates a new user.
 func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	if err := req.ParseMultipartForm(64 * 1_000_000); err != nil {
+	if err := req.ParseMultipartForm(MaxMultipartMem); err != nil {
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
 	}
@@ -46,28 +45,69 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps htt
 		WriteError(w, user.ErrInvalidEmail, http.StatusBadRequest)
 		return
 	}
-	user := &user.User{
+	u := &user.User{
 		FirstName: req.PostFormValue("firstName"),
 		LastName:  req.PostFormValue("lastName"),
 		Email:     email,
 	}
-	ins, err := api.DB.UserSave(req.Context(), user)
+	err := api.staticDB.UserCreate(req.Context(), u)
 	if err != nil {
-		WriteError(w, errors.AddContext(err, "failed to save user"), http.StatusInternalServerError)
+		WriteError(w, errors.AddContext(err, "failed to create user"), http.StatusInternalServerError)
 		return
 	}
-	if ins {
-		w.WriteHeader(http.StatusCreated)
-	} else {
-		w.WriteHeader(http.StatusOK)
-	}
-	WriteJSON(w, user)
+	w.WriteHeader(http.StatusCreated)
+	WriteJSON(w, u)
 }
 
 // userHandlerPUT updates an existing user.
 func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	// TODO Implement
-	WriteJSON(w, struct{ msg string }{"Not implemented."})
+	err := req.ParseMultipartForm(MaxMultipartMem)
+	if err != nil {
+		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
+		return
+	}
+	var u *user.User
+	// Fetch the user by their _id.
+	if id := req.PostFormValue("_id"); id != "" {
+		u, err = api.staticDB.UserByID(req.Context(), id)
+		if err != nil {
+			// This is a Bad Request and not an Internal Server Error because
+			// the client has supplied an invalid `_id`.
+			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
+			return
+		}
+	}
+	// Fetch the user by their email.
+	if u == nil {
+		email := (user.Email)(req.PostFormValue("email"))
+		u, err = api.staticDB.UserByEmail(req.Context(), email)
+		if err != nil {
+			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
+			return
+		}
+	}
+	if fn := req.PostFormValue("firstName"); fn != "" {
+		u.FirstName = fn
+	}
+	if ln := req.PostFormValue("lastName"); ln != "" {
+		u.LastName = ln
+	}
+	if em := req.PostFormValue("email"); em != "" {
+		// No need for extra validation here, the email will be validated in
+		// the update method before any work is done.
+		u.Email = user.Email(em)
+	}
+	err = api.staticDB.UserUpdate(req.Context(), u)
+	if errors.Contains(err, user.ErrInvalidEmail) || errors.Contains(err, database.ErrEmailAlreadyUsed) {
+		WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	WriteJSON(w, u)
 }
 
 // userChangePasswordHandler changes a user's password, given the old one is known.
