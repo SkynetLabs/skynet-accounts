@@ -1,3 +1,3 @@
 # Description
 
-This directry contains `skynet-accounts`'s integration tests.
+This directory contains `skynet-accounts`'s integration tests.

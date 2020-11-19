@@ -18,14 +18,14 @@ import (
 )
 
 var (
-	// EnvDBHost holds the name of the environment variable for DB host.
-	EnvDBHost = "SKYNET_DB_HOST"
-	// EnvDBPort holds the name of the environment variable for DB port.
-	EnvDBPort = "SKYNET_DB_PORT"
-	// EnvDBUser holds the name of the environment variable for DB username.
-	EnvDBUser = "SKYNET_DB_USER"
-	// EnvDBPass holds the name of the environment variable for DB password.
-	EnvDBPass = "SKYNET_DB_PASS"
+	// envDBHost holds the name of the environment variable for DB host.
+	envDBHost = "SKYNET_DB_HOST"
+	// envDBPort holds the name of the environment variable for DB port.
+	envDBPort = "SKYNET_DB_PORT"
+	// envDBUser holds the name of the environment variable for DB username.
+	envDBUser = "SKYNET_DB_USER" // #nosec
+	// envDBPass holds the name of the environment variable for DB password.
+	envDBPass = "SKYNET_DB_PASS" // #nosec
 
 	// mongoCompressors defines the compressors we are going to use for the
 	// connection to MongoDB
@@ -41,11 +41,11 @@ var (
 	// the write concern to be satisfied.
 	mongoWriteConcernTimeout = "1000"
 
-	// DBName defines the name of Skynet's database.
-	DBName = "skynet"
-	// DBUsersCollection defines the name of the "users" collection within
+	// dbName defines the name of Skynet's database.
+	dbName = "skynet"
+	// dbUsersCollection defines the name of the "users" collection within
 	// skynet's database.
-	DBUsersCollection = "users"
+	dbUsersCollection = "users"
 
 	// ErrUserNotFound is returned when we can't find the user in question.
 	ErrUserNotFound = errors.New("user not found")
@@ -56,11 +56,6 @@ var (
 	// what kind of error occurred. This should always be coupled with another
 	// error output for internal use.
 	ErrGeneralInternalFailure = errors.New("general internal failure")
-
-	// True is a helper, so we can easily provide a *bool for UpdateOptions.
-	True = true
-	// False is a helper, so we can easily provide a *bool for UpdateOptions.
-	False = false
 )
 
 // DB represents a MongoDB database connection.
@@ -75,7 +70,7 @@ func New(ctx context.Context) (*DB, error) {
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to get all necessary connection parameters")
 	}
-	return NewCustom(ctx, opts[EnvDBUser], opts[EnvDBPass], opts[EnvDBHost], opts[EnvDBPort], DBName)
+	return NewCustom(ctx, opts[envDBUser], opts[envDBPass], opts[envDBHost], opts[envDBPort], dbName)
 }
 
 // NewCustom returns a new DB connection based on the passed parameters.
@@ -90,7 +85,7 @@ func NewCustom(ctx context.Context, user, pass, host, port, dbname string) (*DB,
 		return nil, errors.AddContext(err, "failed to connect to DB")
 	}
 	database := c.Database(dbname)
-	users := database.Collection(DBUsersCollection)
+	users := database.Collection(dbUsersCollection)
 	db := &DB{
 		staticDB:    database,
 		staticUsers: users,
@@ -272,7 +267,7 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 // environment and returns them in a map.
 func connectionOptionsFromEnv() (map[string]string, error) {
 	opts := make(map[string]string)
-	for _, varName := range []string{EnvDBHost, EnvDBPort, EnvDBUser, EnvDBPass} {
+	for _, varName := range []string{envDBHost, envDBPort, envDBUser, envDBPass} {
 		val, ok := os.LookupEnv(varName)
 		if !ok {
 			return nil, errors.New("missing env var " + varName)
