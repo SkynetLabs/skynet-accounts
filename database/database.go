@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/user"
@@ -24,15 +23,6 @@ TODO
 */
 
 var (
-	// envDBHost holds the name of the environment variable for DB host.
-	envDBHost = "SKYNET_DB_HOST"
-	// envDBPort holds the name of the environment variable for DB port.
-	envDBPort = "SKYNET_DB_PORT"
-	// envDBUser holds the name of the environment variable for DB username.
-	envDBUser = "SKYNET_DB_USER" // #nosec
-	// envDBPass holds the name of the environment variable for DB password.
-	envDBPass = "SKYNET_DB_PASS" // #nosec
-
 	// mongoCompressors defines the compressors we are going to use for the
 	// connection to MongoDB
 	mongoCompressors = "zstd,zlib,snappy"
@@ -64,24 +54,26 @@ var (
 	ErrGeneralInternalFailure = errors.New("general internal failure")
 )
 
-// DB represents a MongoDB database connection.
-type DB struct {
-	staticDB    *mongo.Database
-	staticUsers *mongo.Collection
-}
-
-// New returns a new DB connection based on the environment variables.
-func New(ctx context.Context) (*DB, error) {
-	opts, err := connectionOptionsFromEnv()
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to get all necessary connection parameters")
+type (
+	// DB represents a MongoDB database connection.
+	DB struct {
+		staticDB    *mongo.Database
+		staticUsers *mongo.Collection
 	}
-	return NewCustom(ctx, opts[envDBUser], opts[envDBPass], opts[envDBHost], opts[envDBPort], dbName)
-}
 
-// NewCustom returns a new DB connection based on the passed parameters.
-func NewCustom(ctx context.Context, user, pass, host, port, dbname string) (*DB, error) {
-	connStr := connectionString(user, pass, host, port)
+	// DBCredentials is a helper struct that binds together all values needed for
+	// establishing a DB connection.
+	DBCredentials struct {
+		User     string
+		Password string
+		Host     string
+		Port     string
+	}
+)
+
+// New returns a new DB connection based on the passed parameters.
+func New(ctx context.Context, creds DBCredentials) (*DB, error) {
+	connStr := connectionString(creds)
 	c, err := mongo.NewClient(options.Client().ApplyURI(connStr))
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to create a new DB client")
@@ -90,7 +82,7 @@ func NewCustom(ctx context.Context, user, pass, host, port, dbname string) (*DB,
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to connect to DB")
 	}
-	database := c.Database(dbname)
+	database := c.Database(dbName)
 	users := database.Collection(dbUsersCollection)
 	db := &DB{
 		staticDB:    database,
@@ -270,34 +262,20 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	return users, nil
 }
 
-// connectionOptionsFromEnv retrieves the DB connection credentials from the
-// environment and returns them in a map.
-func connectionOptionsFromEnv() (map[string]string, error) {
-	opts := make(map[string]string)
-	for _, varName := range []string{envDBHost, envDBPort, envDBUser, envDBPass} {
-		val, ok := os.LookupEnv(varName)
-		if !ok {
-			return nil, errors.New("missing env var " + varName)
-		}
-		opts[varName] = val
-	}
-	return opts, nil
-}
-
 // connectionString is a helper that returns a valid MongoDB connection string
 // based on the passed credentials and a set of constants. The connection string
 // is using the standalone approach because the service is supposed to talk to
 // the replica set only via the local node.
 // See https://docs.mongodb.com/manual/reference/connection-string/
-func connectionString(user, pass, host, port string) string {
+func connectionString(creds DBCredentials) string {
 	// There are some symbols in usernames and passwords that need to be escaped.
 	// See https://docs.mongodb.com/manual/reference/connection-string/#components
 	return fmt.Sprintf(
 		"mongodb://%s:%s@%s:%s/?compressors=%s&readPreference=%s&w=%s&wtimeoutMS=%s",
-		url.QueryEscape(user),
-		url.QueryEscape(pass),
-		host,
-		port,
+		url.QueryEscape(creds.User),
+		url.QueryEscape(creds.Password),
+		creds.Host,
+		creds.Port,
 		mongoCompressors,
 		mongoReadPreference,
 		mongoWriteConcern,
