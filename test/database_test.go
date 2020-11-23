@@ -207,6 +207,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 // initEnv sets the environment variables to what we have defined in Makefile.
 func initEnv() {
 	e1 := os.Setenv("SKYNET_DB_HOST", "localhost")
+	//e2 := os.Setenv("SKYNET_DB_PORT", "27017") // DEBUG
 	e2 := os.Setenv("SKYNET_DB_PORT", "37017")
 	e3 := os.Setenv("SKYNET_DB_USER", "admin")
 	e4 := os.Setenv("SKYNET_DB_PASS", "ivolocalpass")

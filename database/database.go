@@ -17,6 +17,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+/*
+TODO
+ - Unit tests for all methods. Mock the DB for that.
+ - We should use a tool/library that allows us to catch common ways to go around the unique email requirement, such as adding suffixes to gmail addresses, e.g. ivo@gmail.com and ivo.fake@gmail.com are the same email.
+*/
+
 var (
 	// envDBHost holds the name of the environment variable for DB host.
 	envDBHost = "SKYNET_DB_HOST"
@@ -223,6 +229,7 @@ func (db *DB) UserUpdate(ctx context.Context, u *user.User) error {
 	if len(users) > 0 && !bytes.Equal(u.ID[:], users[0].ID[:]) {
 		return ErrEmailAlreadyUsed
 	}
+	// TODO What if we have a race a user gets this email right at this point?
 	// Update the user.
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{

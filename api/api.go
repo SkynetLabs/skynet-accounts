@@ -1,8 +1,8 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 
@@ -12,6 +12,13 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 )
+
+/*
+TODO
+	- panic handler
+	- method not allowed
+	- OPTIONS & CORS - https://github.com/julienschmidt/httprouter#automatic-options-responses-and-cors
+*/
 
 const (
 	// DefaultTimeoutDB defines the longest a DB operation can take before
@@ -29,22 +36,18 @@ type API struct {
 }
 
 // New returns a new initialised API.
-func New() (*API, error) {
+func New(db *database.DB) (*API, error) {
+	if db == nil {
+		return nil, errors.New("no DB provided")
+	}
 	router := httprouter.New()
 	router.RedirectTrailingSlash = true
 
 	api := &API{
+		staticDB:     db,
 		staticRouter: router,
 	}
 	api.buildHTTPRoutes()
-
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeoutDB)
-	defer cancel()
-	db, err := database.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-	api.staticDB = db
 	return api, nil
 }
 
