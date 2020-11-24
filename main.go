@@ -19,9 +19,9 @@ var (
 	// envDBPort holds the name of the environment variable for DB port.
 	envDBPort = "SKYNET_DB_PORT"
 	// envDBUser holds the name of the environment variable for DB username.
-	envDBUser = "SKYNET_DB_USER" // #nosec
+	envDBUser = "SKYNET_DB_USER"
 	// envDBPass holds the name of the environment variable for DB password.
-	envDBPass = "SKYNET_DB_PASS" // #nosec
+	envDBPass = "SKYNET_DB_PASS" // #nosec G101: Potential hardcoded credentials
 )
 
 // dbConnFromEnv creates a new DB connection based on credentials found in the

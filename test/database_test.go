@@ -202,6 +202,5 @@ func DBTestCredentials() database.DBCredentials {
 		Password: "ivolocalpass",
 		Host:     "localhost",
 		Port:     "37017",
-		//Port:     "27017", // DEBUG
 	}
 }
