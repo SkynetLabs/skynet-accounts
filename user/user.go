@@ -1,29 +1,42 @@
 package user
 
 import (
-	"crypto/sha256"
 	"errors"
+	"os"
 	"regexp"
 	"sync"
+
+	"github.com/NebulousLabs/skynet-accounts/build"
+
+	"golang.org/x/crypto/bcrypt"
+
+	"gitlab.com/NebulousLabs/fastrand"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 var (
+	// ErrInvalidEmail is returned when we encounter an invalid email value.
+	ErrInvalidEmail = errors.New("invalid email")
+
 	// emailValidatorRegEx checks if a string is a valid email address.
 	// See https://emailregex.com/
 	emailValidatorRegEx = regexp.MustCompile(`^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}$`)
 
-	// ErrInvalidEmail is returned when we encounter an invalid email value.
-	ErrInvalidEmail = errors.New("invalid email")
+	// envPepper holds the name of the environment variable for password pepper.
+	// This is not in main in order to avoid a circular dependency.
+	envPepper = "SKYNET_PEPPER"
+
+	// pepper is the system's password pepper.
+	pepper = []byte{}
+
+	// saltSize specifies the length of the salt []byte
+	saltSize = 32
 )
 
 type (
 	// Email is an email.
 	Email string
-
-	// Hash represents a 256bit hash value.
-	Hash [32]byte
 
 	// User represents a Skynet user.
 	User struct {
@@ -33,7 +46,8 @@ type (
 		FirstName string             `bson:"firstName" json:"firstName"`
 		LastName  string             `bson:"lastName" json:"lastName"`
 		Email     Email              `bson:"email" json:"email"`
-		password  Hash               `bson:"password"`
+		password  []byte             `bson:"password"`
+		salt      []byte             `bson:"salt"`
 		sync.Mutex
 	}
 )
@@ -52,9 +66,41 @@ func (e Email) Validate() bool {
 	return emailValidatorRegEx.MatchString(string(e))
 }
 
+// VerifyPassword verifies that the given password is correct for this user.
+func (u *User) VerifyPassword(pw string) error {
+	u.Lock()
+	defer u.Unlock()
+	return bcrypt.CompareHashAndPassword(append([]byte(pw), u.saltAndPepper()...), u.password)
+}
+
 // SetPassword sets the user's password.
-func (u *User) SetPassword(pw string) error {
-	// TODO Implement
-	u.password = sha256.Sum256([]byte(pw))
+func (u *User) SetPassword(pw string) (err error) {
+	u.Lock()
+	defer u.Unlock()
+	oldSalt := u.salt
+	defer func() {
+		if err != nil {
+			u.salt = oldSalt
+		}
+	}()
+	u.salt = fastrand.Bytes(saltSize)
+	pwHash, err := bcrypt.GenerateFromPassword(append([]byte(pw), u.saltAndPepper()...), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	u.password = pwHash
 	return nil
+}
+
+// saltAndPepper is a convenience function that returns the user's salt and the
+// system's pepper in a single slice.
+func (u *User) saltAndPepper() []byte {
+	if len(pepper) == 0 {
+		pv, ok := os.LookupEnv(envPepper)
+		if !ok {
+			build.Severe("Failed to load the password pepper! Using un-peppered passwords!")
+		}
+		pepper = []byte(pv)
+	}
+	return append(u.salt, pepper...)
 }

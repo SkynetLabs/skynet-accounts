@@ -40,8 +40,8 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps htt
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
 	}
-	email := (user.Email)(req.PostFormValue("email"))
-	if !email.Validate() {
+	email, err := user.NewEmail(req.PostFormValue("email"))
+	if err != nil {
 		WriteError(w, user.ErrInvalidEmail, http.StatusBadRequest)
 		return
 	}
@@ -50,7 +50,7 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps htt
 		LastName:  req.PostFormValue("lastName"),
 		Email:     email,
 	}
-	err := api.staticDB.UserCreate(req.Context(), u)
+	err = api.staticDB.UserCreate(req.Context(), u)
 	if err != nil {
 		WriteError(w, errors.AddContext(err, "failed to create user"), http.StatusInternalServerError)
 		return
@@ -79,7 +79,11 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps http
 	}
 	// Fetch the user by their email.
 	if u == nil {
-		email := (user.Email)(req.PostFormValue("email"))
+		email, err := user.NewEmail(req.PostFormValue("email"))
+		if err != nil {
+			WriteError(w, errors.AddContext(err, "invalid email provided"), http.StatusBadRequest)
+			return
+		}
 		u, err = api.staticDB.UserByEmail(req.Context(), email)
 		if err != nil {
 			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
