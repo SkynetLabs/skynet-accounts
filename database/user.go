@@ -1,10 +1,9 @@
-package user
+package database
 
 import (
 	"crypto/sha256"
 	"errors"
 	"regexp"
-	"sync"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -34,7 +33,6 @@ type (
 		LastName  string             `bson:"lastName" json:"lastName"`
 		Email     Email              `bson:"email" json:"email"`
 		password  Hash               `bson:"password"`
-		sync.Mutex
 	}
 )
 

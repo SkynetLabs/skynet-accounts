@@ -7,8 +7,6 @@ import (
 	"net/url"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
-	"github.com/NebulousLabs/skynet-accounts/user"
-
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -97,9 +95,9 @@ func (db *DB) Disconnect(ctx context.Context) error {
 }
 
 // UserByEmail returns the user with the given email or nil.
-func (db *DB) UserByEmail(ctx context.Context, email user.Email) (*user.User, error) {
+func (db *DB) UserByEmail(ctx context.Context, email Email) (*User, error) {
 	if !email.Validate() {
-		return nil, user.ErrInvalidEmail
+		return nil, ErrInvalidEmail
 	}
 	users, err := db.managedUsersByField(ctx, "email", string(email))
 	if err != nil {
@@ -117,7 +115,7 @@ func (db *DB) UserByEmail(ctx context.Context, email user.Email) (*user.User, er
 }
 
 // UserByID finds a user by their ID.
-func (db *DB) UserByID(ctx context.Context, id string) (*user.User, error) {
+func (db *DB) UserByID(ctx context.Context, id string) (*User, error) {
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse user ID")
@@ -135,7 +133,7 @@ func (db *DB) UserByID(ctx context.Context, id string) (*user.User, error) {
 	if ok := c.Next(ctx); ok {
 		build.Critical("more than one user found for id", id)
 	}
-	var u user.User
+	var u User
 	err = c.Decode(&u)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse value from DB")
@@ -145,11 +143,9 @@ func (db *DB) UserByID(ctx context.Context, id string) (*user.User, error) {
 
 // UserCreate creates a new user in the DB. We need the user object to be passed
 // by reference because we need to be able to update the ID of new user.
-func (db *DB) UserCreate(ctx context.Context, u *user.User) error {
-	u.Lock()
-	defer u.Unlock()
+func (db *DB) UserCreate(ctx context.Context, u *User) error {
 	if !u.Email.Validate() {
-		return user.ErrInvalidEmail
+		return ErrInvalidEmail
 	}
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", string(u.Email))
@@ -184,9 +180,7 @@ func (db *DB) UserCreate(ctx context.Context, u *user.User) error {
 }
 
 // UserDelete deletes a user by their ID.
-func (db *DB) UserDelete(ctx context.Context, u *user.User) error {
-	u.Lock()
-	defer u.Unlock()
+func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if u.ID.IsZero() {
 		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
 	}
@@ -202,11 +196,9 @@ func (db *DB) UserDelete(ctx context.Context, u *user.User) error {
 }
 
 // UserUpdate saves the user in the DB.
-func (db *DB) UserUpdate(ctx context.Context, u *user.User) error {
-	u.Lock()
-	defer u.Unlock()
+func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	if !u.Email.Validate() {
-		return user.ErrInvalidEmail
+		return ErrInvalidEmail
 	}
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", string(u.Email))
@@ -242,15 +234,15 @@ func (db *DB) UserUpdate(ctx context.Context, u *user.User) error {
 
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
-func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*user.User, error) {
+func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
 	filter := bson.D{{fieldName, fieldValue}}
 	c, err := db.staticUsers.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
-	var users []*user.User
+	var users []*User
 	for c.Next(ctx) {
-		var u user.User
+		var u User
 		if err = c.Decode(&u); err != nil {
 			return nil, errors.AddContext(err, "failed to parse value from DB")
 		}
