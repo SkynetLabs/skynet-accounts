@@ -43,10 +43,21 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps htt
 		WriteError(w, database.ErrInvalidEmail, http.StatusBadRequest)
 		return
 	}
+	pw := req.PostFormValue("password")
+	if len(pw) == 0 {
+		WriteError(w, errors.New("The password cannot be empty."), http.StatusBadRequest)
+		return
+	}
 	u := &database.User{
 		FirstName: req.PostFormValue("firstName"),
 		LastName:  req.PostFormValue("lastName"),
 		Email:     email,
+		Tier:      database.TierUnconfirmed,
+	}
+	err = u.SetPassword(pw)
+	if err != nil {
+		WriteError(w, errors.AddContext(err, "failed to set password"), http.StatusInternalServerError)
+		return
 	}
 	err = api.staticDB.UserCreate(req.Context(), u)
 	if err != nil {

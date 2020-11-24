@@ -13,6 +13,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// User status tiers.
+const (
+	TierUnconfirmed = iota
+	TierFree
+	TierPremium
+)
+
 var (
 	// ErrInvalidEmail is returned when we encounter an invalid email value.
 	ErrInvalidEmail = errors.New("invalid email")
@@ -44,6 +51,7 @@ type (
 		FirstName string             `bson:"firstName" json:"firstName"`
 		LastName  string             `bson:"lastName" json:"lastName"`
 		Email     Email              `bson:"email" json:"email"`
+		Tier      int                `bson:"tier" json:"tier"`
 		password  []byte             `bson:"password"`
 		salt      []byte             `bson:"salt"`
 
@@ -96,7 +104,7 @@ func (u *User) SetPassword(pw string) (err error) {
 func (u *User) saltAndPepper() []byte {
 	if len(pepper) == 0 {
 		pv, ok := os.LookupEnv(envPepper)
-		if !ok {
+		if !ok && build.Release != "testing" {
 			build.Severe("Failed to load the password pepper! Using un-peppered passwords!")
 		}
 		pepper = []byte(pv)
