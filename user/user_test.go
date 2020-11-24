@@ -1,10 +1,23 @@
 package user
 
-import "testing"
+import (
+	"bytes"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/NebulousLabs/skynet-accounts/test"
+
+	"gitlab.com/NebulousLabs/fastrand"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 // TestEmail_Validate ensures email validation functions as expected.
 // See https://gist.github.com/cjaoude/fd9910626629b53c4d25
 func TestEmail_Validate(t *testing.T) {
+	t.Parallel()
+
 	valid := []string{
 		"email@example.com",
 		"firstname.lastname@example.com",
@@ -45,4 +58,111 @@ func TestEmail_Validate(t *testing.T) {
 			t.Errorf("Expected '%s' to be invalid\n", email)
 		}
 	}
+}
+
+// TestUser_saltAndPepper ensures saltAndPepper() works as expected.
+// Do not run in parallel to other tests - this test changes the environment.
+func TestUser_saltAndPepper(t *testing.T) {
+	initEnv()
+	salt := fastrand.Bytes(saltSize)
+	pepper := fastrand.Bytes(saltSize)
+	u := &User{
+		ID:        primitive.ObjectID{},
+		FirstName: "Foo",
+		LastName:  "Bar",
+		Email:     "foo@bar.baz",
+		salt:      salt,
+	}
+
+	oldPepper, ok := os.LookupEnv(envPepper)
+	if ok {
+		defer func() { _ = os.Setenv(envPepper, oldPepper) }()
+	}
+	err := os.Setenv(envPepper, string(pepper))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(u.saltAndPepper(), append(salt, pepper...)) {
+		t.Fatal("unexpected salt&pepper returned")
+	}
+}
+
+// TestUser_SetPassword ensures SetPassword() works as expected.
+func TestUser_SetPassword(t *testing.T) {
+	initEnv()
+	salt := fastrand.Bytes(saltSize)
+	u := &User{
+		ID:        primitive.ObjectID{},
+		FirstName: "Foo",
+		LastName:  "Bar",
+		Email:     "foo@bar.baz",
+		salt:      salt,
+	}
+
+	// HAPPY CASE
+	pw := string(fastrand.Bytes(24))
+	err := u.SetPassword(pw)
+	if err != nil {
+		t.Fatalf("failed to set password to '%s' (%v)\n", pw, []byte(pw))
+	}
+	if err = u.VerifyPassword(pw); err != nil {
+		t.Fatal("failed to verify password", err)
+	}
+	// ensure the salt has changed
+	if bytes.Equal(u.salt, salt) {
+		t.Fatal("salt wasn't regenerated")
+	}
+
+	// FAILURE CASE:
+	// Ensure failing to set a password doesn't affect the user's salt.
+	salt = u.salt
+	u.dep = &test.DependencyHashPassword{}
+	err = u.SetPassword("some_new_pass")
+	if err == nil || !strings.Contains(err.Error(), "DependencyHashPassword") {
+		t.Fatalf("expected to fail with  %s but got %v\n", "DependencyHashPassword", err)
+	}
+	if !bytes.Equal(u.salt, salt) {
+		t.Fatal("expected the user's salt to not change")
+	}
+}
+
+// TestUser_VerifyPassword ensures VerifyPassword() works as expected.
+func TestUser_VerifyPassword(t *testing.T) {
+	initEnv()
+	u := &User{
+		ID:        primitive.ObjectID{},
+		FirstName: "Foo",
+		LastName:  "Bar",
+		Email:     "foo@bar.baz",
+	}
+	pw := string(fastrand.Bytes(saltSize))
+	err := u.SetPassword(pw)
+	if err != nil {
+		t.Fatal("failed to set password", err)
+	}
+
+	// HAPPY CASE
+	err = u.VerifyPassword(pw)
+	if err != nil {
+		t.Fatal("failed to verify password", err)
+	}
+
+	// FAILURE CASE: Bad password
+	err = u.VerifyPassword("wrong_pass")
+	if err == nil {
+		t.Fatal("expected to fail to verify password")
+	}
+
+	// FAILURE CASE: Wrong salt
+	u.salt = fastrand.Bytes(saltSize)
+	err = u.VerifyPassword(pw)
+	if err == nil {
+		t.Fatal("expected to fail to verify password")
+	}
+}
+
+// initEnv is a helper method that initialises some environment variables for
+// testing purposes, so we don't run into build.Critical and build.Severe.
+func initEnv() {
+	_ = os.Setenv(envPepper, string(fastrand.Bytes(saltSize)))
 }

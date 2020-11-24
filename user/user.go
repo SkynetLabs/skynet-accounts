@@ -7,12 +7,11 @@ import (
 	"sync"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
-
-	"golang.org/x/crypto/bcrypt"
+	"github.com/NebulousLabs/skynet-accounts/lib"
 
 	"gitlab.com/NebulousLabs/fastrand"
-
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -48,6 +47,8 @@ type (
 		Email     Email              `bson:"email" json:"email"`
 		password  []byte             `bson:"password"`
 		salt      []byte             `bson:"salt"`
+
+		dep lib.Dependencies
 		sync.Mutex
 	}
 )
@@ -70,9 +71,10 @@ func (e Email) Validate() bool {
 func (u *User) VerifyPassword(pw string) error {
 	u.Lock()
 	defer u.Unlock()
-	return bcrypt.CompareHashAndPassword(append([]byte(pw), u.saltAndPepper()...), u.password)
+	return bcrypt.CompareHashAndPassword(u.password, append([]byte(pw), u.saltAndPepper()...))
 }
 
+// TODO Should this method take care of the DB persistence or should that be left to the caller?
 // SetPassword sets the user's password.
 func (u *User) SetPassword(pw string) (err error) {
 	u.Lock()
@@ -87,6 +89,9 @@ func (u *User) SetPassword(pw string) (err error) {
 	pwHash, err := bcrypt.GenerateFromPassword(append([]byte(pw), u.saltAndPepper()...), bcrypt.DefaultCost)
 	if err != nil {
 		return err
+	}
+	if u.dep != nil && u.dep.Disrupt("DependencyHashPassword") {
+		return errors.New("DependencyHashPassword")
 	}
 	u.password = pwHash
 	return nil
