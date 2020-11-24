@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/user"
-
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -27,15 +25,15 @@ func TestDatabase_UserByEmail(t *testing.T) {
 
 	// Add a user to find.
 	username := t.Name()
-	u := &user.User{
+	u := &database.User{
 		FirstName: username,
 		LastName:  "Pratchett",
-		Email:     (user.Email)(username + "@pratchett.com"),
+		Email:     (database.Email)(username + "@pratchett.com"),
 	}
 	if err = db.UserCreate(nil, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
+	defer func(user *database.User) {
 		_ = db.UserDelete(nil, user)
 	}(u)
 
@@ -64,15 +62,15 @@ func TestDatabase_UserByID(t *testing.T) {
 
 	// Add a user to find.
 	username := t.Name()
-	u := &user.User{
+	u := &database.User{
 		FirstName: username,
 		LastName:  "Pratchett",
-		Email:     (user.Email)(username + "@pratchett.com"),
+		Email:     (database.Email)(username + "@pratchett.com"),
 	}
 	if err = db.UserCreate(ctx, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
+	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 
@@ -95,15 +93,15 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	}
 
 	username := t.Name()
-	u := &user.User{
+	u := &database.User{
 		FirstName: username,
 		LastName:  "Pratchett",
-		Email:     (user.Email)(username + "@pratchett.com"),
+		Email:     (database.Email)(username + "@pratchett.com"),
 	}
 	if err = db.UserCreate(nil, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
+	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 
@@ -137,7 +135,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	}
 
 	// Test changing the user's email to an existing email. This should fail.
-	nu := &user.User{
+	nu := &database.User{
 		FirstName: "Some",
 		LastName:  "Guy",
 		Email:     "existing@email.com",
@@ -145,7 +143,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	if err = db.UserCreate(nil, nu); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
+	defer func(user *database.User) {
 		_ = db.UserDelete(nil, user)
 	}(u)
 	u.Email = nu.Email
@@ -164,7 +162,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 	}
 
 	// Add a user to delete.
-	u := &user.User{
+	u := &database.User{
 		FirstName: "Ivaylo",
 		LastName:  "Novakov",
 		Email:     "ivaylo@nebulous.tech",
@@ -172,7 +170,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 	if err = db.UserCreate(ctx, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
+	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Make sure the user is there.
@@ -202,6 +200,5 @@ func DBTestCredentials() database.DBCredentials {
 		Password: "ivolocalpass",
 		Host:     "localhost",
 		Port:     "37017",
-		//Port:     "27017", // DEBUG
 	}
 }

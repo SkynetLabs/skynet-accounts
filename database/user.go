@@ -1,10 +1,9 @@
-package user
+package database
 
 import (
 	"errors"
 	"os"
 	"regexp"
-	"sync"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/lib"
@@ -49,7 +48,6 @@ type (
 		salt      []byte             `bson:"salt"`
 
 		dep lib.Dependencies
-		sync.Mutex
 	}
 )
 
@@ -69,16 +67,12 @@ func (e Email) Validate() bool {
 
 // VerifyPassword verifies that the given password is correct for this user.
 func (u *User) VerifyPassword(pw string) error {
-	u.Lock()
-	defer u.Unlock()
 	return bcrypt.CompareHashAndPassword(u.password, append([]byte(pw), u.saltAndPepper()...))
 }
 
-// TODO Should this method take care of the DB persistence or should that be left to the caller?
 // SetPassword sets the user's password.
+// TODO Should this method take care of the DB persistence or should that be left to the caller?
 func (u *User) SetPassword(pw string) (err error) {
-	u.Lock()
-	defer u.Unlock()
 	oldSalt := u.salt
 	defer func() {
 		if err != nil {
