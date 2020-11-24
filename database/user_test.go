@@ -71,7 +71,7 @@ func TestUser_saltAndPepper(t *testing.T) {
 		FirstName: "Foo",
 		LastName:  "Bar",
 		Email:     "foo@bar.baz",
-		salt:      salt,
+		Salt:      salt,
 	}
 
 	oldPepper, ok := os.LookupEnv(envPepper)
@@ -96,7 +96,7 @@ func TestUser_SetPassword(t *testing.T) {
 		FirstName: "Foo",
 		LastName:  "Bar",
 		Email:     "foo@bar.baz",
-		salt:      salt,
+		Salt:      salt,
 	}
 
 	// HAPPY CASE
@@ -109,19 +109,19 @@ func TestUser_SetPassword(t *testing.T) {
 		t.Fatal("failed to verify password", err)
 	}
 	// ensure the salt has changed
-	if bytes.Equal(u.salt, salt) {
+	if bytes.Equal(u.Salt, salt) {
 		t.Fatal("salt wasn't regenerated")
 	}
 
 	// FAILURE CASE:
 	// Ensure failing to set a password doesn't affect the user's salt.
-	salt = u.salt
+	salt = u.Salt
 	u.dep = &test.DependencyHashPassword{}
 	err = u.SetPassword("some_new_pass")
 	if err == nil || !strings.Contains(err.Error(), "DependencyHashPassword") {
 		t.Fatalf("expected to fail with  %s but got %v\n", "DependencyHashPassword", err)
 	}
-	if !bytes.Equal(u.salt, salt) {
+	if !bytes.Equal(u.Salt, salt) {
 		t.Fatal("expected the user's salt to not change")
 	}
 }
@@ -154,7 +154,7 @@ func TestUser_VerifyPassword(t *testing.T) {
 	}
 
 	// FAILURE CASE: Wrong salt
-	u.salt = fastrand.Bytes(saltSize)
+	u.Salt = fastrand.Bytes(saltSize)
 	err = u.VerifyPassword(pw)
 	if err == nil {
 		t.Fatal("expected to fail to verify password")

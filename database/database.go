@@ -16,8 +16,7 @@ import (
 
 /*
 TODO
- - Unit tests for all methods. Mock the DB for that.
- - We should use a tool/library that allows us to catch common ways to go around the unique email requirement, such as adding suffixes to gmail addresses, e.g. ivo@gmail.com and ivo.fake@gmail.com are the same email.
+ - We should use a tool/library that allows us to catch common ways to go around the unique email requirement, such as adding suffixes to gmail addresses, e.g. ivo@gmail.com and ivo+fake@gmail.com are the same email.
 */
 
 var (
@@ -156,10 +155,9 @@ func (db *DB) UserCreate(ctx context.Context, u *User) error {
 		return ErrEmailAlreadyUsed
 	}
 	// Insert the user.
-	fields := bson.M{
-		"firstName": u.FirstName,
-		"lastName":  u.LastName,
-		"email":     u.Email,
+	fields, err := bson.Marshal(u)
+	if err != nil {
+		return err
 	}
 	ir, err := db.staticUsers.InsertOne(ctx, fields)
 	if err != nil {

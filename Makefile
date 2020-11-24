@@ -15,7 +15,7 @@ all: release
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./ ./api ./build ./database
+pkgs = ./ ./api ./build ./database ./lib
 
 # integration-pkgs defines the packages which contain integration tests
 integration-pkgs = ./test
@@ -95,12 +95,11 @@ test:
 	go test -short -tags='debug testing netgo' -timeout=5s $(pkgs) -run=. -count=$(count)
 test-long: clean fmt vet lint-ci
 	@mkdir -p cover
-	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=3600s $(pkgs) -run=. -count=$(count)
+	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
 
 # test-int always returns a zero exit value! Only use it manually!
-test-int: clean fmt vet lint-ci start-mongo
-	@mkdir -p cover
-	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -tags='testing debug netgo' -timeout=3600s $(integration-pkgs) -run=. -count=$(count) ; \
+test-int: clean fmt vet lint-ci test-long start-mongo
+	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
 	make stop-mongo
 
 .PHONY: all fmt install release clean test test-int test-long stop-mongo

@@ -2,15 +2,14 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
 
-	"github.com/NebulousLabs/skynet-accounts/build"
-
 	"github.com/julienschmidt/httprouter"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 /*
