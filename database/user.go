@@ -53,8 +53,8 @@ type (
 		LastName  string             `bson:"lastName" json:"lastName"`
 		Email     Email              `bson:"email" json:"email"`
 		Tier      int                `bson:"tier" json:"tier"`
-		Password  []byte             `bson:"password"`
-		Salt      []byte             `bson:"salt"`
+		Password  []byte             `bson:"password" json:"-"`
+		Salt      []byte             `bson:"salt" json:"-"`
 
 		dep lib.Dependencies
 	}
