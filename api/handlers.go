@@ -18,6 +18,12 @@ const (
 	MaxMultipartMem = 64_000_000
 )
 
+var (
+	// ErrAccountUnconfirmed is returned when a suer with an unconfirmed account
+	// tried to log in.
+	ErrAccountUnconfirmed = errors.New("Unconfirmed.")
+)
+
 // userHandlerGET returns information about an existing user.
 func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	ok, err := isSelf(req, ps)
@@ -30,7 +36,7 @@ func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, ps http
 		return
 	}
 
-	u, err := api.staticDB.UserByID(req.Context(), id)
+	u, err := api.staticDB.UserByID(req.Context(), ps.ByName("id"))
 	if errors.Contains(err, database.ErrUserNotFound) {
 		WriteError(w, database.ErrUserNotFound, http.StatusNotFound)
 		return
@@ -173,6 +179,12 @@ func (api *API) userLoginHandler(w http.ResponseWriter, req *http.Request, ps ht
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	if u.Tier == database.TierUnconfirmed {
+		// TODO This error should be picked up by the FE and it should offer to
+		// 	resend the account confirmation email.
+		WriteError(w, ErrAccountUnconfirmed, http.StatusUnauthorized)
+		return
+	}
 	err = u.VerifyPassword(pw)
 	if err != nil {
 		WriteError(w, errors.New("Bad username or password."), http.StatusUnauthorized)
@@ -225,7 +237,6 @@ func isSelf(req *http.Request, ps httprouter.Params) (bool, error) {
 		return false, errors.New("failed to get claims")
 	}
 
-	id := ps.ByName("id")
-	isSelf := id != claims["user_id"]
+	isSelf := ps.ByName("id") != claims["user_id"]
 	return isSelf, nil
 }
