@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"os"
 
-	"gitlab.com/NebulousLabs/errors"
-
 	"github.com/NebulousLabs/skynet-accounts/api"
 	"github.com/NebulousLabs/skynet-accounts/database"
+
+	"github.com/joho/godotenv"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 var (
@@ -27,6 +28,9 @@ var (
 // dbConnFromEnv creates a new DB connection based on credentials found in the
 // environment variables.
 func dbConnFromEnv(ctx context.Context) (*database.DB, error) {
+	// Load the environment variables from the .env file.
+	// Existing variables take precedence and won't be overwritten.
+	_ = godotenv.Load()
 	var creds database.DBCredentials
 	var ok bool
 	if creds.User, ok = os.LookupEnv(envDBUser); !ok {
