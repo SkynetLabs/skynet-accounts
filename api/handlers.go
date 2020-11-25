@@ -96,35 +96,21 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps http
 		return
 	}
 
+	var u *database.User
+	// Fetch the user by their id.
+	if id := ps.ByName("id"); id != "" {
+		u, err = api.staticDB.UserByID(req.Context(), id)
+		if err != nil {
+			// This is a Bad Request and not an Internal Server Error because
+			// the client has supplied an invalid user id.
+			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
+			return
+		}
+	}
 	err = req.ParseMultipartForm(MaxMultipartMem)
 	if err != nil {
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
-	}
-	var u *database.User
-	// Fetch the user by their id. That is represented by the `_id` key because
-	// that is the naming Mongo uses.
-	if id := req.PostFormValue("_id"); id != "" {
-		u, err = api.staticDB.UserByID(req.Context(), id)
-		if err != nil {
-			// This is a Bad Request and not an Internal Server Error because
-			// the client has supplied an invalid `_id`.
-			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
-			return
-		}
-	}
-	// Fetch the user by their email.
-	if u == nil {
-		email, err := database.NewEmail(req.PostFormValue("email"))
-		if err != nil {
-			WriteError(w, errors.AddContext(err, "invalid email provided"), http.StatusBadRequest)
-			return
-		}
-		u, err = api.staticDB.UserByEmail(req.Context(), email)
-		if err != nil {
-			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
-			return
-		}
 	}
 	if fn := req.PostFormValue("firstName"); fn != "" {
 		u.FirstName = fn
@@ -237,6 +223,6 @@ func isSelf(req *http.Request, ps httprouter.Params) (bool, error) {
 		return false, errors.New("failed to get claims")
 	}
 
-	isSelf := ps.ByName("id") != claims["user_id"]
+	isSelf := ps.ByName("id") == claims["user_id"]
 	return isSelf, nil
 }
