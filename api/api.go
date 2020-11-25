@@ -26,6 +26,9 @@ const (
 	// DefaultTimeoutRequest defines the longest an API request can take before
 	// triggering a timeout. In seconds.
 	DefaultTimeoutRequest = 30
+
+	// TokenValiditySeconds determines the duration of JWT tokens.
+	TokenValiditySeconds = 24 * 3600
 )
 
 // API is ...
@@ -33,6 +36,11 @@ type API struct {
 	staticDB     *database.DB
 	staticRouter *httprouter.Router
 }
+
+// ctxValue is a helper type which makes it safe to register values in the
+// context. If we don't use a custom unexported type it's possible for others
+// to get our value.
+type ctxValue string
 
 // New returns a new initialised API.
 func New(db *database.DB) (*API, error) {

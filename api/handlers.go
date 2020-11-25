@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/dgrijalva/jwt-go"
+
 	"github.com/NebulousLabs/skynet-accounts/database"
 
 	"github.com/julienschmidt/httprouter"
@@ -18,8 +20,16 @@ const (
 
 // userHandlerGET returns information about an existing user.
 func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	// TODO Limit to the user themselves.
-	id := ps.ByName("id")
+	ok, err := isSelf(req, ps)
+	if err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		WriteError(w, errors.New("you cannot access other users' info"), http.StatusBadRequest)
+		return
+	}
+
 	u, err := api.staticDB.UserByID(req.Context(), id)
 	if errors.Contains(err, database.ErrUserNotFound) {
 		WriteError(w, database.ErrUserNotFound, http.StatusNotFound)
@@ -70,13 +80,24 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps htt
 
 // userHandlerPUT updates an existing user.
 func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	err := req.ParseMultipartForm(MaxMultipartMem)
+	ok, err := isSelf(req, ps)
+	if err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		WriteError(w, errors.New("you cannot access other users' info"), http.StatusBadRequest)
+		return
+	}
+
+	err = req.ParseMultipartForm(MaxMultipartMem)
 	if err != nil {
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
 	}
 	var u *database.User
-	// Fetch the user by their _id.
+	// Fetch the user by their id. That is represented by the `_id` key because
+	// that is the naming Mongo uses.
 	if id := req.PostFormValue("_id"); id != "" {
 		u, err = api.staticDB.UserByID(req.Context(), id)
 		if err != nil {
@@ -131,17 +152,46 @@ func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Reque
 
 // userLoginHandler starts a new session for a user.
 func (api *API) userLoginHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	// TODO Implement
-	fmt.Println("User login.")
-	//req.ParseForm()
-	//req.Form.Set("async", "true")
-	//api.renterDownloadHandler(w, req, ps)
-	WriteJSON(w, struct{ msg string }{"Not implemented."})
+	if err := req.ParseMultipartForm(MaxMultipartMem); err != nil {
+		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
+		return
+	}
+	email, err := database.NewEmail(req.PostFormValue("email"))
+	if err != nil {
+		WriteError(w, database.ErrInvalidEmail, http.StatusBadRequest)
+		return
+	}
+	pw := req.PostFormValue("password")
+	if len(pw) == 0 {
+		WriteError(w, errors.New("The password cannot be empty."), http.StatusBadRequest)
+		return
+	}
+	u, err := api.staticDB.UserByEmail(req.Context(), email)
+	if err != nil {
+		// TODO Consider logging this with a unique ID and returning only the ID
+		// 	and a vague description. Maybe for all endpoints.
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	err = u.VerifyPassword(pw)
+	if err != nil {
+		WriteError(w, errors.New("Bad username or password."), http.StatusUnauthorized)
+		return
+	}
+	token, err := IssueToken(u)
+	if err != nil {
+		fmt.Println(err)
+		// TODO WriteError doesn't set the response's error message properly. Or Postman doesn't read it properly?
+		WriteError(w, err, http.StatusUnprocessableEntity)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	WriteJSON(w, token)
 }
 
-// userPasswordResetRequestHandler starts the password recovery routine.
+// passwordResetRequestHandler starts the password recovery routine.
 // This involves sending an email with a password reset link to the user.
-func (api *API) userPasswordResetRequestHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) passwordResetRequestHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// TODO Implement
 	WriteJSON(w, struct{ msg string }{"Not implemented."})
 }
@@ -154,11 +204,28 @@ func (api *API) userPasswordResetVerifyHandler(w http.ResponseWriter, req *http.
 	WriteJSON(w, struct{ msg string }{"Not implemented."})
 }
 
-// userPasswordResetCompleteHandler completes the password recovery routine by
+// passwordResetCompleteHandler completes the password recovery routine by
 // changing the user's password to the newly provided one, given that the
 // provided recovery code is valid and unused. It also marks the recovery code
 // as used.
-func (api *API) userPasswordResetCompleteHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) passwordResetCompleteHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// TODO Implement
 	WriteJSON(w, struct{ msg string }{"Not implemented."})
+}
+
+// isSelf is a helper function that tells us if the authenticated user is the
+// same as the user whose id is being used in the route path.
+func isSelf(req *http.Request, ps httprouter.Params) (bool, error) {
+	token, ok := req.Context().Value(ctxValue("token")).(*jwt.Token)
+	if !ok {
+		return false, errors.New("failed to get token")
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return false, errors.New("failed to get claims")
+	}
+
+	id := ps.ByName("id")
+	isSelf := id != claims["user_id"]
+	return isSelf, nil
 }
