@@ -145,12 +145,13 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	}
 	defer func(user *database.User) {
 		_ = db.UserDelete(nil, user)
-	}(u)
+	}(nu)
 	u.Email = nu.Email
 	err = db.UserCreate(ctx, u)
 	if !errors.Contains(err, database.ErrEmailAlreadyUsed) {
 		t.Fatalf("Expected error ErrEmailAlreadyUsed but got %v\n", err)
 	}
+	_ = db.UserDelete(nil, u)
 }
 
 // TestDatabase_UserDelete ensures UserDelete works as expected.
@@ -197,8 +198,8 @@ func TestDatabase_UserDelete(t *testing.T) {
 func DBTestCredentials() database.DBCredentials {
 	return database.DBCredentials{
 		User:     "admin",
-		Password: "ivolocalpass",
+		Password: "aO4tV5tC1oU3oQ7u",
 		Host:     "localhost",
-		Port:     "37017",
+		Port:     "27017",
 	}
 }

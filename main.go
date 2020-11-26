@@ -25,27 +25,27 @@ var (
 	envDBPass = "SKYNET_DB_PASS" // #nosec G101: Potential hardcoded credentials
 )
 
-// dbConnFromEnv creates a new DB connection based on credentials found in the
-// environment variables.
-func dbConnFromEnv(ctx context.Context) (*database.DB, error) {
+// loadDBCredentials creates a new DB connection based on credentials found in
+// the environment variables.
+func loadDBCredentials() (database.DBCredentials, error) {
 	// Load the environment variables from the .env file.
 	// Existing variables take precedence and won't be overwritten.
 	_ = godotenv.Load()
-	var creds database.DBCredentials
+	var cds database.DBCredentials
 	var ok bool
-	if creds.User, ok = os.LookupEnv(envDBUser); !ok {
-		return nil, errors.New("missing env var " + envDBUser)
+	if cds.User, ok = os.LookupEnv(envDBUser); !ok {
+		return database.DBCredentials{}, errors.New("missing env var " + envDBUser)
 	}
-	if creds.Password, ok = os.LookupEnv(envDBPass); !ok {
-		return nil, errors.New("missing env var " + envDBPass)
+	if cds.Password, ok = os.LookupEnv(envDBPass); !ok {
+		return database.DBCredentials{}, errors.New("missing env var " + envDBPass)
 	}
-	if creds.Host, ok = os.LookupEnv(envDBHost); !ok {
-		return nil, errors.New("missing env var " + envDBHost)
+	if cds.Host, ok = os.LookupEnv(envDBHost); !ok {
+		return database.DBCredentials{}, errors.New("missing env var " + envDBHost)
 	}
-	if creds.Port, ok = os.LookupEnv(envDBPort); !ok {
-		return nil, errors.New("missing env var " + envDBPort)
+	if cds.Port, ok = os.LookupEnv(envDBPort); !ok {
+		return database.DBCredentials{}, errors.New("missing env var " + envDBPort)
 	}
-	return database.New(ctx, creds)
+	return cds, nil
 }
 
 func main() {
@@ -53,8 +53,12 @@ func main() {
 	if !ok {
 		port = "3000"
 	}
+	dbCreds, err := loadDBCredentials()
+	if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
+	}
 	ctx := context.Background()
-	db, err := dbConnFromEnv(ctx)
+	db, err := database.New(ctx, dbCreds)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}

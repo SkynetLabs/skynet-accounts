@@ -65,7 +65,7 @@ start-mongo:
      --name skynet-accounts-mongo-test-db \
      -p 127.0.0.1:37017:27017 \
      -e MONGO_INITDB_ROOT_USERNAME=admin \
-     -e MONGO_INITDB_ROOT_PASSWORD=ivolocalpass \
+     -e MONGO_INITDB_ROOT_PASSWORD=aO4tV5tC1oU3oQ7u \
      mongo
 
 stop-mongo:
