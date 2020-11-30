@@ -71,17 +71,16 @@ start-mongo:
 stop-mongo:
 	docker stop skynet-accounts-mongo-test-db
 
-# start-mailslurp builds and starts a fake mail server listening on port 2500.
+# start-mailslurp starts a fake mail server listening on port 2500.
 # We use that server in our integration tests.
 start-mailslurp:
 	-docker stop mailslurp
-	cd ./test/mail/ && docker build . -t mailslurp && cd -
 	docker run \
 		--rm \
 		--detach \
 		--name mailslurp \
 		-p 2500:2500 \
-		mailslurp
+		inovakov/mailslurper
 
 stop-mailslurp:
 	docker stop mailslurp
@@ -116,6 +115,6 @@ test-long: clean fmt vet lint-ci
 test-int: clean fmt vet lint-ci test-long start-mongo start-mailslurp
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
 	make stop-mongo
-	make stop-mailslurp
+	#make stop-mailslurp
 
 .PHONY: all fmt install release clean test test-int test-long stop-mongo
