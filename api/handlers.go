@@ -68,7 +68,7 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps htt
 		FirstName: req.PostFormValue("firstName"),
 		LastName:  req.PostFormValue("lastName"),
 		Email:     email,
-		Tier:      database.TierUnconfirmed,
+		Tier:      database.TierFree,
 	}
 	err = u.SetPassword(pw)
 	if err != nil {
