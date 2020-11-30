@@ -5,11 +5,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
-	"github.com/NebulousLabs/skynet-accounts/user"
-
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -17,16 +14,13 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var (
-	// envDBHost holds the name of the environment variable for DB host.
-	envDBHost = "SKYNET_DB_HOST"
-	// envDBPort holds the name of the environment variable for DB port.
-	envDBPort = "SKYNET_DB_PORT"
-	// envDBUser holds the name of the environment variable for DB username.
-	envDBUser = "SKYNET_DB_USER" // #nosec
-	// envDBPass holds the name of the environment variable for DB password.
-	envDBPass = "SKYNET_DB_PASS" // #nosec
+/*
+TODO
+ - Unit tests for all methods. Mock the DB for that.
+ - We should use a tool/library that allows us to catch common ways to go around the unique email requirement, such as adding suffixes to gmail addresses, e.g. ivo@gmail.com and ivo.fake@gmail.com are the same email.
+*/
 
+var (
 	// mongoCompressors defines the compressors we are going to use for the
 	// connection to MongoDB
 	mongoCompressors = "zstd,zlib,snappy"
@@ -58,24 +52,26 @@ var (
 	ErrGeneralInternalFailure = errors.New("general internal failure")
 )
 
-// DB represents a MongoDB database connection.
-type DB struct {
-	staticDB    *mongo.Database
-	staticUsers *mongo.Collection
-}
-
-// New returns a new DB connection based on the environment variables.
-func New(ctx context.Context) (*DB, error) {
-	opts, err := connectionOptionsFromEnv()
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to get all necessary connection parameters")
+type (
+	// DB represents a MongoDB database connection.
+	DB struct {
+		staticDB    *mongo.Database
+		staticUsers *mongo.Collection
 	}
-	return NewCustom(ctx, opts[envDBUser], opts[envDBPass], opts[envDBHost], opts[envDBPort], dbName)
-}
 
-// NewCustom returns a new DB connection based on the passed parameters.
-func NewCustom(ctx context.Context, user, pass, host, port, dbname string) (*DB, error) {
-	connStr := connectionString(user, pass, host, port)
+	// DBCredentials is a helper struct that binds together all values needed for
+	// establishing a DB connection.
+	DBCredentials struct {
+		User     string
+		Password string
+		Host     string
+		Port     string
+	}
+)
+
+// New returns a new DB connection based on the passed parameters.
+func New(ctx context.Context, creds DBCredentials) (*DB, error) {
+	connStr := connectionString(creds)
 	c, err := mongo.NewClient(options.Client().ApplyURI(connStr))
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to create a new DB client")
@@ -84,7 +80,7 @@ func NewCustom(ctx context.Context, user, pass, host, port, dbname string) (*DB,
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to connect to DB")
 	}
-	database := c.Database(dbname)
+	database := c.Database(dbName)
 	users := database.Collection(dbUsersCollection)
 	db := &DB{
 		staticDB:    database,
@@ -99,9 +95,9 @@ func (db *DB) Disconnect(ctx context.Context) error {
 }
 
 // UserByEmail returns the user with the given email or nil.
-func (db *DB) UserByEmail(ctx context.Context, email user.Email) (*user.User, error) {
+func (db *DB) UserByEmail(ctx context.Context, email Email) (*User, error) {
 	if !email.Validate() {
-		return nil, user.ErrInvalidEmail
+		return nil, ErrInvalidEmail
 	}
 	users, err := db.managedUsersByField(ctx, "email", string(email))
 	if err != nil {
@@ -119,7 +115,7 @@ func (db *DB) UserByEmail(ctx context.Context, email user.Email) (*user.User, er
 }
 
 // UserByID finds a user by their ID.
-func (db *DB) UserByID(ctx context.Context, id string) (*user.User, error) {
+func (db *DB) UserByID(ctx context.Context, id string) (*User, error) {
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse user ID")
@@ -137,7 +133,7 @@ func (db *DB) UserByID(ctx context.Context, id string) (*user.User, error) {
 	if ok := c.Next(ctx); ok {
 		build.Critical("more than one user found for id", id)
 	}
-	var u user.User
+	var u User
 	err = c.Decode(&u)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse value from DB")
@@ -147,11 +143,9 @@ func (db *DB) UserByID(ctx context.Context, id string) (*user.User, error) {
 
 // UserCreate creates a new user in the DB. We need the user object to be passed
 // by reference because we need to be able to update the ID of new user.
-func (db *DB) UserCreate(ctx context.Context, u *user.User) error {
-	u.Lock()
-	defer u.Unlock()
+func (db *DB) UserCreate(ctx context.Context, u *User) error {
 	if !u.Email.Validate() {
-		return user.ErrInvalidEmail
+		return ErrInvalidEmail
 	}
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", string(u.Email))
@@ -186,9 +180,7 @@ func (db *DB) UserCreate(ctx context.Context, u *user.User) error {
 }
 
 // UserDelete deletes a user by their ID.
-func (db *DB) UserDelete(ctx context.Context, u *user.User) error {
-	u.Lock()
-	defer u.Unlock()
+func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if u.ID.IsZero() {
 		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
 	}
@@ -204,11 +196,9 @@ func (db *DB) UserDelete(ctx context.Context, u *user.User) error {
 }
 
 // UserUpdate saves the user in the DB.
-func (db *DB) UserUpdate(ctx context.Context, u *user.User) error {
-	u.Lock()
-	defer u.Unlock()
+func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	if !u.Email.Validate() {
-		return user.ErrInvalidEmail
+		return ErrInvalidEmail
 	}
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", string(u.Email))
@@ -223,6 +213,7 @@ func (db *DB) UserUpdate(ctx context.Context, u *user.User) error {
 	if len(users) > 0 && !bytes.Equal(u.ID[:], users[0].ID[:]) {
 		return ErrEmailAlreadyUsed
 	}
+	// TODO What if we have a race a user gets this email right at this point?
 	// Update the user.
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
@@ -243,15 +234,15 @@ func (db *DB) UserUpdate(ctx context.Context, u *user.User) error {
 
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
-func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*user.User, error) {
+func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
 	filter := bson.D{{fieldName, fieldValue}}
 	c, err := db.staticUsers.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
-	var users []*user.User
+	var users []*User
 	for c.Next(ctx) {
-		var u user.User
+		var u User
 		if err = c.Decode(&u); err != nil {
 			return nil, errors.AddContext(err, "failed to parse value from DB")
 		}
@@ -263,34 +254,20 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	return users, nil
 }
 
-// connectionOptionsFromEnv retrieves the DB connection credentials from the
-// environment and returns them in a map.
-func connectionOptionsFromEnv() (map[string]string, error) {
-	opts := make(map[string]string)
-	for _, varName := range []string{envDBHost, envDBPort, envDBUser, envDBPass} {
-		val, ok := os.LookupEnv(varName)
-		if !ok {
-			return nil, errors.New("missing env var " + varName)
-		}
-		opts[varName] = val
-	}
-	return opts, nil
-}
-
 // connectionString is a helper that returns a valid MongoDB connection string
 // based on the passed credentials and a set of constants. The connection string
 // is using the standalone approach because the service is supposed to talk to
 // the replica set only via the local node.
 // See https://docs.mongodb.com/manual/reference/connection-string/
-func connectionString(user, pass, host, port string) string {
+func connectionString(creds DBCredentials) string {
 	// There are some symbols in usernames and passwords that need to be escaped.
 	// See https://docs.mongodb.com/manual/reference/connection-string/#components
 	return fmt.Sprintf(
 		"mongodb://%s:%s@%s:%s/?compressors=%s&readPreference=%s&w=%s&wtimeoutMS=%s",
-		url.QueryEscape(user),
-		url.QueryEscape(pass),
-		host,
-		port,
+		url.QueryEscape(creds.User),
+		url.QueryEscape(creds.Password),
+		creds.Host,
+		creds.Port,
 		mongoCompressors,
 		mongoReadPreference,
 		mongoWriteConcern,

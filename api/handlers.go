@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/NebulousLabs/skynet-accounts/user"
-
 	"github.com/NebulousLabs/skynet-accounts/database"
 
 	"github.com/julienschmidt/httprouter"
@@ -40,12 +38,12 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps htt
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
 	}
-	email := (user.Email)(req.PostFormValue("email"))
+	email := (database.Email)(req.PostFormValue("email"))
 	if !email.Validate() {
-		WriteError(w, user.ErrInvalidEmail, http.StatusBadRequest)
+		WriteError(w, database.ErrInvalidEmail, http.StatusBadRequest)
 		return
 	}
-	u := &user.User{
+	u := &database.User{
 		FirstName: req.PostFormValue("firstName"),
 		LastName:  req.PostFormValue("lastName"),
 		Email:     email,
@@ -66,7 +64,7 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps http
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
 	}
-	var u *user.User
+	var u *database.User
 	// Fetch the user by their _id.
 	if id := req.PostFormValue("_id"); id != "" {
 		u, err = api.staticDB.UserByID(req.Context(), id)
@@ -79,7 +77,7 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps http
 	}
 	// Fetch the user by their email.
 	if u == nil {
-		email := (user.Email)(req.PostFormValue("email"))
+		email := (database.Email)(req.PostFormValue("email"))
 		u, err = api.staticDB.UserByEmail(req.Context(), email)
 		if err != nil {
 			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
@@ -95,10 +93,10 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps http
 	if em := req.PostFormValue("email"); em != "" {
 		// No need for extra validation here, the email will be validated in
 		// the update method before any work is done.
-		u.Email = user.Email(em)
+		u.Email = database.Email(em)
 	}
 	err = api.staticDB.UserUpdate(req.Context(), u)
-	if errors.Contains(err, user.ErrInvalidEmail) || errors.Contains(err, database.ErrEmailAlreadyUsed) {
+	if errors.Contains(err, database.ErrInvalidEmail) || errors.Contains(err, database.ErrEmailAlreadyUsed) {
 		WriteError(w, err, http.StatusBadRequest)
 		return
 	}

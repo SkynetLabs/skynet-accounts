@@ -2,24 +2,18 @@ package database
 
 import (
 	"context"
-	"os"
 	"reflect"
 	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/user"
-
 	"gitlab.com/NebulousLabs/errors"
 )
 
 // TestDatabase_UserByEmail ensures UserByEmail works as expected.
 // This method also test UserCreate.
 func TestDatabase_UserByEmail(t *testing.T) {
-	initEnv()
-	username := t.Name()
 	ctx := context.Background()
-
-	db, err := database.New(ctx)
+	db, err := database.New(ctx, DBTestCredentials())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,15 +24,16 @@ func TestDatabase_UserByEmail(t *testing.T) {
 	}
 
 	// Add a user to find.
-	u := &user.User{
+	username := t.Name()
+	u := &database.User{
 		FirstName: username,
 		LastName:  "Pratchett",
-		Email:     (user.Email)(username + "@pratchett.com"),
+		Email:     (database.Email)(username + "@pratchett.com"),
 	}
 	if err = db.UserCreate(nil, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
+	defer func(user *database.User) {
 		_ = db.UserDelete(nil, user)
 	}(u)
 
@@ -54,11 +49,8 @@ func TestDatabase_UserByEmail(t *testing.T) {
 
 // TestDatabase_UserByID ensures UserByID works as expected.
 func TestDatabase_UserByID(t *testing.T) {
-	initEnv()
-	username := t.Name()
 	ctx := context.Background()
-
-	db, err := database.New(ctx)
+	db, err := database.New(ctx, DBTestCredentials())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,16 +61,17 @@ func TestDatabase_UserByID(t *testing.T) {
 	}
 
 	// Add a user to find.
-	u := &user.User{
+	username := t.Name()
+	u := &database.User{
 		FirstName: username,
 		LastName:  "Pratchett",
-		Email:     (user.Email)(username + "@pratchett.com"),
+		Email:     (database.Email)(username + "@pratchett.com"),
 	}
-	if err = db.UserCreate(nil, u); err != nil {
+	if err = db.UserCreate(ctx, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
-		_ = db.UserDelete(nil, user)
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
 	}(u)
 
 	// Test finding an existent user. This should pass.
@@ -93,25 +86,23 @@ func TestDatabase_UserByID(t *testing.T) {
 
 // TestDatabase_UserUpdate ensures UserUpdate works as expected.
 func TestDatabase_UserUpdate(t *testing.T) {
-	initEnv()
-	username := t.Name()
 	ctx := context.Background()
-
-	db, err := database.New(ctx)
+	db, err := database.New(ctx, DBTestCredentials())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	u := &user.User{
+	username := t.Name()
+	u := &database.User{
 		FirstName: username,
 		LastName:  "Pratchett",
-		Email:     (user.Email)(username + "@pratchett.com"),
+		Email:     (database.Email)(username + "@pratchett.com"),
 	}
 	if err = db.UserCreate(nil, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
-		_ = db.UserDelete(nil, user)
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
 	}(u)
 
 	// Test changing the user's names.
@@ -144,7 +135,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	}
 
 	// Test changing the user's email to an existing email. This should fail.
-	nu := &user.User{
+	nu := &database.User{
 		FirstName: "Some",
 		LastName:  "Guy",
 		Email:     "existing@email.com",
@@ -152,7 +143,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	if err = db.UserCreate(nil, nu); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
+	defer func(user *database.User) {
 		_ = db.UserDelete(nil, user)
 	}(u)
 	u.Email = nu.Email
@@ -164,25 +155,23 @@ func TestDatabase_UserUpdate(t *testing.T) {
 
 // TestDatabase_UserDelete ensures UserDelete works as expected.
 func TestDatabase_UserDelete(t *testing.T) {
-	initEnv()
 	ctx := context.Background()
-
-	db, err := database.New(ctx)
+	db, err := database.New(ctx, DBTestCredentials())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add a user to delete.
-	u := &user.User{
+	u := &database.User{
 		FirstName: "Ivaylo",
 		LastName:  "Novakov",
 		Email:     "ivaylo@nebulous.tech",
 	}
-	if err = db.UserCreate(nil, u); err != nil {
+	if err = db.UserCreate(ctx, u); err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *user.User) {
-		_ = db.UserDelete(nil, user)
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Make sure the user is there.
 	fu, err := db.UserByID(ctx, u.ID.Hex())
@@ -204,13 +193,12 @@ func TestDatabase_UserDelete(t *testing.T) {
 	}
 }
 
-// initEnv sets the environment variables to what we have defined in Makefile.
-func initEnv() {
-	e1 := os.Setenv("SKYNET_DB_HOST", "localhost")
-	e2 := os.Setenv("SKYNET_DB_PORT", "37017")
-	e3 := os.Setenv("SKYNET_DB_USER", "admin")
-	e4 := os.Setenv("SKYNET_DB_PASS", "ivolocalpass")
-	if err := errors.Compose(e1, e2, e3, e4); err != nil {
-		panic(err)
+// DBTestCredentials sets the environment variables to what we have defined in Makefile.
+func DBTestCredentials() database.DBCredentials {
+	return database.DBCredentials{
+		User:     "admin",
+		Password: "ivolocalpass",
+		Host:     "localhost",
+		Port:     "37017",
 	}
 }
