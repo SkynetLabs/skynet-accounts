@@ -112,6 +112,7 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps http
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
 	}
+	// Get the changes values.
 	if fn := req.PostFormValue("firstName"); fn != "" {
 		u.FirstName = fn
 	}
@@ -123,6 +124,7 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps http
 		// the update method before any work is done.
 		u.Email = database.Email(em)
 	}
+	// Persist the changes.
 	err = api.staticDB.UserUpdate(req.Context(), u)
 	if errors.Contains(err, database.ErrInvalidEmail) || errors.Contains(err, database.ErrEmailAlreadyUsed) {
 		WriteError(w, err, http.StatusBadRequest)
@@ -138,8 +140,56 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps http
 
 // userChangePasswordHandler changes a user's password, given the old one is known.
 func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	// TODO Implement
-	WriteJSON(w, struct{ msg string }{"Not implemented."})
+	ok, err := isSelf(req, ps)
+	if err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		WriteError(w, errors.New("you cannot access other users' info"), http.StatusBadRequest)
+		return
+	}
+
+	var u *database.User
+	// Fetch the user by their id.
+	if id := ps.ByName("id"); id != "" {
+		u, err = api.staticDB.UserByID(req.Context(), id)
+		if err != nil {
+			// This is a Bad Request and not an Internal Server Error because
+			// the client has supplied an invalid user id.
+			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
+			return
+		}
+	}
+	err = req.ParseMultipartForm(MaxMultipartMem)
+	if err != nil {
+		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
+		return
+	}
+	// Validate that the given old password is correct.
+	if pw := req.PostFormValue("oldPassword"); pw != "" {
+		err = u.VerifyPassword(pw)
+		if err != nil {
+			WriteError(w, errors.New("Bad username or password."), http.StatusBadRequest)
+			return
+		}
+	}
+	// Set the new password.
+	if pw := req.PostFormValue("newPassword"); pw != "" {
+		err = u.SetPassword(pw)
+		if err != nil {
+			WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
+	}
+	// Persist the change.
+	err = api.staticDB.UserUpdatePassword(req.Context(), u)
+	if err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	WriteJSON(w, u)
 }
 
 // userLoginHandler starts a new session for a user.

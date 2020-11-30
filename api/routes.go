@@ -16,9 +16,9 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/:id", Validate(api.userHandlerGET))
 	api.staticRouter.PUT("/user/:id", Validate(api.userHandlerPUT))
 	api.staticRouter.POST("/user/:id/password", Validate(api.userChangePasswordHandler))
-	api.staticRouter.POST("/password/reset/request", api.passwordResetRequestHandler)
-	api.staticRouter.POST("/password/reset/verify", api.passwordResetCompleteHandler)
-	api.staticRouter.POST("/password/reset/complete", api.passwordResetCompleteHandler)
+	//api.staticRouter.POST("/password/reset/request", api.passwordResetRequestHandler)
+	//api.staticRouter.POST("/password/reset/verify", api.passwordResetCompleteHandler)
+	//api.staticRouter.POST("/password/reset/complete", api.passwordResetCompleteHandler)
 }
 
 // Validate ensures that the user making the request has logged in.

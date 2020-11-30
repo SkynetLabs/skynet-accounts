@@ -230,6 +230,28 @@ func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	return nil
 }
 
+// UserUpdatePassword saves the password changes to the DB.
+func (db *DB) UserUpdatePassword(ctx context.Context, u *User) error {
+	if u.ID.IsZero() {
+		return errors.New("This user is not yet saved in the DB.")
+	}
+	// Update the user.
+	filter := bson.M{"_id": u.ID}
+	update := bson.M{"$set": bson.M{
+		"_id":      u.ID,
+		"password": u.Password,
+		"salt":     u.Salt,
+	}}
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return errors.AddContext(err, "failed to Update")
+	}
+	if ur.UpsertedCount > 1 || ur.ModifiedCount > 1 {
+		build.Critical(fmt.Sprintf("updated more than one user! user_id used: %v\n", u.ID.Hex()))
+	}
+	return nil
+}
+
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
