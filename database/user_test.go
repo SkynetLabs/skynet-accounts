@@ -64,8 +64,8 @@ func TestEmail_Validate(t *testing.T) {
 // Do not run in parallel to other tests - this test changes the environment.
 func TestUser_saltAndPepper(t *testing.T) {
 	initEnv()
-	salt := fastrand.Bytes(saltSize)
-	pepper := fastrand.Bytes(saltSize)
+	salt := []byte("this is a salt")
+	pepper := []byte("this is some pepper")
 	u := &User{
 		ID:        primitive.ObjectID{},
 		FirstName: "Foo",

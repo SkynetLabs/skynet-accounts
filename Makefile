@@ -112,7 +112,7 @@ test-long: clean fmt vet lint-ci
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
 
 # test-int always returns a zero exit value! Only use it manually!
-test-int: clean fmt vet lint-ci test-long start-mongo start-mailslurp
+test-int: test-long start-mongo start-mailslurp
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
 	make stop-mongo
 	make stop-mailslurp
