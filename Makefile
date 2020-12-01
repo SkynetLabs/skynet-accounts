@@ -74,7 +74,7 @@ stop-mongo:
 # start-mailslurp starts a fake mail server listening on port 2500.
 # We use that server in our integration tests.
 start-mailslurp:
-	-docker stop mailslurp
+	make stop-mailslurp
 	docker run \
 		--rm \
 		--detach \
@@ -83,7 +83,7 @@ start-mailslurp:
 		inovakov/mailslurper
 
 stop-mailslurp:
-	docker stop mailslurp
+	-docker stop mailslurp
 
 # debug builds and installs debug binaries. This will also install the utils.
 debug:
@@ -115,6 +115,6 @@ test-long: clean fmt vet lint-ci
 test-int: clean fmt vet lint-ci test-long start-mongo start-mailslurp
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
 	make stop-mongo
-	#make stop-mailslurp
+	make stop-mailslurp
 
 .PHONY: all fmt install release clean test test-int test-long stop-mongo
