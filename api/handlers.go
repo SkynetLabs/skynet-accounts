@@ -188,8 +188,7 @@ func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Reque
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
-	WriteJSON(w, u)
+	WriteSuccess(w)
 }
 
 // userLoginHandler starts a new session for a user.
