@@ -13,12 +13,6 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-const (
-	// MaxMultipartMem defines the maximum amount of memory to be used for
-	// parsing the request's multipart form. In bytes.
-	MaxMultipartMem = 64_000_000
-)
-
 var (
 	// ErrAccountUnconfirmed is returned when a user with an unconfirmed account
 	// tried to log in.
@@ -46,10 +40,6 @@ func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, _ httpr
 
 // userHandlerPOST creates a new user.
 func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if err := req.ParseMultipartForm(MaxMultipartMem); err != nil {
-		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
-		return
-	}
 	email, err := database.NewEmail(req.PostFormValue("email"))
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
@@ -88,18 +78,10 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, _ httpr
 		return
 	}
 
-	var u *database.User
 	// Fetch the user by their id.
-	u, err = api.staticDB.UserByID(req.Context(), uid)
+	u, err := api.staticDB.UserByID(req.Context(), uid)
 	if err != nil {
-		// This is a Bad Request and not an Internal Server Error because
-		// the client has supplied an invalid user id.
-		WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
-		return
-	}
-	err = req.ParseMultipartForm(MaxMultipartMem)
-	if err != nil {
-		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
+		WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusInternalServerError)
 		return
 	}
 	// Get the changes values.
@@ -136,18 +118,10 @@ func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	var u *database.User
 	// Fetch the user by their id.
-	u, err = api.staticDB.UserByID(req.Context(), uid)
+	u, err := api.staticDB.UserByID(req.Context(), uid)
 	if err != nil {
-		// This is a Bad Request and not an Internal Server Error because
-		// the client has supplied an invalid user id.
-		WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
-		return
-	}
-	err = req.ParseMultipartForm(MaxMultipartMem)
-	if err != nil {
-		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
+		WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusInternalServerError)
 		return
 	}
 	oldPass := req.PostFormValue("oldPassword")
@@ -179,10 +153,6 @@ func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Reque
 
 // userLoginHandler starts a new session for a user.
 func (api *API) userLoginHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if err := req.ParseMultipartForm(MaxMultipartMem); err != nil {
-		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
-		return
-	}
 	email, err := database.NewEmail(req.PostFormValue("email"))
 	if err != nil {
 		WriteError(w, database.ErrInvalidEmail, http.StatusBadRequest)

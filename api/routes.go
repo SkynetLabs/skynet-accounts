@@ -31,6 +31,6 @@ func Validate(h httprouter.Handle) httprouter.Handle {
 		}
 		// Embed the verified token in the context of the request.
 		ctx := context.WithValue(req.Context(), ctxValue("token"), token)
-		h(w, req.Clone(ctx), ps)
+		h(w, req.WithContext(ctx), ps)
 	}
 }

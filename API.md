@@ -29,7 +29,6 @@ also 400, 401, 422, 500
 * Returns: 201 JSON object
 ```json
 {
-    "ID": "5fc51d9ca0f351fb6229009a",
     "firstName": "John",
     "lastName": "Doe",
     "email": "john@doe.com",
@@ -40,13 +39,12 @@ also 400 and 500
 
 ### Lookup own user data
 
-* Endpoint: `/user/:id`
+* Endpoint: `/user`
 * Verb: `GET`
 * Requires existing session: `true`
 * Returns: 200 JSON object
 ```json
 {
-    "ID": "5fbe7dca17defb7793e6b7d0",
     "firstName": "John",
     "lastName": "Doe",
     "email": "john@doe.com",
@@ -57,18 +55,16 @@ also 400, 401, 500
 
 ### Update own user data
 
-* Endpoint: `/user/:id`
+* Endpoint: `/user`
 * Verb: `PUT`
 * Requires existing session: `true`
 * POST params:
-    - `id`: string, identifier, won't be changed
     - `email`: string, optional, must be valid, unique to the DB
     - `firstName`: string, optional
     - `lastName`: string, optional
 * Returns: 200 JSON object
 ```json
 {
-   "ID": "5fbe7dca17defb7793e6b7d0",
    "firstName": "John",
    "lastName": "Doe",
    "email": "john@doe.com",
@@ -81,11 +77,10 @@ also 400, 401, 500
 
 ### Change
 
-* Endpoint: `/user/:id/password`
+* Endpoint: `/user/password`
 * Verb: `POST`
 * Requires existing session: `true`
 * POST params:
-    - `id`: string, identifier, won't be changed
     - `oldPassword`: string
     - `newPassword`: string
 * Returns: 204 or 400, 401, 500
