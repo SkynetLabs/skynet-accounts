@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/dgrijalva/jwt-go"
 
@@ -19,24 +20,19 @@ const (
 )
 
 var (
-	// ErrAccountUnconfirmed is returned when a suer with an unconfirmed account
+	// ErrAccountUnconfirmed is returned when a user with an unconfirmed account
 	// tried to log in.
 	ErrAccountUnconfirmed = errors.New("Unconfirmed.")
 )
 
 // userHandlerGET returns information about an existing user.
-func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	ok, err := isSelf(req, ps)
+func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	uid, _, _, err := jwtToken(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	if !ok {
-		WriteError(w, errors.New("you cannot access other users' info"), http.StatusBadRequest)
-		return
-	}
-
-	u, err := api.staticDB.UserByID(req.Context(), ps.ByName("id"))
+	u, err := api.staticDB.UserByID(req.Context(), uid)
 	if errors.Contains(err, database.ErrUserNotFound) {
 		WriteError(w, database.ErrUserNotFound, http.StatusNotFound)
 		return
@@ -49,14 +45,14 @@ func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, ps http
 }
 
 // userHandlerPOST creates a new user.
-func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	if err := req.ParseMultipartForm(MaxMultipartMem); err != nil {
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
 	}
 	email, err := database.NewEmail(req.PostFormValue("email"))
 	if err != nil {
-		WriteError(w, database.ErrInvalidEmail, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	pw := req.PostFormValue("password")
@@ -85,27 +81,21 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, ps htt
 }
 
 // userHandlerPUT updates an existing user.
-func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	ok, err := isSelf(req, ps)
+func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	uid, _, _, err := jwtToken(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	if !ok {
-		WriteError(w, errors.New("you cannot access other users' info"), http.StatusBadRequest)
 		return
 	}
 
 	var u *database.User
 	// Fetch the user by their id.
-	if id := ps.ByName("id"); id != "" {
-		u, err = api.staticDB.UserByID(req.Context(), id)
-		if err != nil {
-			// This is a Bad Request and not an Internal Server Error because
-			// the client has supplied an invalid user id.
-			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
-			return
-		}
+	u, err = api.staticDB.UserByID(req.Context(), uid)
+	if err != nil {
+		// This is a Bad Request and not an Internal Server Error because
+		// the client has supplied an invalid user id.
+		WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
+		return
 	}
 	err = req.ParseMultipartForm(MaxMultipartMem)
 	if err != nil {
@@ -139,48 +129,44 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, ps http
 }
 
 // userChangePasswordHandler changes a user's password, given the old one is known.
-func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	ok, err := isSelf(req, ps)
+func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	uid, _, _, err := jwtToken(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	if !ok {
-		WriteError(w, errors.New("you cannot access other users' info"), http.StatusBadRequest)
 		return
 	}
 
 	var u *database.User
 	// Fetch the user by their id.
-	if id := ps.ByName("id"); id != "" {
-		u, err = api.staticDB.UserByID(req.Context(), id)
-		if err != nil {
-			// This is a Bad Request and not an Internal Server Error because
-			// the client has supplied an invalid user id.
-			WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
-			return
-		}
+	u, err = api.staticDB.UserByID(req.Context(), uid)
+	if err != nil {
+		// This is a Bad Request and not an Internal Server Error because
+		// the client has supplied an invalid user id.
+		WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusBadRequest)
+		return
 	}
 	err = req.ParseMultipartForm(MaxMultipartMem)
 	if err != nil {
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
 	}
+	oldPass := req.PostFormValue("oldPassword")
+	newPass := req.PostFormValue("newPassword")
+	if oldPass == "" || newPass == "" {
+		WriteError(w, errors.New("Both `oldPassword` and `newPassword` are required."), http.StatusBadRequest)
+		return
+	}
 	// Validate that the given old password is correct.
-	if pw := req.PostFormValue("oldPassword"); pw != "" {
-		err = u.VerifyPassword(pw)
-		if err != nil {
-			WriteError(w, errors.New("Bad username or password."), http.StatusBadRequest)
-			return
-		}
+	err = u.VerifyPassword(oldPass)
+	if err != nil {
+		WriteError(w, errors.New("Bad username or password."), http.StatusBadRequest)
+		return
 	}
 	// Set the new password.
-	if pw := req.PostFormValue("newPassword"); pw != "" {
-		err = u.SetPassword(pw)
-		if err != nil {
-			WriteError(w, err, http.StatusInternalServerError)
-			return
-		}
+	err = u.SetPassword(newPass)
+	if err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
+		return
 	}
 	// Persist the change.
 	err = api.staticDB.UserUpdatePassword(req.Context(), u)
@@ -192,7 +178,7 @@ func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Reque
 }
 
 // userLoginHandler starts a new session for a user.
-func (api *API) userLoginHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) userLoginHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	if err := req.ParseMultipartForm(MaxMultipartMem); err != nil {
 		WriteError(w, errors.New("Failed to parse multipart parameters."), http.StatusBadRequest)
 		return
@@ -260,18 +246,23 @@ func (api *API) passwordResetCompleteHandler(w http.ResponseWriter, req *http.Re
 	WriteJSON(w, struct{ msg string }{"Not implemented."})
 }
 
-// isSelf is a helper function that tells us if the authenticated user is the
-// same as the user whose id is being used in the route path.
-func isSelf(req *http.Request, ps httprouter.Params) (bool, error) {
-	token, ok := req.Context().Value(ctxValue("token")).(*jwt.Token)
+// jwtToken is a helper function that extracts the JWT token from the context
+// and returns the contained user id, claims and the token itself.
+func jwtToken(req *http.Request) (id string, claims jwt.MapClaims, token *jwt.Token, err error) {
+	t, ok := req.Context().Value(ctxValue("token")).(*jwt.Token)
 	if !ok {
-		return false, errors.New("failed to get token")
+		err = errors.New("failed to get token")
+		return
 	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return false, errors.New("failed to get claims")
+	if reflect.ValueOf(t.Claims).Kind() != reflect.ValueOf(jwt.MapClaims{}).Kind() {
+		err = errors.New("the token does not contain the claims we expect")
+		return
 	}
-
-	isSelf := ps.ByName("id") == claims["user_id"]
-	return isSelf, nil
+	claims = t.Claims.(jwt.MapClaims)
+	if reflect.ValueOf(claims["user_id"]).Kind() != reflect.String {
+		err = errors.New("the token does not contain the user_id we expect")
+	}
+	id = claims["user_id"].(string)
+	token = t
+	return
 }

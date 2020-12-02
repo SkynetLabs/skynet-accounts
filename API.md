@@ -5,7 +5,6 @@
 * Endpoint: `/login`
 * Verb: `POST`
 * Requires existing session: `false`
-* GET params: 
 * POST params:
     - `email`: string
     - `password`: string
@@ -22,7 +21,6 @@ also 400, 401, 422, 500
 * Endpoint: `/user`
 * Verb: `POST`
 * Requires existing session: `false`
-* GET params: 
 * POST params:
     - `email`: string, must be valid, unique to the DB
     - `password`: string 
@@ -45,8 +43,6 @@ also 400 and 500
 * Endpoint: `/user/:id`
 * Verb: `GET`
 * Requires existing session: `true`
-* GET params: 
-* POST params:
 * Returns: 200 JSON object
 ```json
 {
@@ -64,7 +60,6 @@ also 400, 401, 500
 * Endpoint: `/user/:id`
 * Verb: `PUT`
 * Requires existing session: `true`
-* GET params: 
 * POST params:
     - `id`: string, identifier, won't be changed
     - `email`: string, optional, must be valid, unique to the DB
@@ -89,7 +84,6 @@ also 400, 401, 500
 * Endpoint: `/user/:id/password`
 * Verb: `POST`
 * Requires existing session: `true`
-* GET params: 
 * POST params:
     - `id`: string, identifier, won't be changed
     - `oldPassword`: string

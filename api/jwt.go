@@ -61,6 +61,9 @@ func ValidateToken(t string) (*jwt.Token, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !token.Valid {
+		return nil, errors.New("token is invalid")
+	}
 	return token, nil
 }
 

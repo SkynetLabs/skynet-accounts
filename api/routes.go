@@ -13,9 +13,9 @@ func (api *API) buildHTTPRoutes() {
 	// TODO Rate-limit these from the start to prevent brute force and other forms of abuse.
 	api.staticRouter.POST("/login", api.userLoginHandler)
 	api.staticRouter.POST("/user", api.userHandlerPOST)
-	api.staticRouter.GET("/user/:id", Validate(api.userHandlerGET))
-	api.staticRouter.PUT("/user/:id", Validate(api.userHandlerPUT))
-	api.staticRouter.POST("/user/:id/password", Validate(api.userChangePasswordHandler))
+	api.staticRouter.GET("/user", Validate(api.userHandlerGET))
+	api.staticRouter.PUT("/user", Validate(api.userHandlerPUT))
+	api.staticRouter.POST("/user/password", Validate(api.userChangePasswordHandler))
 	//api.staticRouter.POST("/password/reset/request", api.passwordResetRequestHandler)
 	//api.staticRouter.POST("/password/reset/verify", api.passwordResetCompleteHandler)
 	//api.staticRouter.POST("/password/reset/complete", api.passwordResetCompleteHandler)
