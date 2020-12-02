@@ -80,7 +80,6 @@ func (u *User) VerifyPassword(pw string) error {
 }
 
 // SetPassword sets the user's password.
-// TODO Should this method take care of the DB persistence or should that be left to the caller?
 func (u *User) SetPassword(pw string) (err error) {
 	oldSalt := u.Salt
 	defer func() {

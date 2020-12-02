@@ -230,12 +230,26 @@ func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserUpdatePassword saves the password changes to the DB.
-func (db *DB) UserUpdatePassword(ctx context.Context, u *User) error {
-	if u.ID.IsZero() {
-		return errors.New("This user is not yet saved in the DB.")
-	}
+// UserUpdatePassword implements the entire password changing process - it
+// verifies that the user exist, that old password is correct, sets the new
+// password and saves the changes to the DB.
+// TODO Wrap this into a transaction. https://docs.mongodb.com/manual/core/transactions/
+func (db *DB) UserUpdatePassword(ctx context.Context, uid, oldPass, newPass string) error {
 	// Update the user.
+	u, err := db.UserByID(ctx, uid)
+	if err != nil {
+		return errors.AddContext(err, "can't fetch user")
+	}
+	err = u.VerifyPassword(oldPass)
+	if err != nil {
+		return errors.AddContext(err, "invalid password")
+	}
+	err = u.SetPassword(newPass)
+	if err != nil {
+		return errors.AddContext(err, "failed to set new password")
+	}
+
+	// Persist the changes.
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
 		"_id":      u.ID,

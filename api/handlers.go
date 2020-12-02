@@ -118,32 +118,13 @@ func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	// Fetch the user by their id.
-	u, err := api.staticDB.UserByID(req.Context(), uid)
-	if err != nil {
-		WriteError(w, errors.AddContext(err, "failed to fetch user"), http.StatusInternalServerError)
-		return
-	}
 	oldPass := req.PostFormValue("oldPassword")
 	newPass := req.PostFormValue("newPassword")
 	if oldPass == "" || newPass == "" {
 		WriteError(w, errors.New("Both `oldPassword` and `newPassword` are required."), http.StatusBadRequest)
 		return
 	}
-	// Validate that the given old password is correct.
-	err = u.VerifyPassword(oldPass)
-	if err != nil {
-		WriteError(w, errors.New("Bad username or password."), http.StatusBadRequest)
-		return
-	}
-	// Set the new password.
-	err = u.SetPassword(newPass)
-	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	// Persist the change.
-	err = api.staticDB.UserUpdatePassword(req.Context(), u)
+	err = api.staticDB.UserUpdatePassword(req.Context(), uid, oldPass, newPass)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
