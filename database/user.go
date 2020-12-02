@@ -4,12 +4,9 @@ import (
 	"os"
 	"regexp"
 
-	"gitlab.com/NebulousLabs/errors"
-
 	"github.com/NebulousLabs/skynet-accounts/build"
-	"github.com/NebulousLabs/skynet-accounts/lib"
 
-	"gitlab.com/NebulousLabs/fastrand"
+	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -55,8 +52,6 @@ type (
 		Tier      int                `bson:"tier" json:"tier"`
 		Password  []byte             `bson:"password" json:"-"`
 		Salt      []byte             `bson:"salt" json:"-"`
-
-		dep lib.Dependencies
 	}
 )
 
@@ -76,32 +71,12 @@ func (e Email) Validate() bool {
 
 // VerifyPassword verifies that the given password is correct for this user.
 func (u *User) VerifyPassword(pw string) error {
-	return bcrypt.CompareHashAndPassword(u.Password, append([]byte(pw), u.saltAndPepper()...))
+	return bcrypt.CompareHashAndPassword(u.Password, append([]byte(pw), saltAndPepper(u.Salt)...))
 }
 
-// SetPassword sets the user's password.
-func (u *User) SetPassword(pw string) (err error) {
-	oldSalt := u.Salt
-	defer func() {
-		if err != nil {
-			u.Salt = oldSalt
-		}
-	}()
-	u.Salt = fastrand.Bytes(saltSize)
-	pwHash, err := bcrypt.GenerateFromPassword(append([]byte(pw), u.saltAndPepper()...), bcrypt.DefaultCost)
-	if u.dep != nil && u.dep.Disrupt("DependencyHashPassword") {
-		err = errors.Compose(err, errors.New("DependencyHashPassword"))
-	}
-	if err != nil {
-		return err
-	}
-	u.Password = pwHash
-	return nil
-}
-
-// saltAndPepper is a convenience function that returns the user's salt and the
+// saltAndPepper is a convenience function that combines the given salt and the
 // system's pepper in a single slice.
-func (u *User) saltAndPepper() []byte {
+func saltAndPepper(salt []byte) []byte {
 	if len(pepper) == 0 {
 		pv, ok := os.LookupEnv(envPepper)
 		if !ok && build.Release != "testing" {
@@ -109,5 +84,5 @@ func (u *User) saltAndPepper() []byte {
 		}
 		pepper = []byte(pv)
 	}
-	return append(u.Salt, pepper...)
+	return append(salt, pepper...)
 }
