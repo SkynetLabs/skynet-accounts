@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"reflect"
 
@@ -164,10 +163,12 @@ func (api *API) userLoginHandler(w http.ResponseWriter, req *http.Request, _ htt
 	}
 	token, err := IssueToken(u)
 	if err != nil {
-		fmt.Println(err)
-		// TODO WriteError doesn't set the response's error message properly. Or Postman doesn't read it properly?
+		// TODO WriteError doesn't set the response's error message properly.
 		WriteError(w, err, http.StatusUnprocessableEntity)
 		return
+	}
+	if err = writeJWTCookie(w, token); err != nil {
+		log.Println("Failed to write cookie:", err)
 	}
 	w.WriteHeader(http.StatusOK)
 	WriteJSON(w, token)
@@ -216,4 +217,21 @@ func jwtToken(req *http.Request) (id string, claims jwt.MapClaims, token *jwt.To
 	id = claims["user_id"].(string)
 	token = t
 	return
+}
+
+// writeJWTCookie is a helper function that writes the given JWT token as a
+// secure cookie.
+func writeJWTCookie(w http.ResponseWriter, token string) error {
+	cookieVal := map[string]string{"token": token}
+	encoded, err := secureCookie().Encode(CookieName, cookieVal)
+	if err != nil {
+		return err
+	}
+	cookie := &http.Cookie{
+		Name:  CookieName,
+		Value: encoded,
+		Path:  "/",
+	}
+	http.SetCookie(w, cookie)
+	return nil
 }

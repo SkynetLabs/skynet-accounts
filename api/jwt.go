@@ -67,13 +67,25 @@ func ValidateToken(t string) (*jwt.Token, error) {
 	return token, nil
 }
 
-// extractToken extracts the JWT token from the request and returns it. Returns
-// an empty string if there is no token.
+// extractToken extracts the JWT token from the request and returns it.
+// It checks the header for a Bearer token and, if not found, checks for a cookie.
+// Returns an empty string if there is no token.
 func extractToken(r *http.Request) string {
+	// Check the headers for a token.
 	h := r.Header.Get("Authorization")
-	strArr := strings.Split(h, " ")
-	if len(strArr) == 2 {
-		return strArr[1]
+	if strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer ")
 	}
-	return ""
+
+	// Check the cookie for a token.
+	cookie, err := r.Cookie(CookieName)
+	if err != nil {
+		return ""
+	}
+	value := make(map[string]string)
+	err = secureCookie().Decode(CookieName, cookie.Value, &value)
+	if err != nil {
+		return ""
+	}
+	return value["token"]
 }
