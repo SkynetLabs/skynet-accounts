@@ -24,7 +24,7 @@ func (api *API) buildHTTPRoutes() {
 // validate ensures that the user making the request has logged in.
 func validate(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		token, err := ValidateToken(extractToken(req))
+		token, err := ValidateToken(tokenFromRequest(req))
 		if err != nil {
 			WriteError(w, errors.New("Unauthorized"), http.StatusUnauthorized)
 			return

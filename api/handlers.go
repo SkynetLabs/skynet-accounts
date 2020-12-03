@@ -1,10 +1,8 @@
 package api
 
 import (
+	"log"
 	"net/http"
-	"reflect"
-
-	"github.com/dgrijalva/jwt-go"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 
@@ -20,7 +18,7 @@ var (
 
 // userHandlerGET returns information about an existing user.
 func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	uid, _, _, err := jwtToken(req)
+	uid, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -71,7 +69,7 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, _ http
 
 // userHandlerPUT updates an existing user.
 func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	uid, _, _, err := jwtToken(req)
+	uid, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -111,7 +109,7 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, _ httpr
 
 // userChangePasswordHandler changes a user's password, given the old one is known.
 func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	uid, _, _, err := jwtToken(req)
+	uid, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -196,42 +194,4 @@ func (api *API) userPasswordResetVerifyHandler(w http.ResponseWriter, req *http.
 func (api *API) passwordResetCompleteHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// TODO Implement
 	WriteJSON(w, struct{ msg string }{"Not implemented."})
-}
-
-// jwtToken is a helper function that extracts the JWT token from the context
-// and returns the contained user id, claims and the token itself.
-func jwtToken(req *http.Request) (id string, claims jwt.MapClaims, token *jwt.Token, err error) {
-	t, ok := req.Context().Value(ctxValue("token")).(*jwt.Token)
-	if !ok {
-		err = errors.New("failed to get token")
-		return
-	}
-	if reflect.ValueOf(t.Claims).Kind() != reflect.ValueOf(jwt.MapClaims{}).Kind() {
-		err = errors.New("the token does not contain the claims we expect")
-		return
-	}
-	claims = t.Claims.(jwt.MapClaims)
-	if reflect.ValueOf(claims["user_id"]).Kind() != reflect.String {
-		err = errors.New("the token does not contain the user_id we expect")
-	}
-	id = claims["user_id"].(string)
-	token = t
-	return
-}
-
-// writeJWTCookie is a helper function that writes the given JWT token as a
-// secure cookie.
-func writeJWTCookie(w http.ResponseWriter, token string) error {
-	cookieVal := map[string]string{"token": token}
-	encoded, err := secureCookie().Encode(CookieName, cookieVal)
-	if err != nil {
-		return err
-	}
-	cookie := &http.Cookie{
-		Name:  CookieName,
-		Value: encoded,
-		Path:  "/",
-	}
-	http.SetCookie(w, cookie)
-	return nil
 }

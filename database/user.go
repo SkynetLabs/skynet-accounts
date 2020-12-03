@@ -31,7 +31,7 @@ var (
 
 	// envPepper holds the name of the environment variable for password pepper.
 	// This is not in main in order to avoid a circular dependency.
-	envPepper = "SKYNET_PEPPER"
+	envPepper = "SKYNET_DB_PEPPER"
 
 	// pepper is the system's password pepper.
 	pepper = []byte{}

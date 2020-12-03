@@ -28,9 +28,6 @@ var (
 // loadDBCredentials creates a new DB connection based on credentials found in
 // the environment variables.
 func loadDBCredentials() (database.DBCredentials, error) {
-	// Load the environment variables from the .env file.
-	// Existing variables take precedence and won't be overwritten.
-	_ = godotenv.Load()
 	var cds database.DBCredentials
 	var ok bool
 	if cds.User, ok = os.LookupEnv(envDBUser); !ok {
@@ -49,6 +46,9 @@ func loadDBCredentials() (database.DBCredentials, error) {
 }
 
 func main() {
+	// Load the environment variables from the .env file.
+	// Existing variables take precedence and won't be overwritten.
+	_ = godotenv.Load()
 	port, ok := os.LookupEnv("SKYNET_ACCOUNTS_PORT")
 	if !ok {
 		port = "3000"
