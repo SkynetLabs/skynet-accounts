@@ -15,7 +15,7 @@ all: release
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./ ./api ./build ./database
+pkgs = ./ ./api ./build ./database ./lib
 
 # integration-pkgs defines the packages which contain integration tests
 integration-pkgs = ./test
@@ -65,11 +65,25 @@ start-mongo:
      --name skynet-accounts-mongo-test-db \
      -p 127.0.0.1:37017:27017 \
      -e MONGO_INITDB_ROOT_USERNAME=admin \
-     -e MONGO_INITDB_ROOT_PASSWORD=ivolocalpass \
+     -e MONGO_INITDB_ROOT_PASSWORD=aO4tV5tC1oU3oQ7u \
      mongo
 
 stop-mongo:
 	docker stop skynet-accounts-mongo-test-db
+
+# start-mailslurp starts a fake mail server listening on port 2500.
+# We use that server in our integration tests.
+start-mailslurp:
+	make stop-mailslurp
+	docker run \
+		--rm \
+		--detach \
+		--name mailslurp \
+		-p 2500:2500 \
+		inovakov/mailslurper
+
+stop-mailslurp:
+	-docker stop mailslurp
 
 # debug builds and installs debug binaries. This will also install the utils.
 debug:
@@ -95,12 +109,12 @@ test:
 	go test -short -tags='debug testing netgo' -timeout=5s $(pkgs) -run=. -count=$(count)
 test-long: clean fmt vet lint-ci
 	@mkdir -p cover
-	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=3600s $(pkgs) -run=. -count=$(count)
+	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
 
 # test-int always returns a zero exit value! Only use it manually!
-test-int: clean fmt vet lint-ci start-mongo
-	@mkdir -p cover
-	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -tags='testing debug netgo' -timeout=3600s $(integration-pkgs) -run=. -count=$(count) ; \
+test-int: test-long start-mongo start-mailslurp
+	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
 	make stop-mongo
+	make stop-mailslurp
 
 .PHONY: all fmt install release clean test test-int test-long stop-mongo

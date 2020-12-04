@@ -2,15 +2,14 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
 
-	"github.com/NebulousLabs/skynet-accounts/build"
-
 	"github.com/julienschmidt/httprouter"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 /*
@@ -27,6 +26,9 @@ const (
 	// DefaultTimeoutRequest defines the longest an API request can take before
 	// triggering a timeout. In seconds.
 	DefaultTimeoutRequest = 30
+
+	// TokenValiditySeconds determines the duration of JWT tokens.
+	TokenValiditySeconds = 24 * 3600
 )
 
 // API is ...
@@ -34,6 +36,11 @@ type API struct {
 	staticDB     *database.DB
 	staticRouter *httprouter.Router
 }
+
+// ctxValue is a helper type which makes it safe to register values in the
+// context. If we don't use a custom unexported type it's easy for others
+// to get our value or accidentally overwrite it.
+type ctxValue string
 
 // New returns a new initialised API.
 func New(db *database.DB) (*API, error) {

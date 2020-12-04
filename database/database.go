@@ -16,8 +16,7 @@ import (
 
 /*
 TODO
- - Unit tests for all methods. Mock the DB for that.
- - We should use a tool/library that allows us to catch common ways to go around the unique email requirement, such as adding suffixes to gmail addresses, e.g. ivo@gmail.com and ivo.fake@gmail.com are the same email.
+ - We should use a tool/library that allows us to catch common ways to go around the unique email requirement, such as adding suffixes to gmail addresses, e.g. ivo@gmail.com and ivo+fake@gmail.com are the same email.
 */
 
 var (
@@ -156,10 +155,9 @@ func (db *DB) UserCreate(ctx context.Context, u *User) error {
 		return ErrEmailAlreadyUsed
 	}
 	// Insert the user.
-	fields := bson.M{
-		"firstName": u.FirstName,
-		"lastName":  u.LastName,
-		"email":     u.Email,
+	fields, err := bson.Marshal(u)
+	if err != nil {
+		return err
 	}
 	ir, err := db.staticUsers.InsertOne(ctx, fields)
 	if err != nil {
@@ -228,6 +226,42 @@ func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	}
 	if ur.UpsertedCount > 1 || ur.ModifiedCount > 1 {
 		build.Critical(fmt.Sprintf("updated more than one user! filter: %v, update: %v, update result:%v\n", filter, update, ur))
+	}
+	return nil
+}
+
+// UserUpdatePassword implements the entire password changing process - it
+// verifies that the user exist, that old password is correct, sets the new
+// password and saves the changes to the DB.
+// TODO Wrap this into a transaction. https://docs.mongodb.com/manual/core/transactions/
+func (db *DB) UserUpdatePassword(ctx context.Context, uid, oldPass, newPass string) error {
+	// Update the user.
+	u, err := db.UserByID(ctx, uid)
+	if err != nil {
+		return errors.AddContext(err, "can't fetch user")
+	}
+	err = u.VerifyPassword(oldPass)
+	if err != nil {
+		return errors.AddContext(err, "invalid password")
+	}
+	err = u.SetPassword(newPass)
+	if err != nil {
+		return errors.AddContext(err, "failed to set new password")
+	}
+
+	// Persist the changes.
+	filter := bson.M{"_id": u.ID}
+	update := bson.M{"$set": bson.M{
+		"_id":      u.ID,
+		"password": u.Password,
+		"salt":     u.Salt,
+	}}
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return errors.AddContext(err, "failed to Update")
+	}
+	if ur.UpsertedCount > 1 || ur.ModifiedCount > 1 {
+		build.Critical(fmt.Sprintf("updated more than one user! user_id used: %v\n", u.ID.Hex()))
 	}
 	return nil
 }

@@ -28,3 +28,4 @@ debug.test
 
 # OSX auto-generated file
 **/.DS_Store
+*.env
