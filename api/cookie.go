@@ -16,7 +16,7 @@ const (
 
 	// envCookieDomain holds the name of the environment variable for the
 	// domain name of the portal
-	envCookieDomain = "COOKIE_COMAIN"
+	envCookieDomain = "COOKIE_DOMAIN"
 	// envCookieHashKey holds the name of the env var which holds the key we use
 	// to hash cookies.
 	envCookieHashKey = "COOKIE_HASH_KEY"
