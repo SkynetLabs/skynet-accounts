@@ -21,3 +21,4 @@ ACCESS_SECRET="a strong secret key for signing JWT tokens"
 ## Recommended reading
 - [JSON and BSON](https://www.mongodb.com/json-and-bson)
 - [Using the official MongoDB Go driver](https://vkt.sh/go-mongodb-driver-cookbook/)
+
