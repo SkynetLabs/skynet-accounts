@@ -30,7 +30,7 @@ func TestDB_passwordHashAndSalt(t *testing.T) {
 	}
 
 	// FAILURE CASE:
-	// Ensure failing to set a password doesn't affect the user'salt salt.
+	// Ensure failing to set a password doesn't affect the user's salt.
 	salt = u.Salt
 	db.staticDep = &test.DependencyHashPassword{}
 	_, _, err = db.passwordHashAndSalt("some_new_pass")
