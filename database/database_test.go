@@ -35,6 +35,6 @@ func TestDB_passwordHashAndSalt(t *testing.T) {
 	db.staticDep = &test.DependencyHashPassword{}
 	_, _, err = db.passwordHashAndSalt("some_new_pass")
 	if err == nil || !strings.Contains(err.Error(), "DependencyHashPassword") {
-		t.Fatalf("expected to fail with  %salt but got %v\n", "DependencyHashPassword", err)
+		t.Fatalf("expected to fail with %s but got %v\n", "DependencyHashPassword", err)
 	}
 }
