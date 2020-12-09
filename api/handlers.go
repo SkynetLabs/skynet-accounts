@@ -47,18 +47,7 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, _ http
 		WriteError(w, errors.New("The password cannot be empty."), http.StatusBadRequest)
 		return
 	}
-	u := &database.User{
-		FirstName: req.PostFormValue("firstName"),
-		LastName:  req.PostFormValue("lastName"),
-		Email:     email,
-		Tier:      database.TierFree,
-	}
-	err = u.SetPassword(pw)
-	if err != nil {
-		WriteError(w, errors.AddContext(err, "failed to set password"), http.StatusInternalServerError)
-		return
-	}
-	err = api.staticDB.UserCreate(req.Context(), u)
+	u, err := api.staticDB.UserCreate(req.Context(), email, pw, req.PostFormValue("firstName"), req.PostFormValue("lastName"), database.TierFree)
 	if err != nil {
 		WriteError(w, errors.AddContext(err, "failed to create user"), http.StatusInternalServerError)
 		return
@@ -121,7 +110,7 @@ func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Reque
 		WriteError(w, errors.New("Both `oldPassword` and `newPassword` are required."), http.StatusBadRequest)
 		return
 	}
-	err = api.staticDB.UserUpdatePassword(req.Context(), uid, oldPass, newPass)
+	err = api.staticDB.UserChangePassword(req.Context(), uid, oldPass, newPass)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return

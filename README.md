@@ -24,3 +24,4 @@ COOKIE_ENC_KEY="strong random encryption key, 16 or 32 bytes long. Only needed i
 ## Recommended reading
 - [JSON and BSON](https://www.mongodb.com/json-and-bson)
 - [Using the official MongoDB Go driver](https://vkt.sh/go-mongodb-driver-cookbook/)
+

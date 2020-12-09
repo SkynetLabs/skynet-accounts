@@ -24,13 +24,9 @@ func TestDatabase_UserByEmail(t *testing.T) {
 	}
 
 	// Add a user to find.
-	username := t.Name()
-	u := &database.User{
-		FirstName: username,
-		LastName:  "Pratchett",
-		Email:     (database.Email)(username + "@pratchett.com"),
-	}
-	if err = db.UserCreate(nil, u); err != nil {
+	email := (database.Email)(t.Name() + "@pratchett.com")
+	u, err := db.UserCreate(nil, email, "somepassword", "", "", database.TierPremium)
+	if err != nil {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
@@ -61,13 +57,9 @@ func TestDatabase_UserByID(t *testing.T) {
 	}
 
 	// Add a user to find.
-	username := t.Name()
-	u := &database.User{
-		FirstName: username,
-		LastName:  "Pratchett",
-		Email:     (database.Email)(username + "@pratchett.com"),
-	}
-	if err = db.UserCreate(ctx, u); err != nil {
+	email := (database.Email)(t.Name() + "@pratchett.com")
+	u, err := db.UserCreate(nil, email, "somepassword", "", "", database.TierPremium)
+	if err != nil {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
@@ -92,13 +84,9 @@ func TestDatabase_UserUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	username := t.Name()
-	u := &database.User{
-		FirstName: username,
-		LastName:  "Pratchett",
-		Email:     (database.Email)(username + "@pratchett.com"),
-	}
-	if err = db.UserCreate(nil, u); err != nil {
+	email := (database.Email)(t.Name() + "@pratchett.com")
+	u, err := db.UserCreate(nil, email, "somepassword", "", "", database.TierPremium)
+	if err != nil {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
@@ -135,23 +123,17 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	}
 
 	// Test changing the user's email to an existing email. This should fail.
-	nu := &database.User{
-		FirstName: "Some",
-		LastName:  "Guy",
-		Email:     "existing@email.com",
-	}
-	if err = db.UserCreate(nil, nu); err != nil {
+	nu, err := db.UserCreate(nil, "existing@email.com", "somepassword", "", "", database.TierPremium)
+	if err != nil {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
 		_ = db.UserDelete(nil, user)
 	}(nu)
-	u.Email = nu.Email
-	err = db.UserCreate(ctx, u)
+	u, err = db.UserCreate(nil, nu.Email, "somepassword", "", "", database.TierPremium)
 	if !errors.Contains(err, database.ErrEmailAlreadyUsed) {
 		t.Fatalf("Expected error ErrEmailAlreadyUsed but got %v\n", err)
 	}
-	_ = db.UserDelete(nil, u)
 }
 
 // TestDatabase_UserDelete ensures UserDelete works as expected.
@@ -163,12 +145,8 @@ func TestDatabase_UserDelete(t *testing.T) {
 	}
 
 	// Add a user to delete.
-	u := &database.User{
-		FirstName: "Ivaylo",
-		LastName:  "Novakov",
-		Email:     "ivaylo@nebulous.tech",
-	}
-	if err = db.UserCreate(ctx, u); err != nil {
+	u, err := db.UserCreate(nil, "ivaylo@nebulous.tech", "somepassword", "", "", database.TierPremium)
+	if err != nil {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {

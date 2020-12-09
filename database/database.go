@@ -7,11 +7,15 @@ import (
 	"net/url"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
+	"github.com/NebulousLabs/skynet-accounts/lib"
+
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/fastrand"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/crypto/bcrypt"
 )
 
 /*
@@ -56,6 +60,7 @@ type (
 	DB struct {
 		staticDB    *mongo.Database
 		staticUsers *mongo.Collection
+		staticDep   lib.Dependencies
 	}
 
 	// DBCredentials is a helper struct that binds together all values needed for
@@ -140,28 +145,40 @@ func (db *DB) UserByID(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
-// UserCreate creates a new user in the DB. We need the user object to be passed
-// by reference because we need to be able to update the ID of new user.
-func (db *DB) UserCreate(ctx context.Context, u *User) error {
-	if !u.Email.Validate() {
-		return ErrInvalidEmail
+// UserCreate creates a new user in the DB.
+func (db *DB) UserCreate(ctx context.Context, email Email, password, firstName, lastName string, tier int) (*User, error) {
+	if !email.Validate() {
+		return nil, ErrInvalidEmail
 	}
 	// Check for an existing user with this email.
-	users, err := db.managedUsersByField(ctx, "email", string(u.Email))
+	users, err := db.managedUsersByField(ctx, "email", string(email))
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
-		return errors.AddContext(err, "failed to query DB")
+		return nil, errors.AddContext(err, "failed to query DB")
 	}
 	if len(users) > 0 {
-		return ErrEmailAlreadyUsed
+		return nil, ErrEmailAlreadyUsed
+	}
+	pw, salt, err := db.passwordHashAndSalt(password)
+	if err != nil {
+		return nil, err
+	}
+	u := &User{
+		ID:        primitive.ObjectID{},
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email,
+		Tier:      tier,
+		Password:  pw,
+		Salt:      salt,
 	}
 	// Insert the user.
 	fields, err := bson.Marshal(u)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ir, err := db.staticUsers.InsertOne(ctx, fields)
 	if err != nil {
-		return errors.AddContext(err, "failed to Insert")
+		return nil, errors.AddContext(err, "failed to Insert")
 	}
 	u.ID = ir.InsertedID.(primitive.ObjectID)
 	// Sanity check because races exist.
@@ -172,9 +189,9 @@ func (db *DB) UserCreate(ctx context.Context, u *User) error {
 		if err != nil {
 			build.Critical("Failed to delete new duplicate user! Needs to be cleaned out manually. Offending user id:", u.ID.Hex())
 		}
-		return ErrEmailAlreadyUsed
+		return nil, ErrEmailAlreadyUsed
 	}
-	return nil
+	return u, nil
 }
 
 // UserDelete deletes a user by their ID.
@@ -230,11 +247,11 @@ func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserUpdatePassword implements the entire password changing process - it
+// UserChangePassword implements the entire password changing process - it
 // verifies that the user exist, that old password is correct, sets the new
 // password and saves the changes to the DB.
 // TODO Wrap this into a transaction. https://docs.mongodb.com/manual/core/transactions/
-func (db *DB) UserUpdatePassword(ctx context.Context, uid, oldPass, newPass string) error {
+func (db *DB) UserChangePassword(ctx context.Context, uid, oldPass, newPass string) error {
 	// Update the user.
 	u, err := db.UserByID(ctx, uid)
 	if err != nil {
@@ -244,7 +261,7 @@ func (db *DB) UserUpdatePassword(ctx context.Context, uid, oldPass, newPass stri
 	if err != nil {
 		return errors.AddContext(err, "invalid password")
 	}
-	err = u.SetPassword(newPass)
+	pw, salt, err := db.passwordHashAndSalt(newPass)
 	if err != nil {
 		return errors.AddContext(err, "failed to set new password")
 	}
@@ -253,8 +270,8 @@ func (db *DB) UserUpdatePassword(ctx context.Context, uid, oldPass, newPass stri
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
 		"_id":      u.ID,
-		"password": u.Password,
-		"salt":     u.Salt,
+		"password": pw,
+		"salt":     salt,
 	}}
 	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
 	if err != nil {
@@ -307,4 +324,18 @@ func connectionString(creds DBCredentials) string {
 		mongoWriteConcern,
 		mongoWriteConcernTimeout,
 	)
+}
+
+// passwordHashAndSalt is a helper function that generates a new salt and then
+// hashes the given password with it and the system's pepper.
+func (db *DB) passwordHashAndSalt(password string) ([]byte, []byte, error) {
+	salt := fastrand.Bytes(saltSize)
+	pwHash, err := bcrypt.GenerateFromPassword(append([]byte(password), saltAndPepper(salt)...), bcrypt.DefaultCost)
+	if db.staticDep != nil && db.staticDep.Disrupt("DependencyHashPassword") {
+		err = errors.Compose(err, errors.New("DependencyHashPassword"))
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return pwHash, salt, nil
 }
