@@ -1,11 +1,8 @@
 package api
 
 import (
-	"fmt"
+	"log"
 	"net/http"
-	"reflect"
-
-	"github.com/dgrijalva/jwt-go"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 
@@ -21,7 +18,7 @@ var (
 
 // userHandlerGET returns information about an existing user.
 func (api *API) userHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	uid, _, _, err := jwtToken(req)
+	uid, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -72,7 +69,7 @@ func (api *API) userHandlerPOST(w http.ResponseWriter, req *http.Request, _ http
 
 // userHandlerPUT updates an existing user.
 func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	uid, _, _, err := jwtToken(req)
+	uid, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -112,7 +109,7 @@ func (api *API) userHandlerPUT(w http.ResponseWriter, req *http.Request, _ httpr
 
 // userChangePasswordHandler changes a user's password, given the old one is known.
 func (api *API) userChangePasswordHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	uid, _, _, err := jwtToken(req)
+	uid, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -164,10 +161,12 @@ func (api *API) userLoginHandler(w http.ResponseWriter, req *http.Request, _ htt
 	}
 	token, err := IssueToken(u)
 	if err != nil {
-		fmt.Println(err)
-		// TODO WriteError doesn't set the response's error message properly. Or Postman doesn't read it properly?
+		// TODO WriteError doesn't set the response's error message properly.
 		WriteError(w, err, http.StatusUnprocessableEntity)
 		return
+	}
+	if err = writeJWTCookie(w, token); err != nil {
+		log.Println("Failed to write cookie:", err)
 	}
 	w.WriteHeader(http.StatusOK)
 	WriteJSON(w, token)
@@ -195,25 +194,4 @@ func (api *API) userPasswordResetVerifyHandler(w http.ResponseWriter, req *http.
 func (api *API) passwordResetCompleteHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// TODO Implement
 	WriteJSON(w, struct{ msg string }{"Not implemented."})
-}
-
-// jwtToken is a helper function that extracts the JWT token from the context
-// and returns the contained user id, claims and the token itself.
-func jwtToken(req *http.Request) (id string, claims jwt.MapClaims, token *jwt.Token, err error) {
-	t, ok := req.Context().Value(ctxValue("token")).(*jwt.Token)
-	if !ok {
-		err = errors.New("failed to get token")
-		return
-	}
-	if reflect.ValueOf(t.Claims).Kind() != reflect.ValueOf(jwt.MapClaims{}).Kind() {
-		err = errors.New("the token does not contain the claims we expect")
-		return
-	}
-	claims = t.Claims.(jwt.MapClaims)
-	if reflect.ValueOf(claims["user_id"]).Kind() != reflect.String {
-		err = errors.New("the token does not contain the user_id we expect")
-	}
-	id = claims["user_id"].(string)
-	token = t
-	return
 }

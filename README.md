@@ -14,8 +14,11 @@ SKYNET_DB_HOST="localhost"
 SKYNET_DB_PORT="27017"
 SKYNET_DB_USER="username"
 SKYNET_DB_PASS="password"
-SKYNET_PEPPER="some random string for pepper"
-ACCESS_SECRET="a strong secret key for signing JWT tokens"
+SKYNET_DB_PEPPER="strong random string acting as a secret salt for user passwords"
+JWT_SECRET="strong secret key for signing JWT tokens"
+COOKIE_DOMAIN="siasky.net"
+COOKIE_HASH_KEY="strong random hashing key, at least 32 bytes long"
+COOKIE_ENC_KEY="strong random encryption key, 16 or 32 bytes long. Only needed if you want encrypted cookies. Recommended!"
 ```
 
 ## Recommended reading
