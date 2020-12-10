@@ -152,7 +152,8 @@ func tokenFromRequest(r *http.Request) string {
 }
 
 // tokenFromContext is a helper function that extracts the JWT token from the
-// context and returns the contained user id, claims and the token itself.
+// context and returns the contained user sub, claims and the token itself.
+// The sub is the user id used in Kratos.
 //
 // Example claims structure:
 //
@@ -200,7 +201,7 @@ func tokenFromRequest(r *http.Request) string {
 //        ]
 //    ]
 // ]
-func tokenFromContext(req *http.Request) (id string, claims jwt.MapClaims, token *jwt.Token, err error) {
+func tokenFromContext(req *http.Request) (sub string, claims jwt.MapClaims, token *jwt.Token, err error) {
 	t, ok := req.Context().Value(ctxValue("token")).(*jwt.Token)
 	if !ok {
 		err = errors.New("failed to get token")
@@ -211,18 +212,18 @@ func tokenFromContext(req *http.Request) (id string, claims jwt.MapClaims, token
 		return
 	}
 	claims = t.Claims.(jwt.MapClaims)
-	if reflect.ValueOf(claims["user_id"]).Kind() != reflect.String {
-		err = errors.New("the token does not contain the user_id we expect")
+	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
+		err = errors.New("the token does not contain the sub we expect")
 	}
 	defer func() {
 		if e := recover(); e != nil {
-			id = ""
+			sub = ""
 			claims = nil
 			token = nil
 			err = errors.New("jwt claims don't contain a valid sub")
 		}
 	}()
-	id = claims["sub"].(string)
+	sub = claims["sub"].(string)
 	token = t
 	return
 }

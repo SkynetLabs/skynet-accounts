@@ -5,20 +5,14 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-	"gitlab.com/NebulousLabs/errors"
 )
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
 func (api *API) buildHTTPRoutes() {
-	// TODO Rate-limit these from the start to prevent brute force and other forms of abuse.
-	api.staticRouter.POST("/login", api.userLoginHandler)
-	api.staticRouter.POST("/user", api.userHandlerPOST)
 	api.staticRouter.GET("/user", validate(api.userHandlerGET))
-	api.staticRouter.PUT("/user", validate(api.userHandlerPUT))
-	api.staticRouter.POST("/user/password", validate(api.userChangePasswordHandler))
-	//api.staticRouter.POST("/password/reset/request", api.passwordResetRequestHandler)
-	//api.staticRouter.POST("/password/reset/verify", api.passwordResetCompleteHandler)
-	//api.staticRouter.POST("/password/reset/complete", api.passwordResetCompleteHandler)
+	//api.staticRouter.PUT("/user", validate(api.userHandlerPUT))
+	//api.staticRouter.POST("/report/upload/:skylink", validate(api.userChangePasswordHandler))
+	//api.staticRouter.POST("/report/download/:skylink", validate(api.userChangePasswordHandler))
 }
 
 // validate ensures that the user making the request has logged in.
@@ -26,7 +20,7 @@ func validate(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		token, err := ValidateToken(tokenFromRequest(req))
 		if err != nil {
-			WriteError(w, errors.New("Unauthorized"), http.StatusUnauthorized)
+			WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
 		// Embed the verified token in the context of the request.

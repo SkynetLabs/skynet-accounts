@@ -1,7 +1,6 @@
 package database
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -10,18 +9,11 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/lib"
 
 	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/fastrand"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"golang.org/x/crypto/bcrypt"
 )
-
-/*
-TODO
- - We should use a tool/library that allows us to catch common ways to go around the unique email requirement, such as adding suffixes to gmail addresses, e.g. ivo@gmail.com and ivo+fake@gmail.com are the same email.
-*/
 
 var (
 	// mongoCompressors defines the compressors we are going to use for the
@@ -46,9 +38,9 @@ var (
 
 	// ErrUserNotFound is returned when we can't find the user in question.
 	ErrUserNotFound = errors.New("user not found")
-	// ErrEmailAlreadyUsed is returned when we try to use an email to either
-	// create or update a user and another user already uses this email.
-	ErrEmailAlreadyUsed = errors.New("email already in use by another user")
+	// ErrUserAlreadyExists is returned when we try to use a sub to create a
+	// user and a user already exists with this sub. This should never happen.
+	ErrUserAlreadyExists = errors.New("sub already belongs to an existing user")
 	// ErrGeneralInternalFailure is returned when we do not want to disclose
 	// what kind of error occurred. This should always be coupled with another
 	// error output for internal use.
@@ -98,20 +90,18 @@ func (db *DB) Disconnect(ctx context.Context) error {
 	return db.staticDB.Client().Disconnect(ctx)
 }
 
-// UserByEmail returns the user with the given email or nil.
-func (db *DB) UserByEmail(ctx context.Context, email Email) (*User, error) {
-	if !email.Validate() {
-		return nil, ErrInvalidEmail
-	}
-	users, err := db.managedUsersByField(ctx, "email", string(email))
+// UserBySub returns the user with the given sub or nil. The sub is the Kratos
+// id of that user.
+func (db *DB) UserBySub(ctx context.Context, sub string) (*User, error) {
+	users, err := db.managedUsersByField(ctx, "sub", sub)
 	if err != nil {
 		return nil, err
 	}
-	// Emails must be unique. If we hit this then we have a serious
+	// Subs must be unique. If we hit this then we have a serious
 	// programmer error which endangers customer's data and finances.
 	// We should error out in order to prevent exposing the wrong user data.
 	if len(users) > 1 {
-		build.Critical(fmt.Sprintf("More than one user found for email '%s'!", email))
+		build.Critical(fmt.Sprintf("More than one user found for sub '%s'!", sub))
 		// The error message is intentionally cryptic.
 		return nil, ErrGeneralInternalFailure
 	}
@@ -146,30 +136,19 @@ func (db *DB) UserByID(ctx context.Context, id string) (*User, error) {
 }
 
 // UserCreate creates a new user in the DB.
-func (db *DB) UserCreate(ctx context.Context, email Email, password, firstName, lastName string, tier int) (*User, error) {
-	if !email.Validate() {
-		return nil, ErrInvalidEmail
-	}
-	// Check for an existing user with this email.
-	users, err := db.managedUsersByField(ctx, "email", string(email))
+func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, error) {
+	// Check for an existing user with this sub.
+	users, err := db.managedUsersByField(ctx, "sub", sub)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
 	if len(users) > 0 {
-		return nil, ErrEmailAlreadyUsed
-	}
-	pw, salt, err := db.passwordHashAndSalt(password)
-	if err != nil {
-		return nil, err
+		return nil, ErrUserAlreadyExists
 	}
 	u := &User{
-		ID:        primitive.ObjectID{},
-		FirstName: firstName,
-		LastName:  lastName,
-		Email:     email,
-		Tier:      tier,
-		Password:  pw,
-		Salt:      salt,
+		ID:   primitive.ObjectID{},
+		Sub:  sub,
+		Tier: tier,
 	}
 	// Insert the user.
 	fields, err := bson.Marshal(u)
@@ -182,14 +161,14 @@ func (db *DB) UserCreate(ctx context.Context, email Email, password, firstName, 
 	}
 	u.ID = ir.InsertedID.(primitive.ObjectID)
 	// Sanity check because races exist.
-	users, err = db.managedUsersByField(ctx, "email", string(u.Email))
+	users, err = db.managedUsersByField(ctx, "sub", sub)
 	if len(users) > 1 {
 		// Race detected! Email no longer unique in DB. Delete new user.
 		err := db.UserDelete(ctx, u)
 		if err != nil {
 			build.Critical("Failed to delete new duplicate user! Needs to be cleaned out manually. Offending user id:", u.ID.Hex())
 		}
-		return nil, ErrEmailAlreadyUsed
+		return nil, ErrUserAlreadyExists
 	}
 	return u, nil
 }
@@ -210,75 +189,21 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserUpdate saves the user in the DB.
+// UserUpdate changes the user's data int he DB.
+// It never changes the id or sub of the user.
 func (db *DB) UserUpdate(ctx context.Context, u *User) error {
-	if !u.Email.Validate() {
-		return ErrInvalidEmail
-	}
-	// Check for an existing user with this email.
-	users, err := db.managedUsersByField(ctx, "email", string(u.Email))
-	if err != nil && !errors.Contains(err, ErrUserNotFound) {
-		return errors.AddContext(err, "failed to query DB")
-	}
-	// Sanity check.
-	if len(users) > 1 {
-		build.Critical("More than one user found with email", u.Email)
-		return ErrEmailAlreadyUsed
-	}
-	if len(users) > 0 && !bytes.Equal(u.ID[:], users[0].ID[:]) {
-		return ErrEmailAlreadyUsed
-	}
-	// TODO What if we have a race a user gets this email right at this point?
 	// Update the user.
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
-		"_id":       u.ID,
-		"firstName": u.FirstName,
-		"lastName":  u.LastName,
-		"email":     u.Email,
+		"_id":  u.ID,
+		"tier": u.Tier,
 	}}
 	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
 	if err != nil {
-		return errors.AddContext(err, "failed to Update")
+		return errors.AddContext(err, "failed to update")
 	}
 	if ur.UpsertedCount > 1 || ur.ModifiedCount > 1 {
 		build.Critical(fmt.Sprintf("updated more than one user! filter: %v, update: %v, update result:%v\n", filter, update, ur))
-	}
-	return nil
-}
-
-// UserChangePassword implements the entire password changing process - it
-// verifies that the user exist, that old password is correct, sets the new
-// password and saves the changes to the DB.
-// TODO Wrap this into a transaction. https://docs.mongodb.com/manual/core/transactions/
-func (db *DB) UserChangePassword(ctx context.Context, uid, oldPass, newPass string) error {
-	// Update the user.
-	u, err := db.UserByID(ctx, uid)
-	if err != nil {
-		return errors.AddContext(err, "can't fetch user")
-	}
-	err = u.VerifyPassword(oldPass)
-	if err != nil {
-		return errors.AddContext(err, "invalid password")
-	}
-	pw, salt, err := db.passwordHashAndSalt(newPass)
-	if err != nil {
-		return errors.AddContext(err, "failed to set new password")
-	}
-
-	// Persist the changes.
-	filter := bson.M{"_id": u.ID}
-	update := bson.M{"$set": bson.M{
-		"_id":      u.ID,
-		"password": pw,
-		"salt":     salt,
-	}}
-	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
-	if err != nil {
-		return errors.AddContext(err, "failed to Update")
-	}
-	if ur.UpsertedCount > 1 || ur.ModifiedCount > 1 {
-		build.Critical(fmt.Sprintf("updated more than one user! user_id used: %v\n", u.ID.Hex()))
 	}
 	return nil
 }
@@ -324,18 +249,4 @@ func connectionString(creds DBCredentials) string {
 		mongoWriteConcern,
 		mongoWriteConcernTimeout,
 	)
-}
-
-// passwordHashAndSalt is a helper function that generates a new salt and then
-// hashes the given password with it and the system's pepper.
-func (db *DB) passwordHashAndSalt(password string) ([]byte, []byte, error) {
-	salt := fastrand.Bytes(saltSize)
-	pwHash, err := bcrypt.GenerateFromPassword(append([]byte(password), saltAndPepper(salt)...), bcrypt.DefaultCost)
-	if db.staticDep != nil && db.staticDep.Disrupt("DependencyHashPassword") {
-		err = errors.Compose(err, errors.New("DependencyHashPassword"))
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-	return pwHash, salt, nil
 }

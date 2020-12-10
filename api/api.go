@@ -12,25 +12,6 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-/*
-TODO
-	- panic handler
-	- method not allowed
-	- OPTIONS & CORS - https://github.com/julienschmidt/httprouter#automatic-options-responses-and-cors
-*/
-
-const (
-	// DefaultTimeoutDB defines the longest a DB operation can take before
-	// triggering a timeout. In seconds.
-	DefaultTimeoutDB = 10
-	// DefaultTimeoutRequest defines the longest an API request can take before
-	// triggering a timeout. In seconds.
-	DefaultTimeoutRequest = 30
-
-	// TokenValiditySeconds determines the duration of JWT tokens.
-	TokenValiditySeconds = 24 * 3600
-)
-
 // API is ...
 type API struct {
 	staticDB     *database.DB

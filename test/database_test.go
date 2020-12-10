@@ -9,23 +9,24 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-// TestDatabase_UserByEmail ensures UserByEmail works as expected.
+// TestDatabase_UserBySub ensures UserBySub works as expected.
 // This method also test UserCreate.
-func TestDatabase_UserByEmail(t *testing.T) {
+func TestDatabase_UserBySub(t *testing.T) {
 	ctx := context.Background()
 	db, err := database.New(ctx, DBTestCredentials())
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	sub := "this is a random test sub that shoudn't exist in the DB"
 	// Test finding a non-existent user. This should fail.
-	_, err = db.UserByEmail(ctx, "noexist@foo.bar")
+	_, err = db.UserBySub(ctx, sub)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error ErrUserNotFound, got %v\n", err)
 	}
 
 	// Add a user to find.
-	email := (database.Email)(t.Name() + "@pratchett.com")
-	u, err := db.UserCreate(nil, email, "somepassword", "", "", database.TierPremium)
+	u, err := db.UserCreate(nil, sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +35,7 @@ func TestDatabase_UserByEmail(t *testing.T) {
 	}(u)
 
 	// Test finding an existent user. This should pass.
-	u1, err := db.UserByEmail(ctx, u.Email)
+	u1, err := db.UserBySub(ctx, u.Sub)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,8 +58,8 @@ func TestDatabase_UserByID(t *testing.T) {
 	}
 
 	// Add a user to find.
-	email := (database.Email)(t.Name() + "@pratchett.com")
-	u, err := db.UserCreate(nil, email, "somepassword", "", "", database.TierPremium)
+	sub := "this is a sub"
+	u, err := db.UserCreate(nil, sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,8 +85,8 @@ func TestDatabase_UserUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	email := (database.Email)(t.Name() + "@pratchett.com")
-	u, err := db.UserCreate(nil, email, "somepassword", "", "", database.TierPremium)
+	sub := "this is a sub"
+	u, err := db.UserCreate(nil, sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,9 +94,8 @@ func TestDatabase_UserUpdate(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 
-	// Test changing the user's names.
-	u.FirstName += "_changed"
-	u.LastName += "_also_changed"
+	// Test changing the user's tier.
+	u.Tier = database.TierPremium5
 	err = db.UserUpdate(ctx, u)
 	if err != nil {
 		t.Fatal("Failed to update user:", err)
@@ -104,35 +104,8 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to load user:", err)
 	}
-	if u.FirstName != u1.FirstName || u.LastName != u1.LastName {
-		t.Fatalf("Expected names '%s' and '%s', got '%s' and '%s'\n", u.FirstName, u.LastName, u1.FirstName, u1.LastName)
-	}
-
-	// Test changing the user's email to a non-existent email. This should work.
-	u.Email = "new@email.com"
-	err = db.UserUpdate(ctx, u)
-	if err != nil {
-		t.Fatal("Failed to update user:", err)
-	}
-	u1, err = db.UserByID(ctx, u.ID.Hex())
-	if err != nil {
-		t.Fatal("Failed to load user:", err)
-	}
-	if u.Email != u1.Email {
-		t.Fatalf("Expected the email to be '%s', got '%s'\n", u.Email, u1.Email)
-	}
-
-	// Test changing the user's email to an existing email. This should fail.
-	nu, err := db.UserCreate(nil, "existing@email.com", "somepassword", "", "", database.TierPremium)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func(user *database.User) {
-		_ = db.UserDelete(nil, user)
-	}(nu)
-	u, err = db.UserCreate(nil, nu.Email, "somepassword", "", "", database.TierPremium)
-	if !errors.Contains(err, database.ErrEmailAlreadyUsed) {
-		t.Fatalf("Expected error ErrEmailAlreadyUsed but got %v\n", err)
+	if u1.Tier != database.TierPremium5 {
+		t.Fatalf("Expected tier '%d', got '%d'\n", database.TierPremium5, u1.Tier)
 	}
 }
 
@@ -144,8 +117,9 @@ func TestDatabase_UserDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	sub := "this is a sub"
 	// Add a user to delete.
-	u, err := db.UserCreate(nil, "ivaylo@nebulous.tech", "somepassword", "", "", database.TierPremium)
+	u, err := db.UserCreate(nil, sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
