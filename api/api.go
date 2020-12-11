@@ -52,7 +52,7 @@ func WriteError(w http.ResponseWriter, err error, code int) {
 		log.Println(code, err)
 	}
 	encodingErr := json.NewEncoder(w).Encode(err)
-	if _, isJsonErr := encodingErr.(*json.SyntaxError); isJsonErr {
+	if _, isJSONErr := encodingErr.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.
 		// Specifically, only non-marshallable types should cause an error here.
 		build.Critical("failed to encode API error response:", encodingErr)
@@ -65,7 +65,7 @@ func WriteError(w http.ResponseWriter, err error, code int) {
 func WriteJSON(w http.ResponseWriter, obj interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	err := json.NewEncoder(w).Encode(obj)
-	if _, isJsonErr := err.(*json.SyntaxError); isJsonErr {
+	if _, isJSONErr := err.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.
 		// Specifically, only non-marshallable types should cause an error here.
 		build.Critical("failed to encode API response:", err)

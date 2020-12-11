@@ -39,6 +39,7 @@ markdown-spellcheck:
 # lint runs golangci-lint (which includes golint, a spellcheck of the codebase,
 # and other linters), the custom analyzers, and also a markdown spellchecker.
 lint: markdown-spellcheck lint-analyze
+	golint ./...
 	golangci-lint run -c .golangci.yml
 
 # lint-ci runs golint.

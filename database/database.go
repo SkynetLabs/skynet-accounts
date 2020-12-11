@@ -39,8 +39,8 @@ var (
 	// ErrUserNotFound is returned when we can't find the user in question.
 	ErrUserNotFound = errors.New("user not found")
 	// ErrUserAlreadyExists is returned when we try to use a sub to create a
-	// user and a user already exists with this sub. This should never happen.
-	ErrUserAlreadyExists = errors.New("sub already belongs to an existing user")
+	// user and a user already exists with this identity.
+	ErrUserAlreadyExists = errors.New("identity already belongs to an existing user")
 	// ErrGeneralInternalFailure is returned when we do not want to disclose
 	// what kind of error occurred. This should always be coupled with another
 	// error output for internal use.

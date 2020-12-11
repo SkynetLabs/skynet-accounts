@@ -46,6 +46,7 @@ DB, an account will be created on the Free tier.
     "tier": 1
   }
   ```
+  - 401 (missing JWT)
   - 424 (when there is no such user, and we fail to create it)
   - 500 (on any other error)
 
@@ -67,6 +68,7 @@ etc.
   }
   ```
   - 400
+  - 401 (missing JWT)
   - 500
 
 ## Reports endpoints
@@ -81,7 +83,7 @@ etc.
 * Returns:
   - 204 
   - 400
-  - 401
+  - 401 (missing JWT)
   - 500
 
 ### Report a download (TODO)
@@ -94,5 +96,5 @@ etc.
 * Returns: 
   - 204
   - 400
-  - 401
+  - 401 (missing JWT)
   - 500
