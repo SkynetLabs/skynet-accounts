@@ -160,16 +160,6 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 		return nil, errors.AddContext(err, "failed to Insert")
 	}
 	u.ID = ir.InsertedID.(primitive.ObjectID)
-	// Sanity check because races exist.
-	users, err = db.managedUsersByField(ctx, "sub", sub)
-	if len(users) > 1 {
-		// Race detected! Sub no longer unique in DB. Delete new user.
-		err := db.UserDelete(ctx, u)
-		if err != nil {
-			build.Critical("Failed to delete new duplicate user! Needs to be cleaned out manually. Offending user id:", u.ID.Hex())
-		}
-		return nil, ErrUserAlreadyExists
-	}
 	return u, nil
 }
 

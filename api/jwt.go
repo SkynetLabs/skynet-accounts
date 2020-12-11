@@ -101,8 +101,6 @@ func keyForToken(token *jwt.Token) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO Should this be replaced by a deferred recover in case the value is not
-	// 	string and we panic? It might be faster than calling reflect every time.
 	if reflect.ValueOf(token.Header["kid"]).Kind() != reflect.String {
 		return nil, errors.New("invalid jwk header - the kid field is not a string")
 	}
@@ -216,15 +214,13 @@ func tokenFromContext(req *http.Request) (sub string, claims jwt.MapClaims, toke
 	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
 		err = errors.New("the token does not contain the sub we expect")
 	}
-	defer func() {
-		if e := recover(); e != nil {
-			sub = ""
-			claims = nil
-			token = nil
-			err = errors.New("jwt claims don't contain a valid sub")
-		}
-	}()
-	sub = claims["sub"].(string)
+	subEntry, ok := claims["sub"]
+	if !ok {
+		claims = nil
+		err = errors.New("jwt claims don't contain a valid sub")
+		return
+	}
+	sub = subEntry.(string)
 	token = t
 	return
 }
