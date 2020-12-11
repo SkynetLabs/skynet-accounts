@@ -11,14 +11,19 @@ import (
 func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user", validate(api.userHandlerGET))
 	//api.staticRouter.PUT("/user", validate(api.userHandlerPUT))
-	//api.staticRouter.POST("/report/upload/:skylink", validate(api.userChangePasswordHandler))
-	//api.staticRouter.POST("/report/download/:skylink", validate(api.userChangePasswordHandler))
+	//api.staticRouter.POST("/track/upload/:skylink", validate(api.trackUploadHandler))
+	//api.staticRouter.POST("/track/download/:skylink", validate(api.trackDownloadHandler))
 }
 
 // validate ensures that the user making the request has logged in.
 func validate(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		token, err := ValidateToken(tokenFromRequest(req))
+		t, err := tokenFromRequest(req)
+		if err != nil {
+			WriteError(w, err, http.StatusBadRequest)
+			return
+		}
+		token, err := ValidateToken(t)
 		if err != nil {
 			WriteError(w, err, http.StatusUnauthorized)
 			return

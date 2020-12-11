@@ -163,7 +163,7 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 	// Sanity check because races exist.
 	users, err = db.managedUsersByField(ctx, "sub", sub)
 	if len(users) > 1 {
-		// Race detected! Email no longer unique in DB. Delete new user.
+		// Race detected! Sub no longer unique in DB. Delete new user.
 		err := db.UserDelete(ctx, u)
 		if err != nil {
 			build.Critical("Failed to delete new duplicate user! Needs to be cleaned out manually. Offending user id:", u.ID.Hex())
@@ -189,21 +189,18 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserUpdate changes the user's data int he DB.
+// UserUpdate changes the user's data in the DB.
 // It never changes the id or sub of the user.
 func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	// Update the user.
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
-		"_id":  u.ID,
 		"tier": u.Tier,
 	}}
-	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
+	opts := options.Update().SetUpsert(true)
+	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
-	}
-	if ur.UpsertedCount > 1 || ur.ModifiedCount > 1 {
-		build.Critical(fmt.Sprintf("updated more than one user! filter: %v, update: %v, update result:%v\n", filter, update, ur))
 	}
 	return nil
 }

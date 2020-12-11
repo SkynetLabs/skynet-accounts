@@ -13,11 +13,11 @@ import (
 
 var (
 	// oathkeeperPubKeys is the public RS key exposed by Oathkeeper for JWT
-	// validation. It's available at oathkeeperPubKeyUrl.
+	// validation. It's available at oathkeeperPubKeyURL.
 	oathkeeperPubKeys *jwk.Set = nil
 
-	// oathkeeperPubKeyUrl is the URL on which we can find the public key.
-	oathkeeperPubKeyUrl = "http://oathkeeper:4456/.well-known/jwks.json"
+	// oathkeeperPubKeyURL is the URL on which we can find the public key.
+	oathkeeperPubKeyURL = "http://oathkeeper:4456/.well-known/jwks.json"
 )
 
 // ValidateToken verifies the validity of a JWT token, both in terms of validity
@@ -101,8 +101,8 @@ func keyForToken(token *jwt.Token) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Should this be replaced by a deferred recover in case the value is not
-	// string and we panic? It might be faster than calling reflect every time.
+	// TODO Should this be replaced by a deferred recover in case the value is not
+	// 	string and we panic? It might be faster than calling reflect every time.
 	if reflect.ValueOf(token.Header["kid"]).Kind() != reflect.String {
 		return nil, errors.New("invalid jwk header - the kid field is not a string")
 	}
@@ -122,7 +122,7 @@ func keyForToken(token *jwt.Token) (interface{}, error) {
 // Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
 func oathkeeperPublicKeys() (*jwk.Set, error) {
 	if oathkeeperPubKeys == nil {
-		r, err := http.Get(oathkeeperPubKeyUrl)
+		r, err := http.Get(oathkeeperPubKeyURL) // #nosec G107: Potential HTTP request made with variable url
 		if err != nil {
 		    return nil, err
 		}
@@ -142,13 +142,14 @@ func oathkeeperPublicKeys() (*jwk.Set, error) {
 
 // tokenFromRequest extracts the JWT token from the request and returns it.
 // Returns an empty string if there is no token.
-func tokenFromRequest(r *http.Request) string {
+func tokenFromRequest(r *http.Request) (string, error) {
 	// Check the headers for a token.
-	h := r.Header.Get("Authorization")
-	if !strings.HasPrefix(h, "Bearer ") {
-		return ""
+	authHeader := r.Header.Get("Authorization")
+	parts := strings.Split(authHeader, "Bearer")
+	if len(parts) != 2 {
+		return "", errors.New("invalid authorization header")
 	}
-	return strings.TrimPrefix(h, "Bearer ")
+	return strings.TrimSpace(parts[1]), nil
 }
 
 // tokenFromContext is a helper function that extracts the JWT token from the

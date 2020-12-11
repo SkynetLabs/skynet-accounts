@@ -1,57 +1,98 @@
-# Basic API Guide
+# API Guide
 
-## User
+## General terms
+
+### ORY, Kratos, Oathkeeper, and JWx
+
+While `skynet-accounts` handles account information in the context of a Skynet 
+portal, the baseline account management (account CRUD, email verification, 
+password resets, etc.) is handled by [ORY](https://www.ory.sh/) 
+([Kratos](https://www.ory.sh/kratos/) and [Oathkeeper](https://www.ory.sh/oathkeeper/)) 
+to which we often refer to as "Kratos". This also covers the login/logout 
+process and the issuance of JTW tokens. When we talk about JWT (or JWK, or JWKS)
+we mean the tokens issued by ORY.
+
+The workflow of verification follows a simple pattern:
+ * Oathkeeper exposes a public link on which it shares the public keys with 
+   which anyone can verify the validity of the JWT tokens it issues.
+ * `skynet-accounts` fetches those keys and uses them to validate the JWTs it
+  receives in requests.
+
+### User tiers
+
+The tiers communicated by the API are numeric. This is the mapping:
+
+0. Reserved. It's not used by the API.
+1. Free.
+2. Premium 5.
+3. Premium 20.
+4. Premium 80 (yes, we need better names).
+
+## User endpoints
 
 ### Get
 
-This request combines the "get user data" and "create user" requests - if the
-users exists in the DB, their data will be returned. If they don't exist in the
+This request combines the "get user data" and "create user" requests - if the 
+users exists in the DB, their data will be returned. If they don't exist in the 
 DB, an account will be created on the Free tier.
 
 * Endpoint: `/user`
 * Verb: `GET`
-* Requires existing session: `true`
+* Requires valid JWT: `true`
 * Returns:
   - 200 JSON object
-```json
-{
+  ```json
+  {
     "tier": 1
-}
-```
-  - 404 (when there is no such user and we fail to create it)
+  }
+  ```
+  - 424 (when there is no such user, and we fail to create it)
   - 500 (on any other error)
 
-### Update own user data (TODO)
+### Update user data (TODO)
+
+This endpoint allows us to update the user's tier, membership expiration dates, 
+etc.
 
 * Endpoint: `/user`
 * Verb: `PUT`
-* Requires existing session: `true`
+* Requires valid JWT: `true`
 * POST params:
     - TBD
 * Returns:
   - 200 JSON object
-```json
-{
-   "tier": 1
-}
-```
+  ```json
+  {
+    "tier": 1
+  }
+  ```
   - 400
   - 500
 
-## Reports
+## Reports endpoints
 
 ### Report an upload (TODO)
 
-* Endpoint: `/report/upload/:skylink`
+* Endpoint: `/track/upload`
 * Verb: `POST`
-* Requires existing session: `true`
-* POST params: none
-* Returns: 204 or 400, 401, 500
+* Requires valid JWT: `true`
+* POST params:
+  - skylink: just the skylink hash, no path, no protocol
+* Returns:
+  - 204 
+  - 400
+  - 401
+  - 500
 
 ### Report a download (TODO)
 
-* Endpoint: `/report/download/:skylink`
+* Endpoint: `/track/download`
 * Verb: `POST`
-* Requires existing session: `true`
-* POST params: none
-* Returns: 204 or 400, 401, 500
+* Requires valid JWT: `true`
+* POST params:
+  - skylink: just the skylink hash, no path, no protocol
+* Returns: 
+  - 204
+  - 400
+  - 401
+  - 500

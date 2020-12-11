@@ -18,7 +18,8 @@ func TestDatabase_UserBySub(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sub := "this is a random test sub that shoudn't exist in the DB"
+	// A random sub that shouldn't exist in the DB.
+	sub := "695725d4-a345-4e68-919a-7395cb68484c"
 	// Test finding a non-existent user. This should fail.
 	_, err = db.UserBySub(ctx, sub)
 	if !errors.Contains(err, database.ErrUserNotFound) {
@@ -58,7 +59,7 @@ func TestDatabase_UserByID(t *testing.T) {
 	}
 
 	// Add a user to find.
-	sub := "this is a sub"
+	sub := "695725d4-a345-4e68-919a-7395cb68484c"
 	u, err := db.UserCreate(nil, sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +86,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sub := "this is a sub"
+	sub := "695725d4-a345-4e68-919a-7395cb68484c"
 	u, err := db.UserCreate(nil, sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +118,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sub := "this is a sub"
+	sub := "695725d4-a345-4e68-919a-7395cb68484c"
 	// Add a user to delete.
 	u, err := db.UserCreate(nil, sub, database.TierFree)
 	if err != nil {
