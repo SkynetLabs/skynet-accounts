@@ -39,6 +39,7 @@ markdown-spellcheck:
 # lint runs golangci-lint (which includes golint, a spellcheck of the codebase,
 # and other linters), the custom analyzers, and also a markdown spellchecker.
 lint: markdown-spellcheck lint-analyze
+	golint ./...
 	golangci-lint run -c .golangci.yml
 
 # lint-ci runs golint.
@@ -71,20 +72,6 @@ start-mongo:
 stop-mongo:
 	docker stop skynet-accounts-mongo-test-db
 
-# start-mailslurp starts a fake mail server listening on port 2500.
-# We use that server in our integration tests.
-start-mailslurp:
-	make stop-mailslurp
-	docker run \
-		--rm \
-		--detach \
-		--name mailslurp \
-		-p 2500:2500 \
-		inovakov/mailslurper
-
-stop-mailslurp:
-	-docker stop mailslurp
-
 # debug builds and installs debug binaries. This will also install the utils.
 debug:
 	go install -tags='debug profile netgo' -ldflags='$(ldflags)' $(pkgs)
@@ -112,9 +99,8 @@ test-long: clean fmt vet lint-ci
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
 
 # test-int always returns a zero exit value! Only use it manually!
-test-int: test-long start-mongo start-mailslurp
+test-int: test-long start-mongo
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
 	make stop-mongo
-	make stop-mailslurp
 
 .PHONY: all fmt install release clean test test-int test-long stop-mongo

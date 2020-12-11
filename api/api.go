@@ -12,25 +12,6 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-/*
-TODO
-	- panic handler
-	- method not allowed
-	- OPTIONS & CORS - https://github.com/julienschmidt/httprouter#automatic-options-responses-and-cors
-*/
-
-const (
-	// DefaultTimeoutDB defines the longest a DB operation can take before
-	// triggering a timeout. In seconds.
-	DefaultTimeoutDB = 10
-	// DefaultTimeoutRequest defines the longest an API request can take before
-	// triggering a timeout. In seconds.
-	DefaultTimeoutRequest = 30
-
-	// TokenValiditySeconds determines the duration of JWT tokens.
-	TokenValiditySeconds = 24 * 3600
-)
-
 // API is ...
 type API struct {
 	staticDB     *database.DB
@@ -71,7 +52,7 @@ func WriteError(w http.ResponseWriter, err error, code int) {
 		log.Println(code, err)
 	}
 	encodingErr := json.NewEncoder(w).Encode(err)
-	if _, isJsonErr := encodingErr.(*json.SyntaxError); isJsonErr {
+	if _, isJSONErr := encodingErr.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.
 		// Specifically, only non-marshallable types should cause an error here.
 		build.Critical("failed to encode API error response:", encodingErr)
@@ -84,7 +65,7 @@ func WriteError(w http.ResponseWriter, err error, code int) {
 func WriteJSON(w http.ResponseWriter, obj interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	err := json.NewEncoder(w).Encode(obj)
-	if _, isJsonErr := err.(*json.SyntaxError); isJsonErr {
+	if _, isJSONErr := err.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.
 		// Specifically, only non-marshallable types should cause an error here.
 		build.Critical("failed to encode API response:", err)

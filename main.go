@@ -23,14 +23,14 @@ var (
 	envDBUser = "SKYNET_DB_USER"
 	// envDBPass holds the name of the environment variable for DB password.
 	envDBPass = "SKYNET_DB_PASS" // #nosec G101: Potential hardcoded credentials
+	// envPort holds the name of the environment variable for the port on which
+	// this service listens.
+	envPort = "SKYNET_ACCOUNTS_PORT"
 )
 
 // loadDBCredentials creates a new DB connection based on credentials found in
 // the environment variables.
 func loadDBCredentials() (database.DBCredentials, error) {
-	// Load the environment variables from the .env file.
-	// Existing variables take precedence and won't be overwritten.
-	_ = godotenv.Load()
 	var cds database.DBCredentials
 	var ok bool
 	if cds.User, ok = os.LookupEnv(envDBUser); !ok {
@@ -49,7 +49,10 @@ func loadDBCredentials() (database.DBCredentials, error) {
 }
 
 func main() {
-	port, ok := os.LookupEnv("SKYNET_ACCOUNTS_PORT")
+	// Load the environment variables from the .env file.
+	// Existing variables take precedence and won't be overwritten.
+	_ = godotenv.Load()
+	port, ok := os.LookupEnv(envPort)
 	if !ok {
 		port = "3000"
 	}

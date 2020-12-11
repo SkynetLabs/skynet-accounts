@@ -1,6 +1,6 @@
 # skynet-accounts
 
-`skynet-accounts` is a service implementing user accounts for [Skynet](https://siasky.net) portals. It uses MongoDB for data storage.
+`skynet-accounts` is a service that stores [Skynet](https://siasky.net) user account data. It uses MongoDB for data storage. It uses ORY Kratos for the actual account management.
 
 ## Setup steps
 
@@ -14,8 +14,7 @@ SKYNET_DB_HOST="localhost"
 SKYNET_DB_PORT="27017"
 SKYNET_DB_USER="username"
 SKYNET_DB_PASS="password"
-SKYNET_PEPPER="some random string for pepper"
-ACCESS_SECRET="a strong secret key for signing JWT tokens"
+SKYNET_ACCOUNTS_PORT=3000
 ```
 
 ## Recommended reading
