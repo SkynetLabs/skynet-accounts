@@ -7,6 +7,7 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/lib"
+	"github.com/sirupsen/logrus"
 
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -35,6 +36,15 @@ var (
 	// dbUsersCollection defines the name of the "users" collection within
 	// skynet's database.
 	dbUsersCollection = "users"
+	// dbUsersCollection defines the name of the "skylinks" collection within
+	// skynet's database.
+	dbSkylinksCollection = "skylinks"
+	// dbUsersCollection defines the name of the "uploads" collection within
+	// skynet's database.
+	dbUploadsCollection = "uploads"
+	// dbUsersCollection defines the name of the "downloads" collection within
+	// skynet's database.
+	dbDownloadsCollection = "downloads"
 
 	// ErrUserNotFound is returned when we can't find the user in question.
 	ErrUserNotFound = errors.New("user not found")
@@ -77,6 +87,10 @@ func New(ctx context.Context, creds DBCredentials) (*DB, error) {
 		return nil, errors.AddContext(err, "failed to connect to DB")
 	}
 	database := c.Database(dbName)
+	err = ensureDBSchema(ctx, database)
+	if err != nil {
+		return nil, err
+	}
 	users := database.Collection(dbUsersCollection)
 	db := &DB{
 		staticDB:    database,
@@ -236,4 +250,77 @@ func connectionString(creds DBCredentials) string {
 		mongoWriteConcern,
 		mongoWriteConcernTimeout,
 	)
+}
+
+// ensureDBSchema checks that we have all collections and indexes we need and
+// creates them if needed.
+// See https://docs.mongodb.com/manual/indexes/
+// See https://docs.mongodb.com/manual/core/index-unique/
+func ensureDBSchema(ctx context.Context, db *mongo.Database) error {
+	// schema defines a mapping between a collection name and the indexes that
+	// must exist for that collection.
+	schema := map[string][]mongo.IndexModel{
+		dbUsersCollection: {
+			{
+				Keys:    bson.D{{"sub", 1}},
+				Options: options.Index().SetName("usersSubUnique").SetUnique(true),
+			},
+		},
+		dbSkylinksCollection: {
+			{
+				Keys:    bson.D{{"skylink", 1}},
+				Options: options.Index().SetName("skylinksSkylinkUnique").SetUnique(true),
+			},
+		},
+		dbUploadsCollection: {
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("uploadsUserID"),
+			},
+			{
+				Keys:    bson.D{{"skylink_id", 1}},
+				Options: options.Index().SetName("uploadsSkylinkID"),
+			},
+		},
+		dbDownloadsCollection: {
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("uploadsUserID"),
+			},
+			{
+				Keys:    bson.D{{"skylink_id", 1}},
+				Options: options.Index().SetName("uploadsSkylinkID"),
+			},
+		},
+	}
+	for collName, models := range schema {
+		coll, err := ensureCollection(ctx, db, collName)
+		if err != nil {
+			return err
+		}
+		iv := coll.Indexes()
+		names, err := iv.CreateMany(ctx, models)
+		if err != nil {
+			return errors.AddContext(err, "failed to create indexes")
+		}
+		logrus.Debugf("Created new indexes: %v\n", names)
+	}
+	return nil
+}
+
+// ensureCollection is a helper function that gets the given collection from the
+// database and creates it if it doesn't exist.
+func ensureCollection(ctx context.Context, db *mongo.Database, collName string) (*mongo.Collection, error) {
+	coll := db.Collection(collName)
+	if coll == nil {
+		err := db.CreateCollection(ctx, dbUsersCollection)
+		if err != nil {
+			return nil, err
+		}
+		coll = db.Collection(dbUsersCollection)
+		if coll == nil {
+			return nil, errors.New("failed to create collection " + dbUsersCollection)
+		}
+	}
+	return coll, nil
 }
