@@ -1,7 +1,15 @@
 package database
 
 import (
+	"context"
+	"fmt"
+
+	"github.com/NebulousLabs/skynet-accounts/build"
+
+	"gitlab.com/NebulousLabs/errors"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // User status tiers.
@@ -23,3 +31,130 @@ type (
 		Tier int                `bson:"tier" json:"tier"`
 	}
 )
+
+// UserBySub returns the user with the given sub or nil. The sub is the Kratos
+// id of that user.
+func (db *DB) UserBySub(ctx context.Context, sub string) (*User, error) {
+	users, err := db.managedUsersByField(ctx, "sub", sub)
+	if err != nil {
+		return nil, err
+	}
+	// Subs must be unique. If we hit this then we have a serious
+	// programmer error which endangers customer's data and finances.
+	// We should error out in order to prevent exposing the wrong user data.
+	if len(users) > 1 {
+		build.Critical(fmt.Sprintf("More than one user found for sub '%s'!", sub))
+		// The error message is intentionally cryptic.
+		return nil, ErrGeneralInternalFailure
+	}
+	return users[0], nil
+}
+
+// UserByID finds a user by their ID.
+func (db *DB) UserByID(ctx context.Context, id string) (*User, error) {
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to parse user ID")
+	}
+	filter := bson.D{{"_id", oid}}
+	c, err := db.staticUsers.Find(ctx, filter)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to Find")
+	}
+	// Get the first result.
+	if ok := c.Next(ctx); !ok {
+		return nil, ErrUserNotFound
+	}
+	// Ensure there are no more results.
+	if ok := c.Next(ctx); ok {
+		build.Critical("more than one user found for id", id)
+	}
+	var u User
+	err = c.Decode(&u)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to parse value from DB")
+	}
+	return &u, nil
+}
+
+// UserCreate creates a new user in the DB.
+func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, error) {
+	// Check for an existing user with this sub.
+	users, err := db.managedUsersByField(ctx, "sub", sub)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if len(users) > 0 {
+		return nil, ErrUserAlreadyExists
+	}
+	u := &User{
+		ID:   primitive.ObjectID{},
+		Sub:  sub,
+		Tier: tier,
+	}
+	// Insert the user.
+	fields, err := bson.Marshal(u)
+	if err != nil {
+		return nil, err
+	}
+	ir, err := db.staticUsers.InsertOne(ctx, fields)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to Insert")
+	}
+	u.ID = ir.InsertedID.(primitive.ObjectID)
+	return u, nil
+}
+
+// UserDelete deletes a user by their ID.
+func (db *DB) UserDelete(ctx context.Context, u *User) error {
+	if u.ID.IsZero() {
+		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
+	}
+	filter := bson.D{{"_id", u.ID}}
+	dr, err := db.staticUsers.DeleteOne(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to Delete")
+	}
+	if dr.DeletedCount == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// UserUpdate changes the user's data in the DB.
+// It never changes the id or sub of the user.
+func (db *DB) UserUpdate(ctx context.Context, u *User) error {
+	// Update the user.
+	filter := bson.M{"_id": u.ID}
+	update := bson.M{"$set": bson.M{
+		"tier": u.Tier,
+	}}
+	opts := options.Update().SetUpsert(true)
+	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return errors.AddContext(err, "failed to update")
+	}
+	return nil
+}
+
+// managedUsersByField finds all users that have a given field value.
+// The calling method is responsible for the validation of the value.
+func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
+	filter := bson.D{{fieldName, fieldValue}}
+	c, err := db.staticUsers.Find(ctx, filter)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to Find")
+	}
+	var users []*User
+	for c.Next(ctx) {
+		var u User
+		if err = c.Decode(&u); err != nil {
+			return nil, errors.AddContext(err, "failed to parse value from DB")
+		}
+		users = append(users, &u)
+	}
+	if len(users) == 0 {
+		return users, ErrUserNotFound
+	}
+	return users, nil
+}

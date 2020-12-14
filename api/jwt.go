@@ -91,7 +91,7 @@ func ValidateToken(t string) (*jwt.Token, error) {
 	return token, nil
 }
 
-// keyForToken is a helper function that finds a suitable key for validating the
+// keyForToken finds a suitable key for validating the
 // given token among the public keys provided by Oathkeeper.
 func keyForToken(token *jwt.Token) (interface{}, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
@@ -111,7 +111,7 @@ func keyForToken(token *jwt.Token) (interface{}, error) {
 	return keys[0].Materialize()
 }
 
-// oathkeeperPublicKeys is a helper function that checks whether we have the
+// oathkeeperPublicKeys checks whether we have the
 // needed public key cached and if we don't it fetches it and caches it for us.
 //
 // See https://tools.ietf.org/html/rfc7517
@@ -150,7 +150,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 	return strings.TrimSpace(parts[1]), nil
 }
 
-// tokenFromContext is a helper function that extracts the JWT token from the
+// tokenFromContext extracts the JWT token from the
 // context and returns the contained user sub, claims and the token itself.
 // The sub is the user id used in Kratos.
 //
