@@ -36,13 +36,13 @@ var (
 	// dbUsersCollection defines the name of the "users" collection within
 	// skynet's database.
 	dbUsersCollection = "users"
-	// dbUsersCollection defines the name of the "skylinks" collection within
+	// dbSkylinksCollection defines the name of the "skylinks" collection within
 	// skynet's database.
 	dbSkylinksCollection = "skylinks"
-	// dbUsersCollection defines the name of the "uploads" collection within
+	// dbUploadsCollection defines the name of the "uploads" collection within
 	// skynet's database.
 	dbUploadsCollection = "uploads"
-	// dbUsersCollection defines the name of the "downloads" collection within
+	// dbDownloadsCollection defines the name of the "downloads" collection within
 	// skynet's database.
 	dbDownloadsCollection = "downloads"
 
