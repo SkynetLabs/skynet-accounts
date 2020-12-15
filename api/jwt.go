@@ -121,17 +121,21 @@ func keyForToken(token *jwt.Token) (interface{}, error) {
 // Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
 func oathkeeperPublicKeys() (*jwk.Set, error) {
 	if oathkeeperPubKeys == nil {
+		fmt.Println("fetching JWKS from oathkeeper")
 		r, err := http.Get(oathkeeperPubKeyURL) // #nosec G107: Potential HTTP request made with variable url
 		if err != nil {
-			return nil, err
+			fmt.Println("ERROR while fetching JWKS from oathkeeper", err)
+		    return nil, err
 		}
 		defer r.Body.Close()
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			return nil, err
+			fmt.Println("ERROR while reading JWKS from oathkeeper", err)
+		    return nil, err
 		}
 		set, err := jwk.ParseString(string(b))
 		if err != nil {
+			fmt.Println("ERROR while parsing JWKS from oathkeeper", err)
 			return nil, err
 		}
 		oathkeeperPubKeys = set

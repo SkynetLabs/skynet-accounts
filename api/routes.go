@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"github.com/sirupsen/logrus"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -24,11 +25,13 @@ func validate(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		tokenStr, err := tokenFromRequest(req)
 		if err != nil {
+			fmt.Println("error while fetching token from request", err)
 			WriteError(w, err, http.StatusBadRequest)
 			return
 		}
 		token, err := ValidateToken(tokenStr)
 		if err != nil {
+			fmt.Println("error while validating token", err)
 			WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
