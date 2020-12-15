@@ -28,8 +28,6 @@ const (
 var (
 	// _sc holds an instance of `securecookie`, so we don't instantiate it more
 	// than once.
-	// TODO Do we do that in Go? Do we have a convention for private fields? `_sc`?
-	// 	Alternatively, I can make it a field on API.
 	_sc *securecookie.SecureCookie = nil
 )
 

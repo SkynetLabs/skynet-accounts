@@ -240,9 +240,8 @@ func TokenExpiration(t *jwt.Token) (int64, error) {
 		return 0, errors.New("the token does not contain the claims we expect")
 	}
 	claims := t.Claims.(jwt.MapClaims)
-	if reflect.ValueOf(claims["exp"]).Kind() != reflect.Int64 { // TODO ???
-		fmt.Println(" >>>> ", reflect.ValueOf(claims["exp"]).Kind())
+	if reflect.ValueOf(claims["exp"]).Kind() != reflect.Float64 {
 		return 0, errors.New("the token does not contain the claims we expect")
 	}
-	return claims["exp"].(int64), nil
+	return int64(claims["exp"].(float64)), nil
 }
