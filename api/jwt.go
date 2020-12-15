@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"reflect"
 	"strings"
@@ -122,12 +123,12 @@ func oathkeeperPublicKeys() (*jwk.Set, error) {
 	if oathkeeperPubKeys == nil {
 		r, err := http.Get(oathkeeperPubKeyURL) // #nosec G107: Potential HTTP request made with variable url
 		if err != nil {
-		    return nil, err
+			return nil, err
 		}
 		defer r.Body.Close()
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-		    return nil, err
+			return nil, err
 		}
 		set, err := jwk.ParseString(string(b))
 		if err != nil {

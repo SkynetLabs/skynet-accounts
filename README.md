@@ -15,6 +15,9 @@ SKYNET_DB_PORT="27017"
 SKYNET_DB_USER="username"
 SKYNET_DB_PASS="password"
 SKYNET_ACCOUNTS_PORT=3000
+COOKIE_DOMAIN="siasky.xyz"
+COOKIE_HASH_KEY=""
+COOKIE_ENC_KEY=""
 ```
 
 ## Recommended reading
