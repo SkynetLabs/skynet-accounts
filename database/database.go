@@ -285,11 +285,11 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database) error {
 		dbDownloadsCollection: {
 			{
 				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("uploadsUserID"),
+				Options: options.Index().SetName("downloadsUserID"),
 			},
 			{
 				Keys:    bson.D{{"skylink_id", 1}},
-				Options: options.Index().SetName("uploadsSkylinkID"),
+				Options: options.Index().SetName("downloadsSkylinkID"),
 			},
 		},
 	}
