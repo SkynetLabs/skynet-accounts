@@ -20,13 +20,13 @@ var (
 	// dbUsersCollection defines the name of the "users" collection within
 	// skynet's database.
 	dbUsersCollection = "users"
-	// dbUsersCollection defines the name of the "skylinks" collection within
+	// dbSkylinksCollection defines the name of the "skylinks" collection within
 	// skynet's database.
 	dbSkylinksCollection = "skylinks"
-	// dbUsersCollection defines the name of the "uploads" collection within
+	// dbUploadsCollection defines the name of the "uploads" collection within
 	// skynet's database.
 	dbUploadsCollection = "uploads"
-	// dbUsersCollection defines the name of the "downloads" collection within
+	// dbDownloadsCollection defines the name of the "downloads" collection within
 	// skynet's database.
 	dbDownloadsCollection = "downloads"
 
@@ -133,9 +133,8 @@ func connectionString(creds DBCredentials) string {
 
 // ensureDBSchema checks that we have all collections and indexes we need and
 // creates them if needed.
-// See https://docs.mongodb.com/manual/indexes/ TODO
-// See https://docs.mongodb.com/manual/core/index-unique/ TODO
-// TODO Read about BSON
+// See https://docs.mongodb.com/manual/indexes/
+// See https://docs.mongodb.com/manual/core/index-unique/
 func ensureDBSchema(ctx context.Context, db *mongo.Database) error {
 	// schema defines a mapping between a collection name and the indexes that
 	// must exist for that collection.
