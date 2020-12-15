@@ -225,3 +225,20 @@ func tokenFromContext(req *http.Request) (sub string, claims jwt.MapClaims, toke
 	token = t
 	return
 }
+
+// TokenExpiration extracts and returns the `exp` claim of the given token.
+// NOTE: It does NOT validate the token!
+func TokenExpiration(t *jwt.Token) (int64, error) {
+	if t == nil {
+		return 0, errors.New("invalid token")
+	}
+	if reflect.ValueOf(t.Claims).Kind() != reflect.ValueOf(jwt.MapClaims{}).Kind() {
+		return 0, errors.New("the token does not contain the claims we expect")
+	}
+	claims := t.Claims.(jwt.MapClaims)
+	if reflect.ValueOf(claims["exp"]).Kind() != reflect.Int64 { // TODO ???
+		fmt.Println(" >>>> ", reflect.ValueOf(claims["exp"]).Kind())
+		return 0, errors.New("the token does not contain the claims we expect")
+	}
+	return claims["exp"].(int64), nil
+}

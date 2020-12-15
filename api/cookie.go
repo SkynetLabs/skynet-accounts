@@ -46,7 +46,10 @@ func secureCookie() *securecookie.SecureCookie {
 
 // writeJWTCookie is a helper function that writes the given JWT token as a
 // secure cookie.
-func writeJWTCookie(w http.ResponseWriter, token string) error {
+func writeJWTCookie(w http.ResponseWriter, token string, exp int64) error {
+	if exp <= 0 || time.Unix(exp, 0).Before(time.Now()) {
+		exp = time.Now().Unix()
+	}
 	encodedValue, err := secureCookie().Encode(CookieName, token)
 	if err != nil {
 		return err
@@ -62,7 +65,7 @@ func writeJWTCookie(w http.ResponseWriter, token string) error {
 		HttpOnly: true,
 		Path:     "/",
 		Domain:   domain,
-		Expires:  time.Now().Add(cookieValidity * time.Second),
+		Expires:  time.Unix(exp, 0),
 		MaxAge:   cookieValidity,
 		Secure:   true, // do not send over insecure channels, e.g. HTTP
 		SameSite: 1,    // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00
