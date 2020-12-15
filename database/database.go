@@ -143,33 +143,33 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database) error {
 		dbUsersCollection: {
 			{
 				Keys:    bson.D{{"sub", 1}},
-				Options: options.Index().SetName("usersSubUnique").SetUnique(true),
+				Options: options.Index().SetName("sub_unique").SetUnique(true),
 			},
 		},
 		dbSkylinksCollection: {
 			{
 				Keys:    bson.D{{"skylink", 1}},
-				Options: options.Index().SetName("skylinksSkylinkUnique").SetUnique(true),
+				Options: options.Index().SetName("skylink_unique").SetUnique(true),
 			},
 		},
 		dbUploadsCollection: {
 			{
 				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("uploadsUserID"),
+				Options: options.Index().SetName("user_id"),
 			},
 			{
 				Keys:    bson.D{{"skylink_id", 1}},
-				Options: options.Index().SetName("uploadsSkylinkID"),
+				Options: options.Index().SetName("skylink_id"),
 			},
 		},
 		dbDownloadsCollection: {
 			{
 				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("uploadsUserID"),
+				Options: options.Index().SetName("user_id"),
 			},
 			{
 				Keys:    bson.D{{"skylink_id", 1}},
-				Options: options.Index().SetName("uploadsSkylinkID"),
+				Options: options.Index().SetName("skylink_id"),
 			},
 		},
 	}
