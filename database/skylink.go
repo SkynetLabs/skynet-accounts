@@ -50,6 +50,18 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 	return &skylinkRec, nil
 }
 
+// SkylinkByID finds a skylink by its ID.
+func (db *DB) SkylinkByID(ctx context.Context, id primitive.ObjectID) (*Skylink, error) {
+	filter := bson.D{{"_id", id}}
+	sr := db.staticSkylinks.FindOne(ctx, filter)
+	var sl Skylink
+	err := sr.Decode(&sl)
+	if err != nil {
+		return nil, err
+	}
+	return &sl, nil
+}
+
 // validateSkylink extracts the skylink hash from the given skylink that might
 // have protocol, path, etc. within it.
 func validateSkylink(skylink string) (string, error) {

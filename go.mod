@@ -11,6 +11,7 @@ require (
 	github.com/lestrrat/go-pdebug v0.0.0-20180220043741-569c97477ae8 // indirect
 	github.com/sirupsen/logrus v1.4.2
 	gitlab.com/NebulousLabs/errors v0.0.0-20200929122200-06c536cf6975
+	gitlab.com/NebulousLabs/threadgroup v0.0.0-20200608151952-38921fbef213 // indirect
 	go.mongodb.org/mongo-driver v1.4.4
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974 // indirect
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9 // indirect

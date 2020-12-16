@@ -2,8 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 	"log"
 	"net/http"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
@@ -15,6 +18,7 @@ import (
 // API is ...
 type API struct {
 	staticDB     *database.DB
+	staticMF     *metafetcher.MetaFetcher
 	staticRouter *httprouter.Router
 }
 
@@ -24,7 +28,7 @@ type API struct {
 type ctxValue string
 
 // New returns a new initialised API.
-func New(db *database.DB) (*API, error) {
+func New(db *database.DB, mf *metafetcher.MetaFetcher) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
 	}
@@ -33,6 +37,7 @@ func New(db *database.DB) (*API, error) {
 
 	api := &API{
 		staticDB:     db,
+		staticMF:     mf,
 		staticRouter: router,
 	}
 	api.buildHTTPRoutes()
@@ -48,9 +53,10 @@ func (api *API) Router() *httprouter.Router {
 func WriteError(w http.ResponseWriter, err error, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
-	if build.DEBUG {
-		log.Println(code, err)
-	}
+	//if build.DEBUG {
+	log.Println(code, err)
+	logrus.Debug(code, err) // this is here so I can compare the output
+	//}
 	encodingErr := json.NewEncoder(w).Encode(err)
 	if _, isJSONErr := encodingErr.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.

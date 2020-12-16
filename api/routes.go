@@ -2,12 +2,12 @@ package api
 
 import (
 	"context"
-	"github.com/sirupsen/logrus"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/sirupsen/logrus"
 )
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
