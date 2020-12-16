@@ -35,14 +35,12 @@ func validate(h httprouter.Handle) httprouter.Handle {
 			WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
-		// Get the token's expiration time:
-		exp, _ := TokenExpiration(token)
-
 		// If we don't have a valid cookie with reasonably long remaining TTL
 		// then set one.
 		c, err := req.Cookie(CookieName)
+		exp, _ := TokenExpiration(token)
 		if err != nil || !c.Expires.Equal(time.Unix(exp, 0)) {
-			err = writeJWTCookie(w, tokenStr, exp)
+			err = writeCookie(w, tokenStr)
 			if err != nil {
 				logrus.Println("Failed to write cookie:", err)
 			}
