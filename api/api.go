@@ -2,9 +2,10 @@ package api
 
 import (
 	"encoding/json"
-	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 	"log"
 	"net/http"
+
+	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/sirupsen/logrus"
 
@@ -20,6 +21,7 @@ type API struct {
 	staticDB     *database.DB
 	staticMF     *metafetcher.MetaFetcher
 	staticRouter *httprouter.Router
+	staticLogger *logrus.Logger
 }
 
 // ctxValue is a helper type which makes it safe to register values in the
@@ -28,9 +30,12 @@ type API struct {
 type ctxValue string
 
 // New returns a new initialised API.
-func New(db *database.DB, mf *metafetcher.MetaFetcher) (*API, error) {
+func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
+	}
+	if logger == nil {
+		logger = logrus.New()
 	}
 	router := httprouter.New()
 	router.RedirectTrailingSlash = true
@@ -39,6 +44,7 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher) (*API, error) {
 		staticDB:     db,
 		staticMF:     mf,
 		staticRouter: router,
+		staticLogger: logger,
 	}
 	api.buildHTTPRoutes()
 	return api, nil
@@ -53,10 +59,9 @@ func (api *API) Router() *httprouter.Router {
 func WriteError(w http.ResponseWriter, err error, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
-	//if build.DEBUG {
-	log.Println(code, err)
-	logrus.Debug(code, err) // this is here so I can compare the output
-	//}
+	if build.DEBUG {
+		log.Println(code, err)
+	}
 	encodingErr := json.NewEncoder(w).Encode(err)
 	if _, isJSONErr := encodingErr.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.

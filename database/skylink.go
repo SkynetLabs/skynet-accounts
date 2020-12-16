@@ -18,7 +18,7 @@ var (
 type Skylink struct {
 	ID      primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 	Skylink string             `bson:"skylink" json:"skylink"`
-	Size    uint64             `bson:"size" json:"size"`
+	Size    int64              `bson:"size" json:"size"`
 }
 
 // Skylink gets the DB object for the given skylink.
@@ -32,7 +32,7 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 	skylinkRec := Skylink{
 		Skylink: skylinkHash,
 	}
-	// Try to fins the skylink in the database.
+	// Try to find the skylink in the database.
 	filter := bson.D{{"skylink", skylinkHash}}
 	sr := db.staticSkylinks.FindOne(ctx, filter)
 	err = sr.Decode(&skylinkRec)
@@ -60,6 +60,24 @@ func (db *DB) SkylinkByID(ctx context.Context, id primitive.ObjectID) (*Skylink,
 		return nil, err
 	}
 	return &sl, nil
+}
+
+// SkylinkUpdate updates the meta data about the given skylink. If any of the
+// parameters is empty they won't be used in the update operation.
+func (db *DB) SkylinkUpdate(ctx context.Context, id primitive.ObjectID, name string, size int64) error {
+	filter := bson.M{"_id": id}
+	updates := bson.M{}
+	if name != "" {
+		updates["name"] = name
+	}
+	if size > 0 {
+		updates["size"] = size
+	}
+	_, err := db.staticSkylinks.UpdateOne(ctx, filter, bson.M{"$set": updates})
+	if err != nil {
+		return errors.AddContext(err, "failed to update")
+	}
+	return nil
 }
 
 // validateSkylink extracts the skylink hash from the given skylink that might

@@ -2,16 +2,17 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 	"log"
 	"net/http"
 	"os"
 
 	"github.com/NebulousLabs/skynet-accounts/api"
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -68,18 +69,30 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
 	}
+
 	ctx := context.Background()
-	db, err := database.New(ctx, dbCreds)
+	logger := logrus.New()
+	logger.SetLevel(logLevel())
+	db, err := database.New(ctx, dbCreds, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
-	// TODO If this doesn't return an error just do it in the api.New()
-	//tg := threadgroup.ThreadGroup{}
-	mf := metafetcher.New(ctx, db, portal)
-	server, err := api.New(db, mf)
+	mf := metafetcher.New(ctx, db, portal, logger)
+	server, err := api.New(db, mf, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
-	fmt.Println("Listening on port " + port)
-	log.Fatal(http.ListenAndServe(":"+port, server.Router()))
+	logger.Info("Listening on port " + port)
+	logger.Fatal(http.ListenAndServe(":"+port, server.Router()))
+}
+
+// logLevel returns the desires log level.
+func logLevel() logrus.Level {
+	if build.DEBUG {
+		return logrus.TraceLevel
+	}
+	if build.Release == "testing" || build.Release == "dev" {
+		return logrus.DebugLevel
+	}
+	return logrus.InfoLevel
 }

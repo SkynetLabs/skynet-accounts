@@ -138,6 +138,17 @@ func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	return nil
 }
 
+// UserUpdateUsedStorage changes the user's used storage by adding the given
+// delta. If the delta is negative the change will be a decrease.
+func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, delta int64) error {
+	filter := bson.M{"_id": id}
+	update := bson.M{"$inc": bson.M{
+		"storage_used": delta,
+	}}
+	_, err := db.staticUsers.UpdateOne(ctx, filter, update)
+	return err
+}
+
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {

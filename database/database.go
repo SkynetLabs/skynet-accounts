@@ -67,6 +67,7 @@ type (
 		staticUploads   *mongo.Collection
 		staticDownloads *mongo.Collection
 		staticDep       lib.Dependencies
+		staticLogger    *logrus.Logger
 	}
 
 	// DBCredentials is a helper struct that binds together all values needed for
@@ -80,7 +81,7 @@ type (
 )
 
 // New returns a new DB connection based on the passed parameters.
-func New(ctx context.Context, creds DBCredentials) (*DB, error) {
+func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, error) {
 	connStr := connectionString(creds)
 	c, err := mongo.NewClient(options.Client().ApplyURI(connStr))
 	if err != nil {
@@ -91,7 +92,7 @@ func New(ctx context.Context, creds DBCredentials) (*DB, error) {
 		return nil, errors.AddContext(err, "failed to connect to DB")
 	}
 	database := c.Database(dbName)
-	err = ensureDBSchema(ctx, database)
+	err = ensureDBSchema(ctx, database, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +102,7 @@ func New(ctx context.Context, creds DBCredentials) (*DB, error) {
 		staticSkylinks:  database.Collection(dbSkylinksCollection),
 		staticUploads:   database.Collection(dbUploadsCollection),
 		staticDownloads: database.Collection(dbDownloadsCollection),
+		staticLogger:    logger,
 	}
 	return db, nil
 }
@@ -135,7 +137,7 @@ func connectionString(creds DBCredentials) string {
 // creates them if needed.
 // See https://docs.mongodb.com/manual/indexes/
 // See https://docs.mongodb.com/manual/core/index-unique/
-func ensureDBSchema(ctx context.Context, db *mongo.Database) error {
+func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger) error {
 	// schema defines a mapping between a collection name and the indexes that
 	// must exist for that collection.
 	schema := map[string][]mongo.IndexModel{
@@ -182,7 +184,7 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database) error {
 		if err != nil {
 			return errors.AddContext(err, "failed to create indexes")
 		}
-		logrus.Debugf("Created new indexes: %v\n", names)
+		log.Debugf("Created new indexes: %v\n", names)
 	}
 	return nil
 }

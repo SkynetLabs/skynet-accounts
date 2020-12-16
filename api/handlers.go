@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
@@ -100,6 +101,21 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, _ h
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
+	}
+	if skylink.Size == 0 {
+		// Queue the skylink to have its meta data fetched and updated in the
+		// DB, as well as the user's used space to be updated.
+		api.staticMF.Queue <- metafetcher.Message{
+			UserID:    u.ID,
+			SkylinkID: skylink.ID,
+		}
+	} else {
+		err = api.staticDB.UserUpdateUsedStorage(req.Context(), u.ID, skylink.Size)
+		if err != nil {
+			// Log the error but return success - the record will be corrected
+			// later when we rescan the user's used space.
+			api.staticLogger.Debug("Failed to update user's used space:", err)
+		}
 	}
 	WriteSuccess(w)
 }
