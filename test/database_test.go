@@ -13,7 +13,7 @@ import (
 // This method also test UserCreate.
 func TestDatabase_UserBySub(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, DBTestCredentials())
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestDatabase_UserBySub(t *testing.T) {
 // TestDatabase_UserByID ensures UserByID works as expected.
 func TestDatabase_UserByID(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, DBTestCredentials())
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestDatabase_UserByID(t *testing.T) {
 // TestDatabase_UserUpdate ensures UserUpdate works as expected.
 func TestDatabase_UserUpdate(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, DBTestCredentials())
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 // TestDatabase_UserDelete ensures UserDelete works as expected.
 func TestDatabase_UserDelete(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, DBTestCredentials())
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
