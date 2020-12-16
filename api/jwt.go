@@ -144,15 +144,26 @@ func oathkeeperPublicKeys() (*jwk.Set, error) {
 }
 
 // tokenFromRequest extracts the JWT token from the request and returns it.
-// Returns an empty string if there is no token.
+// It first checks the request headers and then the cookies.
 func tokenFromRequest(r *http.Request) (string, error) {
 	// Check the headers for a token.
 	authHeader := r.Header.Get("Authorization")
 	parts := strings.Split(authHeader, "Bearer")
-	if len(parts) != 2 {
-		return "", errors.New("invalid authorization header")
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[1]), nil
 	}
-	return strings.TrimSpace(parts[1]), nil
+
+	// Check the cookie for a token.
+	cookie, err := r.Cookie(CookieName)
+	if err != nil {
+		return "", err
+	}
+	var value string
+	err = secureCookie().Decode(CookieName, cookie.Value, &value)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
 }
 
 // tokenFromContext extracts the JWT token from the

@@ -1,15 +1,11 @@
 package api
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gorilla/securecookie"
-	"gitlab.com/NebulousLabs/errors"
 )
 
 const (
@@ -40,7 +36,7 @@ var (
 func secureCookie() *securecookie.SecureCookie {
 	if _sc == nil {
 		var hashKey = []byte(os.Getenv(envCookieHashKey))
-		var blockKey = []byte("") // []byte(os.Getenv(envCookieEncKey))
+		var blockKey = []byte(os.Getenv(envCookieEncKey))
 		_sc = securecookie.New(hashKey, blockKey)
 	}
 	return _sc
@@ -48,43 +44,11 @@ func secureCookie() *securecookie.SecureCookie {
 
 // writeCookie is a helper function that writes the given JWT token as a
 // secure cookie.
-func writeCookie(w http.ResponseWriter, token string) error {
-	if token == "" {
-		return errors.New("invalid token")
+func writeCookie(w http.ResponseWriter, token string, exp int64) error {
+	if exp <= 0 || time.Unix(exp, 0).Before(time.Now()) {
+		exp = time.Now().Unix()
 	}
-	ts := strings.Split(token, ".")
-	if len(ts) != 3 {
-		return errors.New("invalid token")
-	}
-	var b []byte
-	_, err := base64.StdEncoding.Decode([]byte(ts[1]), b)
-	if err != nil {
-		return errors.AddContext(err, "failed to decode token payload")
-	}
-	type claims struct {
-		Exp     int64 `json:"exp"`
-		Session struct {
-			Identity struct {
-				Traits struct {
-					Email string `json:"email"`
-					Name  struct {
-						First string `json:"first"`
-						Last  string `json:"last"`
-					} `json:"name"`
-				} `json:"traits"`
-			} `json:"identity"`
-		} `json:"session"`
-	}
-	var cl claims
-	err = json.Unmarshal(b, &cl)
-	if err != nil {
-		return errors.AddContext(err, "failed to parse claims")
-	}
-	content, err := json.Marshal(cl)
-	if err != nil {
-		return errors.AddContext(err, "failed to marshal back to JSON")
-	}
-	encodedValue, err := secureCookie().Encode(CookieName, string(content))
+	encodedValue, err := secureCookie().Encode(CookieName, token)
 	if err != nil {
 		return err
 	}
@@ -99,7 +63,7 @@ func writeCookie(w http.ResponseWriter, token string) error {
 		HttpOnly: true,
 		Path:     "/",
 		Domain:   domain,
-		Expires:  time.Unix(cl.Exp, 0),
+		Expires:  time.Unix(exp, 0),
 		MaxAge:   cookieValidity,
 		Secure:   true, // do not send over insecure channels, e.g. HTTP
 		SameSite: 1,    // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00

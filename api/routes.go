@@ -40,7 +40,7 @@ func validate(h httprouter.Handle) httprouter.Handle {
 		c, err := req.Cookie(CookieName)
 		exp, _ := TokenExpiration(token)
 		if err != nil || !c.Expires.Equal(time.Unix(exp, 0)) {
-			err = writeCookie(w, tokenStr)
+			err = writeCookie(w, tokenStr, exp)
 			if err != nil {
 				logrus.Println("Failed to write cookie:", err)
 			}
