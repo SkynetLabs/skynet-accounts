@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 	"log"
 	"net/http"
 	"os"
@@ -26,6 +27,9 @@ var (
 	// envPort holds the name of the environment variable for the port on which
 	// this service listens.
 	envPort = "SKYNET_ACCOUNTS_PORT"
+	// envPortal holds the name of the environment variable for the portal to
+	// use to fetch skylinks.
+	envPortal = "PORTAL_URL"
 )
 
 // loadDBCredentials creates a new DB connection based on credentials found in
@@ -56,6 +60,10 @@ func main() {
 	if !ok {
 		port = "3000"
 	}
+	portal, ok := os.LookupEnv(envPortal)
+	if !ok {
+		portal = "https://siasky.net"
+	}
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
@@ -65,7 +73,10 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
-	server, err := api.New(db)
+	// TODO If this doesn't return an error just do it in the api.New()
+	//tg := threadgroup.ThreadGroup{}
+	mf := metafetcher.New(ctx, db, portal)
+	server, err := api.New(db, mf)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
