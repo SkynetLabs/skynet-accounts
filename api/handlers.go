@@ -41,6 +41,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub)
+	// TODO Should we create the user in case it's not found?
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -60,6 +61,7 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub)
+	// TODO Should we create the user in case it's not found?
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return

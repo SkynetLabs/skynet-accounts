@@ -26,18 +26,16 @@ The tiers communicated by the API are numeric. This is the mapping:
 1. Free.
 2. Premium 5.
 3. Premium 20.
-4. Premium 80 (yes, we need better names).
+4. Premium 80.
 
 ## User endpoints
 
-### Get
+### GET `/user`
 
 This request combines the "get user data" and "create user" requests - if the 
 users exists in the DB, their data will be returned. If they don't exist in the 
 DB, an account will be created on the Free tier.
 
-* Endpoint: `/user`
-* Verb: `GET`
 * Requires valid JWT: `true`
 * Returns:
   - 200 JSON object
@@ -50,13 +48,11 @@ DB, an account will be created on the Free tier.
   - 424 (when there is no such user, and we fail to create it)
   - 500 (on any other error)
 
-### Update user data (TODO)
+### PUT `/user` (TODO)
 
 This endpoint allows us to update the user's tier, membership expiration dates, 
 etc.
 
-* Endpoint: `/user`
-* Verb: `PUT`
 * Requires valid JWT: `true`
 * POST params:
     - TBD
@@ -71,12 +67,32 @@ etc.
   - 401 (missing JWT)
   - 500
 
+### GET `/user/uploads`
+
+Returns a list of all skylinks uploaded by the user.
+
+* Requires valid JWT: `true`
+* Returns:
+  - 200 JSON Array (TBD)
+  - 401 (missing JWT)
+  - 424 (when there is no such user, and we fail to create it)
+  - 500 (on any other error)
+
+### GET `/user/downloads`
+
+Returns a list of all skylinks downloads by the user.
+
+* Requires valid JWT: `true`
+* Returns:
+  - 200 JSON Array (TBD)
+  - 401 (missing JWT)
+  - 424 (when there is no such user, and we fail to create it)
+  - 500 (on any other error)
+
 ## Reports endpoints
 
-### Report an upload (TODO)
+### POST `/track/upload`
 
-* Endpoint: `/track/upload`
-* Verb: `POST`
 * Requires valid JWT: `true`
 * POST params:
   - skylink: just the skylink hash, no path, no protocol
@@ -86,10 +102,8 @@ etc.
   - 401 (missing JWT)
   - 500
 
-### Report a download (TODO)
+### POST `/track/download`
 
-* Endpoint: `/track/download`
-* Verb: `POST`
 * Requires valid JWT: `true`
 * POST params:
   - skylink: just the skylink hash, no path, no protocol
