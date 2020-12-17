@@ -103,6 +103,7 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, _ h
 		return
 	}
 	if skylink.Size == 0 {
+		// Zero size means that we haven't fetched the skyfile's size yet.
 		// Queue the skylink to have its meta data fetched and updated in the
 		// DB, as well as the user's used space to be updated.
 		api.staticMF.Queue <- metafetcher.Message{

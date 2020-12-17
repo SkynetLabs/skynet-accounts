@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 
@@ -79,8 +80,21 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		mf.Queue <- m
 		return
 	}
-	r, err := http.Head(fmt.Sprintf("%s/%s", mf.portal, sl.Skylink))
-	if err != nil || r.StatusCode > 399 {
+	// Make a HEAD request directly to the local `sia` container. We do that, so
+	// we don't get rate-limited by nginx in case we need to make many requests.
+	skylinkURL, err := url.Parse(fmt.Sprintf("http://sia:9980/skynet/skylink/%s", sl.Skylink))
+	if err != nil {
+		mf.logger.Debugf("Error while forming skylink URL for skylink %s. Error: %v\n", sl.Skylink, err)
+		return
+	}
+	req := http.Request{
+		Method: http.MethodHead,
+		URL:    skylinkURL,
+		Header: http.Header{"User-Agent": []string{"Sia-Agent"}},
+	}
+	client := http.Client{}
+	res, err := client.Do(&req)
+	if err != nil || res.StatusCode > 399 {
 		mf.logger.Tracef("Failed to fetch skyfile. Skylink: %s, error: %v\n", sl.Skylink, err)
 		if m.Attempts >= maxAttempts {
 			mf.logger.Debugf("Message exceeded its maximum number of attempts, dropping: %v\n", m)
@@ -90,9 +104,9 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		mf.Queue <- m
 		return
 	}
-	mhs, ok := r.Header["Skynet-File-Metadata"]
+	mhs, ok := res.Header["Skynet-File-Metadata"]
 	if !ok {
-		mf.logger.Debugf("Skyfile doesn't have metadata: %s. Headers: %v\n", sl.Skylink, r.Header)
+		mf.logger.Debugf("Skyfile doesn't have metadata: %s. Headers: %v\n", sl.Skylink, res.Header)
 		return
 	}
 	var meta struct {
