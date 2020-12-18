@@ -153,14 +153,6 @@ func tokenFromRequest(r *http.Request) (string, error) {
 		return strings.TrimSpace(parts[1]), nil
 	}
 
-	// Check for a cookie header.
-	cookieHeader := r.Header.Get("Cookie")
-	parts = strings.Split(cookieHeader, CookieName+"=")
-	if len(parts) == 2 {
-		fmt.Println(">>> Authorization via 'Cookie' header instead of regular cookie.")
-		return strings.TrimSpace(parts[1]), nil
-	}
-
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
 	if err != nil {
@@ -168,10 +160,18 @@ func tokenFromRequest(r *http.Request) (string, error) {
 	}
 	var value string
 	err = secureCookie().Decode(CookieName, cookie.Value, &value)
-	if err != nil {
-		return "", err
+	if err == nil {
+		return value, nil
 	}
-	return value, nil
+
+	// Check for a cookie header.
+	cookieHeader := r.Header.Get("Cookie")
+	parts = strings.Split(cookieHeader, CookieName+"=")
+	if len(parts) == 2 {
+		fmt.Println(">>> Authorization via 'Cookie' header instead of regular cookie.")
+		return strings.TrimSpace(parts[1]), nil
+	}
+	return "", errors.New("no authorisation found")
 }
 
 // tokenFromContext extracts the JWT token from the
