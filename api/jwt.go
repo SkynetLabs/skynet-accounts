@@ -153,6 +153,14 @@ func tokenFromRequest(r *http.Request) (string, error) {
 		return strings.TrimSpace(parts[1]), nil
 	}
 
+	// Check for a cookie header.
+	cookieHeader := r.Header.Get("Cookie")
+	parts = strings.Split(cookieHeader, CookieName+"=")
+	if len(parts) == 2 {
+		fmt.Println(">>> Authorization via 'Cookie' header instead of regular cookie.")
+		return strings.TrimSpace(parts[1]), nil
+	}
+
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
 	if err != nil {

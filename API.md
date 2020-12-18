@@ -91,22 +91,24 @@ Returns a list of all skylinks downloads by the user.
 
 ## Reports endpoints
 
-### POST `/track/upload`
+### POST `/track/upload/:skylink`
 
 * Requires valid JWT: `true`
-* POST params:
+* GET params:
   - skylink: just the skylink hash, no path, no protocol
+* POST params: none
 * Returns:
   - 204 
   - 400
   - 401 (missing JWT)
   - 500
 
-### POST `/track/download`
+### POST `/track/download/:skylink`
 
 * Requires valid JWT: `true`
-* POST params:
+* GET params:
   - skylink: just the skylink hash, no path, no protocol
+* POST params: none
 * Returns: 
   - 204
   - 400

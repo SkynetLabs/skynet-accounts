@@ -74,12 +74,8 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 }
 
 // trackUploadHandler registers a new upload in the system.
-func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sl := req.PostFormValue("skylink")
-	if sl == "" {
-		WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
-		return
-	}
+func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	sl := ps.ByName("skylink")
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
@@ -124,8 +120,8 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, _ h
 }
 
 // trackDownloadHandler registers a new download in the system.
-func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sl := req.PostFormValue("skylink")
+func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	sl := ps.ByName("skylink")
 	if sl == "" {
 		WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
 		return

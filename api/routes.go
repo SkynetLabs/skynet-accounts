@@ -16,8 +16,8 @@ func (api *API) buildHTTPRoutes() {
 	//api.staticRouter.PUT("/user", validate(api.userHandlerPUT))
 	api.staticRouter.GET("/user/uploads", validate(api.userUploadsHandler))
 	api.staticRouter.GET("/user/downloads", validate(api.userDownloadsHandler))
-	api.staticRouter.POST("/track/upload", validate(api.trackUploadHandler))
-	api.staticRouter.POST("/track/download", validate(api.trackDownloadHandler))
+	api.staticRouter.POST("/track/upload/:skylink", validate(api.trackUploadHandler))
+	api.staticRouter.POST("/track/download/:skylink", validate(api.trackDownloadHandler))
 }
 
 // validate ensures that the user making the request has logged in.
