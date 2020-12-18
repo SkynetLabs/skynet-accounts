@@ -33,10 +33,13 @@ type (
 	}
 )
 
-// UserBySub returns the user with the given sub or nil. The sub is the Kratos
-// id of that user.
-func (db *DB) UserBySub(ctx context.Context, sub string) (*User, error) {
+// UserBySub returns the user with the given sub. If `create` is `true` it will
+// create the user if it doesn't exist. The sub is the Kratos id of that user.
+func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "sub", sub)
+	if create && err == ErrUserNotFound {
+		return db.UserCreate(ctx, sub, TierFree)
+	}
 	if err != nil {
 		return nil, err
 	}

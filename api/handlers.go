@@ -7,7 +7,6 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
-	"gitlab.com/NebulousLabs/errors"
 )
 
 // userHandler returns information about an existing user and create it if it
@@ -18,17 +17,10 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub)
-	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
-	}
-	if errors.Contains(err, database.ErrUserNotFound) {
-		u, err = api.staticDB.UserCreate(req.Context(), sub, database.TierFree)
-		if err != nil {
-			WriteError(w, errors.AddContext(err, "user not found, failed to create"), http.StatusFailedDependency)
-			return
-		}
 	}
 	WriteJSON(w, u)
 }
@@ -40,8 +32,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub)
-	// TODO Should we create the user in case it's not found?
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -60,8 +51,7 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub)
-	// TODO Should we create the user in case it's not found?
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -75,13 +65,12 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 
 // trackUploadHandler registers a new upload in the system.
 func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	sl := ps.ByName("skylink")
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	skylink, err := api.staticDB.Skylink(req.Context(), sl)
+	skylink, err := api.staticDB.Skylink(req.Context(), ps.ByName("skylink"))
 	if err == database.ErrInvalidSkylink {
 		WriteError(w, err, http.StatusBadRequest)
 		return
@@ -90,7 +79,7 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub)
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -121,17 +110,12 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 
 // trackDownloadHandler registers a new download in the system.
 func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	sl := ps.ByName("skylink")
-	if sl == "" {
-		WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
-		return
-	}
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	skylink, err := api.staticDB.Skylink(req.Context(), sl)
+	skylink, err := api.staticDB.Skylink(req.Context(), ps.ByName("skylink"))
 	if err == database.ErrInvalidSkylink {
 		WriteError(w, err, http.StatusBadRequest)
 		return
@@ -140,7 +124,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub)
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
