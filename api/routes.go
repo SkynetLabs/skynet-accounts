@@ -26,7 +26,7 @@ func validate(h httprouter.Handle) httprouter.Handle {
 		tokenStr, err := tokenFromRequest(req)
 		if err != nil {
 			fmt.Println("error while fetching token from request", err)
-			WriteError(w, err, http.StatusBadRequest)
+			WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
 		token, err := ValidateToken(tokenStr)

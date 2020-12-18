@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/dgrijalva/jwt-go"
-	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/lestrrat/go-jwx/jwk"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -109,7 +109,7 @@ func keyForToken(token *jwt.Token) (interface{}, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("no suitable keys found")
 	}
-	return keys[0], nil
+	return keys[0].Materialize()
 }
 
 // oathkeeperPublicKeys checks whether we have the
