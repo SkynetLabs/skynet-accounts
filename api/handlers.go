@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
@@ -26,7 +27,7 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 }
 
 // userUploadsHandler returns all uploads made by the current user.
-func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
@@ -37,7 +38,9 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	ups, err := api.staticDB.UploadsByUser(req.Context(), *u)
+	offset, _ := strconv.Atoi(ps.ByName("offset"))
+	limit, _ := strconv.Atoi(ps.ByName("limit"))
+	ups, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, limit)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 	}
@@ -45,7 +48,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 }
 
 // userDownloadsHandler returns all downloads made by the current user.
-func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
@@ -56,7 +59,9 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	ups, err := api.staticDB.DownloadsByUser(req.Context(), *u)
+	offset, _ := strconv.Atoi(ps.ByName("offset"))
+	limit, _ := strconv.Atoi(ps.ByName("limit"))
+	ups, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, limit)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 	}

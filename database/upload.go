@@ -7,6 +7,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Upload ...
@@ -51,12 +52,19 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 }
 
 // UploadsBySkylink fetches all uploads of this skylink
-func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink) ([]Upload, error) {
+func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, limit int) ([]Upload, error) {
 	if skylink.ID.IsZero() {
 		return nil, errors.New("invalid skylink")
 	}
 	filter := bson.D{{"skylink_id", skylink.ID}}
-	c, err := db.staticUploads.Find(ctx, filter)
+	opts := options.FindOptions{}
+	if offset > 0 {
+		opts.SetSkip(int64(offset))
+	}
+	if limit > 0 {
+		opts.SetLimit(int64(limit))
+	}
+	c, err := db.staticUploads.Find(ctx, filter, &opts)
 	if err != nil {
 		return nil, err
 	}
@@ -69,12 +77,19 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink) ([]Upload, 
 }
 
 // UploadsByUser fetches all uploads by this user
-func (db *DB) UploadsByUser(ctx context.Context, user User) ([]Upload, error) {
+func (db *DB) UploadsByUser(ctx context.Context, user User, offset, limit int) ([]Upload, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
 	filter := bson.D{{"user_id", user.ID}}
-	c, err := db.staticUploads.Find(ctx, filter)
+	opts := options.FindOptions{}
+	if offset > 0 {
+		opts.SetSkip(int64(offset))
+	}
+	if limit > 0 {
+		opts.SetLimit(int64(limit))
+	}
+	c, err := db.staticUploads.Find(ctx, filter, &opts)
 	if err != nil {
 		return nil, err
 	}

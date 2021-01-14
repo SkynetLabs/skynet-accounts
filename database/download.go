@@ -7,6 +7,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Download ...
@@ -51,12 +52,19 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink) (*
 }
 
 // DownloadsBySkylink fetches all downloads of this skylink
-func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink) ([]Download, error) {
+func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, limit int) ([]Download, error) {
 	if skylink.ID.IsZero() {
 		return nil, errors.New("invalid skylink")
 	}
 	filter := bson.D{{"skylink_id", skylink.ID}}
-	c, err := db.staticDownloads.Find(ctx, filter)
+	opts := options.FindOptions{}
+	if offset > 0 {
+		opts.SetSkip(int64(offset))
+	}
+	if limit > 0 {
+		opts.SetLimit(int64(limit))
+	}
+	c, err := db.staticDownloads.Find(ctx, filter, &opts)
 	if err != nil {
 		return nil, err
 	}
@@ -69,12 +77,19 @@ func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink) ([]Downlo
 }
 
 // DownloadsByUser fetches all downloads by this user
-func (db *DB) DownloadsByUser(ctx context.Context, user User) ([]Download, error) {
+func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, limit int) ([]Download, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
 	filter := bson.D{{"user_id", user.ID}}
-	c, err := db.staticDownloads.Find(ctx, filter)
+	opts := options.FindOptions{}
+	if offset > 0 {
+		opts.SetSkip(int64(offset))
+	}
+	if limit > 0 {
+		opts.SetLimit(int64(limit))
+	}
+	c, err := db.staticDownloads.Find(ctx, filter, &opts)
 	if err != nil {
 		return nil, err
 	}
