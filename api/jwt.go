@@ -157,10 +157,20 @@ func tokenFromRequest(r *http.Request) (string, error) {
 		return strings.TrimSpace(parts[1]), nil
 	}
 
+	// Check the headers for a cookie.
+	cookieHeader := r.Header.Get("Cookie")
+	parts = strings.Split(cookieHeader, CookieName+"=")
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[1]), nil
+	}
+
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
+	if err == http.ErrNoCookie {
+		return "", errors.New("no authorisation found")
+	}
 	if err != nil {
-		return "", err
+		return "", errors.AddContext(err, "cookie exists but it's not valid")
 	}
 	var value string
 	err = secureCookie().Decode(CookieName, cookie.Value, &value)
@@ -168,12 +178,6 @@ func tokenFromRequest(r *http.Request) (string, error) {
 		return value, nil
 	}
 
-	// Check for a cookie header.
-	cookieHeader := r.Header.Get("Cookie")
-	parts = strings.Split(cookieHeader, CookieName+"=")
-	if len(parts) == 2 {
-		return strings.TrimSpace(parts[1]), nil
-	}
 	return "", errors.New("no authorisation found")
 }
 
@@ -252,9 +256,9 @@ func tokenFromContext(req *http.Request) (sub string, claims jwt.MapClaims, toke
 	return
 }
 
-// TokenExpiration extracts and returns the `exp` claim of the given token.
+// tokenExpiration extracts and returns the `exp` claim of the given token.
 // NOTE: It does NOT validate the token!
-func TokenExpiration(t *jwt.Token) (int64, error) {
+func tokenExpiration(t *jwt.Token) (int64, error) {
 	if t == nil {
 		return 0, errors.New("invalid token")
 	}

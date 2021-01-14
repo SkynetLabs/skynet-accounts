@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Download ...
+// Download describes a single download of a skylink by a user.
 type Download struct {
 	ID        primitive.ObjectID  `bson:"_id,omitempty" json:"_id"`
 	UserID    primitive.ObjectID  `bson:"user_id,omitempty" json:"user_id"`

@@ -37,7 +37,7 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 		// If we don't have a valid cookie with reasonably long remaining TTL
 		// then set one.
 		c, err := req.Cookie(CookieName)
-		exp, _ := TokenExpiration(token)
+		exp, _ := tokenExpiration(token)
 		if err != nil || !c.Expires.Equal(time.Unix(exp, 0)) {
 			err = writeCookie(w, tokenStr, exp)
 			if err != nil {

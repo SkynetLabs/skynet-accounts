@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
 
@@ -42,14 +41,6 @@ func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, er
 	}
 	if err != nil {
 		return nil, err
-	}
-	// Subs must be unique. If we hit this then we have a serious
-	// programmer error which endangers customer's data and finances.
-	// We should error out in order to prevent exposing the wrong user data.
-	if len(users) > 1 {
-		build.Critical(fmt.Sprintf("More than one user found for sub '%s'!", sub))
-		// The error message is intentionally cryptic.
-		return nil, ErrGeneralInternalFailure
 	}
 	return users[0], nil
 }
