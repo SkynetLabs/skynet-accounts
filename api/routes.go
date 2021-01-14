@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -12,26 +11,26 @@ import (
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
 func (api *API) buildHTTPRoutes() {
-	api.staticRouter.GET("/user", validate(api.userHandler))
+	api.staticRouter.GET("/user", api.validate(api.userHandler))
 	//api.staticRouter.PUT("/user", validate(api.userHandlerPUT))
-	api.staticRouter.GET("/user/uploads", validate(api.userUploadsHandler))
-	api.staticRouter.GET("/user/downloads", validate(api.userDownloadsHandler))
-	api.staticRouter.POST("/track/upload/:skylink", validate(api.trackUploadHandler))
-	api.staticRouter.POST("/track/download/:skylink", validate(api.trackDownloadHandler))
+	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsHandler))
+	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
+	api.staticRouter.POST("/track/upload/:skylink", api.validate(api.trackUploadHandler))
+	api.staticRouter.POST("/track/download/:skylink", api.validate(api.trackDownloadHandler))
 }
 
 // validate ensures that the user making the request has logged in.
-func validate(h httprouter.Handle) httprouter.Handle {
+func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		tokenStr, err := tokenFromRequest(req)
 		if err != nil {
-			fmt.Println("error while fetching token from request", err)
+			api.staticLogger.Traceln("error while fetching token from request", err)
 			WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
-		token, err := ValidateToken(tokenStr)
+		token, err := ValidateToken(api.staticLogger, tokenStr)
 		if err != nil {
-			fmt.Println("error while validating token", err)
+			api.staticLogger.Traceln("error while validating token", err)
 			WriteError(w, err, http.StatusUnauthorized)
 			return
 		}

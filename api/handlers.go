@@ -6,6 +6,7 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+	"gitlab.com/NebulousLabs/errors"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -15,7 +16,7 @@ import (
 func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
@@ -30,7 +31,7 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
@@ -75,7 +76,12 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	skylink, err := api.staticDB.Skylink(req.Context(), ps.ByName("skylink"))
+	sl := ps.ByName("skylink")
+	if sl == "" {
+		WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
+		return
+	}
+	skylink, err := api.staticDB.Skylink(req.Context(), sl)
 	if err == database.ErrInvalidSkylink {
 		WriteError(w, err, http.StatusBadRequest)
 		return
@@ -120,7 +126,12 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	skylink, err := api.staticDB.Skylink(req.Context(), ps.ByName("skylink"))
+	sl := ps.ByName("skylink")
+	if sl == "" {
+		WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
+		return
+	}
+	skylink, err := api.staticDB.Skylink(req.Context(), sl)
 	if err == database.ErrInvalidSkylink {
 		WriteError(w, err, http.StatusBadRequest)
 		return

@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat/go-jwx/jwk"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -80,8 +81,11 @@ var (
 //  },
 //  "sub": "695725d4-a345-4e68-919a-7395cb68484c"
 //}
-func ValidateToken(t string) (*jwt.Token, error) {
-	token, err := jwt.Parse(t, keyForToken)
+func ValidateToken(logger *logrus.Logger, t string) (*jwt.Token, error) {
+	keyForTokenWithLogger := func(token *jwt.Token) (interface{}, error) {
+		return keyForToken(logger, token)
+	}
+	token, err := jwt.Parse(t, keyForTokenWithLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -94,11 +98,11 @@ func ValidateToken(t string) (*jwt.Token, error) {
 
 // keyForToken finds a suitable key for validating the
 // given token among the public keys provided by Oathkeeper.
-func keyForToken(token *jwt.Token) (interface{}, error) {
+func keyForToken(logger *logrus.Logger, token *jwt.Token) (interface{}, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 		return nil, errors.New(fmt.Sprintf("unexpected signing method: %v", token.Header["alg"]))
 	}
-	keySet, err := oathkeeperPublicKeys()
+	keySet, err := oathkeeperPublicKeys(logger)
 	if err != nil {
 		return nil, err
 	}
@@ -119,23 +123,23 @@ func keyForToken(token *jwt.Token) (interface{}, error) {
 // See https://auth0.com/blog/navigating-rs256-and-jwks/
 // See http://self-issued.info/docs/draft-ietf-oauth-json-web-token.html
 // Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
-func oathkeeperPublicKeys() (*jwk.Set, error) {
+func oathkeeperPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
 	if oathkeeperPubKeys == nil {
-		fmt.Println("fetching JWKS from oathkeeper")
+		logger.Traceln("fetching JWKS from oathkeeper")
 		r, err := http.Get(oathkeeperPubKeyURL) // #nosec G107: Potential HTTP request made with variable url
 		if err != nil {
-			fmt.Println("ERROR while fetching JWKS from oathkeeper", err)
+			logger.Warningln("ERROR while fetching JWKS from oathkeeper", err)
 			return nil, err
 		}
 		defer r.Body.Close()
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			fmt.Println("ERROR while reading JWKS from oathkeeper", err)
+			logger.Warningln("ERROR while reading JWKS from oathkeeper", err)
 			return nil, err
 		}
 		set, err := jwk.ParseString(string(b))
 		if err != nil {
-			fmt.Println("ERROR while parsing JWKS from oathkeeper", err)
+			logger.Warningln("ERROR while parsing JWKS from oathkeeper", err)
 			return nil, err
 		}
 		oathkeeperPubKeys = set
@@ -168,7 +172,6 @@ func tokenFromRequest(r *http.Request) (string, error) {
 	cookieHeader := r.Header.Get("Cookie")
 	parts = strings.Split(cookieHeader, CookieName+"=")
 	if len(parts) == 2 {
-		fmt.Println(">>> Authorization via 'Cookie' header instead of regular cookie.")
 		return strings.TrimSpace(parts[1]), nil
 	}
 	return "", errors.New("no authorisation found")
