@@ -21,7 +21,7 @@ func TestDatabase_UserBySub(t *testing.T) {
 	// A random sub that shouldn't exist in the DB.
 	sub := "695725d4-a345-4e68-919a-7395cb68484c"
 	// Test finding a non-existent user. This should fail.
-	_, err = db.UserBySub(ctx, sub)
+	_, err = db.UserBySub(ctx, sub, false)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error ErrUserNotFound, got %v\n", err)
 	}
@@ -36,7 +36,7 @@ func TestDatabase_UserBySub(t *testing.T) {
 	}(u)
 
 	// Test finding an existent user. This should pass.
-	u1, err := db.UserBySub(ctx, u.Sub)
+	u1, err := db.UserBySub(ctx, u.Sub, false)
 	if err != nil {
 		t.Fatal(err)
 	}

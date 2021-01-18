@@ -166,14 +166,14 @@ func tokenFromRequest(r *http.Request) (string, error) {
 
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
-	if err == http.ErrNoCookie {
+	if errors.Contains(err, http.ErrNoCookie) {
 		return "", errors.New("no authorisation found")
 	}
 	if err != nil {
 		return "", errors.AddContext(err, "cookie exists but it's not valid")
 	}
 	var value string
-	err = secureCookie().Decode(CookieName, cookie.Value, &value)
+	err = secureCookie.Decode(CookieName, cookie.Value, &value)
 	if err == nil {
 		return value, nil
 	}

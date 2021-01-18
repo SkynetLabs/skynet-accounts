@@ -36,7 +36,7 @@ type (
 // create the user if it doesn't exist. The sub is the Kratos id of that user.
 func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "sub", sub)
-	if create && err == ErrUserNotFound {
+	if create && errors.Contains(err, ErrUserNotFound) {
 		return db.UserCreate(ctx, sub, TierFree)
 	}
 	if err != nil {

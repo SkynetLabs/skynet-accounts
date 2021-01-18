@@ -92,6 +92,9 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 		return nil, errors.AddContext(err, "failed to connect to DB")
 	}
 	database := c.Database(dbName)
+	if logger == nil {
+		logger = &logrus.Logger{}
+	}
 	err = ensureDBSchema(ctx, database, logger)
 	if err != nil {
 		return nil, err

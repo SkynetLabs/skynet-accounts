@@ -82,7 +82,7 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 		return
 	}
 	skylink, err := api.staticDB.Skylink(req.Context(), sl)
-	if err == database.ErrInvalidSkylink {
+	if errors.Contains(err, database.ErrInvalidSkylink) {
 		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
@@ -132,7 +132,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		return
 	}
 	skylink, err := api.staticDB.Skylink(req.Context(), sl)
-	if err == database.ErrInvalidSkylink {
+	if errors.Contains(err, database.ErrInvalidSkylink) {
 		WriteError(w, err, http.StatusBadRequest)
 		return
 	}

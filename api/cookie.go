@@ -26,21 +26,12 @@ const (
 )
 
 var (
-	// _sc holds an instance of `securecookie`, so we don't instantiate it more
-	// than once.
-	_sc *securecookie.SecureCookie = nil
-)
-
-// secureCookie extracts the hash and block keys from env vars and returns a
-// usable `securecookie` struct.
-func secureCookie() *securecookie.SecureCookie {
-	if _sc == nil {
+	secureCookie = func() *securecookie.SecureCookie {
 		var hashKey = []byte(os.Getenv(envCookieHashKey))
 		var blockKey = []byte(os.Getenv(envCookieEncKey))
-		_sc = securecookie.New(hashKey, blockKey)
-	}
-	return _sc
-}
+		return securecookie.New(hashKey, blockKey)
+	}()
+)
 
 // writeCookie is a helper function that writes the given JWT token as a
 // secure cookie.
@@ -48,7 +39,7 @@ func writeCookie(w http.ResponseWriter, token string, exp int64) error {
 	if exp <= 0 || time.Unix(exp, 0).Before(time.Now()) {
 		exp = time.Now().Unix()
 	}
-	encodedValue, err := secureCookie().Encode(CookieName, token)
+	encodedValue, err := secureCookie.Encode(CookieName, token)
 	if err != nil {
 		return err
 	}

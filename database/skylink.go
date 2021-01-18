@@ -36,7 +36,7 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 	filter := bson.D{{"skylink", skylinkHash}}
 	sr := db.staticSkylinks.FindOne(ctx, filter)
 	err = sr.Decode(&skylinkRec)
-	if err == mongo.ErrNoDocuments {
+	if errors.Contains(err, mongo.ErrNoDocuments) {
 		// It's not there, upsert it. We use upsert instead of insert in order
 		// to avoid races. And we use an update object instead of just passing
 		// the skylink record to UpdateOne because we want to omit the _id in
