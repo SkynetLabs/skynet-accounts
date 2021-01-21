@@ -40,7 +40,7 @@ var (
 //{
 //  "exp": 1607594172,
 //  "iat": 1607593272,
-//  "iss": "https://siasky.xyz/",
+//  "iss": "https://siasky.net/",
 //  "jti": "1e5872ae-71d8-49ec-a550-4fc6163cbbf2",
 //  "nbf": 1607593272,
 //  "session": {
@@ -58,7 +58,7 @@ var (
 //        }
 //      ],
 //      "schema_id": "default",
-//      "schema_url": "https://siasky.xyz/secure/.ory/kratos/public/schemas/default",
+//      "schema_url": "https://siasky.net/secure/.ory/kratos/public/schemas/default",
 //      "traits": {
 //        "email": "ivaylo@nebulous.tech",
 //        "name": {
@@ -190,7 +190,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 // map[
 //    exp:1.607594172e+09
 //    iat:1.607593272e+09
-//    iss:https://siasky.xyz/
+//    iss:https://siasky.net/
 //    jti:1e5872ae-71d8-49ec-a550-4fc6163cbbf2
 //    nbf:1.607593272e+09
 //    sub:695725d4-a345-4e68-919a-7395cb68484c
@@ -210,7 +210,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 //                ]
 //            ]
 //            schema_id:default
-//            schema_url:https://siasky.xyz/secure/.ory/kratos/public/schemas/default
+//            schema_url:https://siasky.net/secure/.ory/kratos/public/schemas/default
 //            traits:map[
 //                email:ivaylo@nebulous.tech
 //                name:map[
