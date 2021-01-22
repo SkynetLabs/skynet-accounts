@@ -5,6 +5,10 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+
+	"github.com/sirupsen/logrus"
+
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
 
@@ -15,7 +19,9 @@ import (
 // API is ...
 type API struct {
 	staticDB     *database.DB
+	staticMF     *metafetcher.MetaFetcher
 	staticRouter *httprouter.Router
+	staticLogger *logrus.Logger
 }
 
 // ctxValue is a helper type which makes it safe to register values in the
@@ -24,16 +30,21 @@ type API struct {
 type ctxValue string
 
 // New returns a new initialised API.
-func New(db *database.DB) (*API, error) {
+func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
+	}
+	if logger == nil {
+		logger = logrus.New()
 	}
 	router := httprouter.New()
 	router.RedirectTrailingSlash = true
 
 	api := &API{
 		staticDB:     db,
+		staticMF:     mf,
 		staticRouter: router,
+		staticLogger: logger,
 	}
 	api.buildHTTPRoutes()
 	return api, nil

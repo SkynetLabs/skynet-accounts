@@ -2,15 +2,17 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 
 	"github.com/NebulousLabs/skynet-accounts/api"
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -26,6 +28,9 @@ var (
 	// envPort holds the name of the environment variable for the port on which
 	// this service listens.
 	envPort = "SKYNET_ACCOUNTS_PORT"
+	// envPortal holds the name of the environment variable for the portal to
+	// use to fetch skylinks.
+	envPortal = "PORTAL_URL"
 )
 
 // loadDBCredentials creates a new DB connection based on credentials found in
@@ -56,19 +61,38 @@ func main() {
 	if !ok {
 		port = "3000"
 	}
+	portal, ok := os.LookupEnv(envPortal)
+	if !ok {
+		portal = "https://siasky.net"
+	}
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
 	}
+
 	ctx := context.Background()
-	db, err := database.New(ctx, dbCreds)
+	logger := logrus.New()
+	logger.SetLevel(logLevel())
+	db, err := database.New(ctx, dbCreds, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
-	server, err := api.New(db)
+	mf := metafetcher.New(ctx, db, portal, logger)
+	server, err := api.New(db, mf, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
-	fmt.Println("Listening on port " + port)
-	log.Fatal(http.ListenAndServe(":"+port, server.Router()))
+	logger.Info("Listening on port " + port)
+	logger.Fatal(http.ListenAndServe(":"+port, server.Router()))
+}
+
+// logLevel returns the desires log level.
+func logLevel() logrus.Level {
+	if build.DEBUG {
+		return logrus.TraceLevel
+	}
+	if build.Release == "testing" || build.Release == "dev" {
+		return logrus.DebugLevel
+	}
+	return logrus.InfoLevel
 }

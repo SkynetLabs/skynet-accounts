@@ -2,12 +2,14 @@ package api
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"reflect"
 	"strings"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat/go-jwx/jwk"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -38,7 +40,7 @@ var (
 //{
 //  "exp": 1607594172,
 //  "iat": 1607593272,
-//  "iss": "https://siasky.xyz/",
+//  "iss": "https://siasky.net/",
 //  "jti": "1e5872ae-71d8-49ec-a550-4fc6163cbbf2",
 //  "nbf": 1607593272,
 //  "session": {
@@ -56,7 +58,7 @@ var (
 //        }
 //      ],
 //      "schema_id": "default",
-//      "schema_url": "https://siasky.xyz/secure/.ory/kratos/public/schemas/default",
+//      "schema_url": "https://siasky.net/secure/.ory/kratos/public/schemas/default",
 //      "traits": {
 //        "email": "ivaylo@nebulous.tech",
 //        "name": {
@@ -79,8 +81,11 @@ var (
 //  },
 //  "sub": "695725d4-a345-4e68-919a-7395cb68484c"
 //}
-func ValidateToken(t string) (*jwt.Token, error) {
-	token, err := jwt.Parse(t, keyForToken)
+func ValidateToken(logger *logrus.Logger, t string) (*jwt.Token, error) {
+	keyForTokenWithLogger := func(token *jwt.Token) (interface{}, error) {
+		return keyForToken(logger, token)
+	}
+	token, err := jwt.Parse(t, keyForTokenWithLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -91,13 +96,13 @@ func ValidateToken(t string) (*jwt.Token, error) {
 	return token, nil
 }
 
-// keyForToken is a helper function that finds a suitable key for validating the
+// keyForToken finds a suitable key for validating the
 // given token among the public keys provided by Oathkeeper.
-func keyForToken(token *jwt.Token) (interface{}, error) {
+func keyForToken(logger *logrus.Logger, token *jwt.Token) (interface{}, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 		return nil, errors.New(fmt.Sprintf("unexpected signing method: %v", token.Header["alg"]))
 	}
-	keySet, err := oathkeeperPublicKeys()
+	keySet, err := oathkeeperPublicKeys(logger)
 	if err != nil {
 		return nil, err
 	}
@@ -111,26 +116,30 @@ func keyForToken(token *jwt.Token) (interface{}, error) {
 	return keys[0].Materialize()
 }
 
-// oathkeeperPublicKeys is a helper function that checks whether we have the
+// oathkeeperPublicKeys checks whether we have the
 // needed public key cached and if we don't it fetches it and caches it for us.
 //
 // See https://tools.ietf.org/html/rfc7517
 // See https://auth0.com/blog/navigating-rs256-and-jwks/
 // See http://self-issued.info/docs/draft-ietf-oauth-json-web-token.html
 // Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
-func oathkeeperPublicKeys() (*jwk.Set, error) {
+func oathkeeperPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
 	if oathkeeperPubKeys == nil {
+		logger.Traceln("fetching JWKS from oathkeeper")
 		r, err := http.Get(oathkeeperPubKeyURL) // #nosec G107: Potential HTTP request made with variable url
 		if err != nil {
-		    return nil, err
+			logger.Warningln("ERROR while fetching JWKS from oathkeeper", err)
+			return nil, err
 		}
 		defer r.Body.Close()
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-		    return nil, err
+			logger.Warningln("ERROR while reading JWKS from oathkeeper", err)
+			return nil, err
 		}
 		set, err := jwk.ParseString(string(b))
 		if err != nil {
+			logger.Warningln("ERROR while parsing JWKS from oathkeeper", err)
 			return nil, err
 		}
 		oathkeeperPubKeys = set
@@ -139,18 +148,40 @@ func oathkeeperPublicKeys() (*jwk.Set, error) {
 }
 
 // tokenFromRequest extracts the JWT token from the request and returns it.
-// Returns an empty string if there is no token.
+// It first checks the request headers and then the cookies.
 func tokenFromRequest(r *http.Request) (string, error) {
 	// Check the headers for a token.
 	authHeader := r.Header.Get("Authorization")
 	parts := strings.Split(authHeader, "Bearer")
-	if len(parts) != 2 {
-		return "", errors.New("invalid authorization header")
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[1]), nil
 	}
-	return strings.TrimSpace(parts[1]), nil
+
+	// Check the headers for a cookie.
+	cookieHeader := r.Header.Get("Cookie")
+	parts = strings.Split(cookieHeader, CookieName+"=")
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[1]), nil
+	}
+
+	// Check the cookie for a token.
+	cookie, err := r.Cookie(CookieName)
+	if errors.Contains(err, http.ErrNoCookie) {
+		return "", errors.New("no authorisation found")
+	}
+	if err != nil {
+		return "", errors.AddContext(err, "cookie exists but it's not valid")
+	}
+	var value string
+	err = secureCookie.Decode(CookieName, cookie.Value, &value)
+	if err == nil {
+		return value, nil
+	}
+
+	return "", errors.New("no authorisation found")
 }
 
-// tokenFromContext is a helper function that extracts the JWT token from the
+// tokenFromContext extracts the JWT token from the
 // context and returns the contained user sub, claims and the token itself.
 // The sub is the user id used in Kratos.
 //
@@ -159,7 +190,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 // map[
 //    exp:1.607594172e+09
 //    iat:1.607593272e+09
-//    iss:https://siasky.xyz/
+//    iss:https://siasky.net/
 //    jti:1e5872ae-71d8-49ec-a550-4fc6163cbbf2
 //    nbf:1.607593272e+09
 //    sub:695725d4-a345-4e68-919a-7395cb68484c
@@ -179,7 +210,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 //                ]
 //            ]
 //            schema_id:default
-//            schema_url:https://siasky.xyz/secure/.ory/kratos/public/schemas/default
+//            schema_url:https://siasky.net/secure/.ory/kratos/public/schemas/default
 //            traits:map[
 //                email:ivaylo@nebulous.tech
 //                name:map[
@@ -223,4 +254,20 @@ func tokenFromContext(req *http.Request) (sub string, claims jwt.MapClaims, toke
 	sub = subEntry.(string)
 	token = t
 	return
+}
+
+// tokenExpiration extracts and returns the `exp` claim of the given token.
+// NOTE: It does NOT validate the token!
+func tokenExpiration(t *jwt.Token) (int64, error) {
+	if t == nil {
+		return 0, errors.New("invalid token")
+	}
+	if reflect.ValueOf(t.Claims).Kind() != reflect.ValueOf(jwt.MapClaims{}).Kind() {
+		return 0, errors.New("the token does not contain the claims we expect")
+	}
+	claims := t.Claims.(jwt.MapClaims)
+	if reflect.ValueOf(claims["exp"]).Kind() != reflect.Float64 {
+		return 0, errors.New("the token does not contain the claims we expect")
+	}
+	return int64(claims["exp"].(float64)), nil
 }
