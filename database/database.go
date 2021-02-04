@@ -30,6 +30,9 @@ var (
 	// skynet's database.
 	dbDownloadsCollection = "downloads"
 
+	// defaultPageSize defines the default number of records to return.
+	defaultPageSize = 1000
+
 	// mongoCompressors defines the compressors we are going to use for the
 	// connection to MongoDB
 	mongoCompressors = "zstd,zlib,snappy"
