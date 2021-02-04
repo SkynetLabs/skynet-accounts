@@ -16,6 +16,12 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
+const (
+	// defaultPortal is the URL of the default Skynet portal, maintained by
+	// Skynet Labs. It can be overridden by an environment variable.
+	defaultPortal = "https://siasky.net"
+)
+
 var (
 	// envDBHost holds the name of the environment variable for DB host.
 	envDBHost = "SKYNET_DB_HOST"
@@ -63,7 +69,7 @@ func main() {
 	}
 	portal, ok := os.LookupEnv(envPortal)
 	if !ok {
-		portal = "https://siasky.net"
+		portal = defaultPortal
 	}
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
