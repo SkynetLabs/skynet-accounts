@@ -2,20 +2,22 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Upload ...
 type Upload struct {
-	ID        primitive.ObjectID  `bson:"_id,omitempty" json:"_id"`
-	UserID    primitive.ObjectID  `bson:"user_id,omitempty" json:"user_id"`
-	SkylinkID primitive.ObjectID  `bson:"skylink_id,omitempty" json:"skylink_id"`
-	Timestamp primitive.Timestamp `bson:"timestamp" json:"timestamp"`
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"user_id"`
+	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylink_id"`
+	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 }
 
 // UploadByID fetches a single upload from the DB.
@@ -41,7 +43,7 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 	up := Upload{
 		UserID:    user.ID,
 		SkylinkID: skylink.ID,
-		Timestamp: primitive.Timestamp{T: uint32(time.Now().Unix())},
+		Timestamp: time.Now().UTC(),
 	}
 	ior, err := db.staticUploads.InsertOne(ctx, up)
 	if err != nil {

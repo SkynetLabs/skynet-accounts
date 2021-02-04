@@ -12,10 +12,10 @@ import (
 
 // Download describes a single download of a skylink by a user.
 type Download struct {
-	ID        primitive.ObjectID  `bson:"_id,omitempty" json:"_id"`
-	UserID    primitive.ObjectID  `bson:"user_id,omitempty" json:"user_id"`
-	SkylinkID primitive.ObjectID  `bson:"skylink_id,omitempty" json:"skylink_id"`
-	Timestamp primitive.Timestamp `bson:"timestamp" json:"timestamp"`
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"user_id"`
+	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylink_id"`
+	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 }
 
 // DownloadByID fetches a single download from the DB.
@@ -41,7 +41,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink) (*
 	up := Download{
 		UserID:    user.ID,
 		SkylinkID: skylink.ID,
-		Timestamp: primitive.Timestamp{T: uint32(time.Now().Unix())},
+		Timestamp: time.Now().UTC(),
 	}
 	ior, err := db.staticDownloads.InsertOne(ctx, up)
 	if err != nil {

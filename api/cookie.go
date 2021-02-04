@@ -36,8 +36,8 @@ var (
 // writeCookie is a helper function that writes the given JWT token as a
 // secure cookie.
 func writeCookie(w http.ResponseWriter, token string, exp int64) error {
-	if exp <= 0 || time.Unix(exp, 0).Before(time.Now()) {
-		exp = time.Now().Unix()
+	if exp <= 0 || time.Unix(exp, 0).Before(time.Now().UTC()) {
+		exp = time.Now().UTC().Unix()
 	}
 	encodedValue, err := secureCookie.Encode(CookieName, token)
 	if err != nil {
