@@ -25,13 +25,13 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 		tokenStr, err := tokenFromRequest(req)
 		if err != nil {
 			api.staticLogger.Traceln("error while fetching token from request", err)
-			WriteError(w, err, http.StatusUnauthorized)
+			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
 		token, err := ValidateToken(api.staticLogger, tokenStr)
 		if err != nil {
 			api.staticLogger.Traceln("error while validating token", err)
-			WriteError(w, err, http.StatusUnauthorized)
+			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
 		// If we don't have a valid cookie with reasonably long remaining TTL
