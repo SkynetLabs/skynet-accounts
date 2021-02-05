@@ -12,9 +12,9 @@ import (
 
 // Upload ...
 type Upload struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
-	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"user_id"`
-	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylink_id"`
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
+	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
 	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 }
 
@@ -24,7 +24,7 @@ type UploadResponseDTO struct {
 	Skylink   string    `bson:"skylink" json:"skylink"`
 	Name      string    `bson:"name" json:"name"`
 	Size      uint64    `bson:"size" json:"size"`
-	Timestamp time.Time `bson:"timestamp" json:"uploaded_on"`
+	Timestamp time.Time `bson:"timestamp" json:"uploadedOn"`
 }
 
 // UploadByID fetches a single upload from the DB.

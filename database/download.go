@@ -12,9 +12,9 @@ import (
 
 // Download describes a single download of a skylink by a user.
 type Download struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
-	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"user_id"`
-	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylink_id"`
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
+	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
 	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 }
 
@@ -24,7 +24,7 @@ type DownloadResponseDTO struct {
 	Skylink   string    `bson:"skylink" json:"skylink"`
 	Name      string    `bson:"name" json:"name"`
 	Size      uint64    `bson:"size" json:"size"`
-	Timestamp time.Time `bson:"timestamp" json:"downloaded_on"`
+	Timestamp time.Time `bson:"timestamp" json:"downloadedOn"`
 }
 
 // DownloadByID fetches a single download from the DB.
