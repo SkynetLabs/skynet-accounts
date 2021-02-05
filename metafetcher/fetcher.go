@@ -71,9 +71,9 @@ func (mf *MetaFetcher) threadedStartQueueWatcher(ctx context.Context) {
 func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	sl, err := mf.db.SkylinkByID(ctx, m.SkylinkID)
 	if err != nil {
-		logrus.Tracef("Failed to fetch skylink from DB. Skylink ID: %v, error: %v\n", m.SkylinkID, err)
+		logrus.Tracef("Failed to fetch skylink from DB. Skylink ID: %v, error: %v", m.SkylinkID, err)
 		if m.Attempts >= maxAttempts {
-			mf.logger.Debugf("Message exceeded its maximum number of attempts, dropping: %v\n", m)
+			mf.logger.Debugf("Message exceeded its maximum number of attempts, dropping: %v", m)
 			return
 		}
 		m.Attempts++
@@ -85,19 +85,19 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	if sl.Size != 0 {
 		err = mf.db.UserUpdateUsedStorage(ctx, m.UserID, sl.Size)
 		if err != nil {
-			mf.logger.Debugf("Failed to update user's used storage: %s\n", err)
+			mf.logger.Debugf("Failed to update user's used storage: %s", err)
 			// This return might be redundant but it's better to have it than to
 			// forget to add it when we add more code below.
 			return
 		}
-		mf.logger.Tracef("Successfully incremented the used storage ofuser %v with the size of skyfile %v.\n", m.UserID, m.SkylinkID)
+		mf.logger.Tracef("Successfully incremented the used storage ofuser %v with the size of skyfile %v.", m.UserID, m.SkylinkID)
 		return
 	}
 	// Make a HEAD request directly to the local `sia` container. We do that, so
 	// we don't get rate-limited by nginx in case we need to make many requests.
 	skylinkURL, err := url.Parse(fmt.Sprintf("http://sia:9980/skynet/skylink/%s", sl.Skylink))
 	if err != nil {
-		mf.logger.Debugf("Error while forming skylink URL for skylink %s. Error: %v\n", sl.Skylink, err)
+		mf.logger.Debugf("Error while forming skylink URL for skylink %s. Error: %v", sl.Skylink, err)
 		return
 	}
 	req := http.Request{
@@ -108,9 +108,9 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	client := http.Client{}
 	res, err := client.Do(&req)
 	if err != nil || res.StatusCode > 399 {
-		mf.logger.Tracef("Failed to fetch skyfile. Skylink: %s, error: %v\n", sl.Skylink, err)
+		mf.logger.Tracef("Failed to fetch skyfile. Skylink: %s, error: %v", sl.Skylink, err)
 		if m.Attempts >= maxAttempts {
-			mf.logger.Debugf("Message exceeded its maximum number of attempts, dropping: %v\n", m)
+			mf.logger.Debugf("Message exceeded its maximum number of attempts, dropping: %v", m)
 			return
 		}
 		m.Attempts++
@@ -119,7 +119,7 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	}
 	mhs, ok := res.Header["Skynet-File-Metadata"]
 	if !ok {
-		mf.logger.Debugf("Skyfile doesn't have metadata: %s. Headers: %v\n", sl.Skylink, res.Header)
+		mf.logger.Debugf("Skyfile doesn't have metadata: %s. Headers: %v", sl.Skylink, res.Header)
 		return
 	}
 	var meta struct {
@@ -128,22 +128,22 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	}
 	err = json.Unmarshal([]byte(mhs[0]), &meta)
 	if err != nil {
-		mf.logger.Debugf("Failed to parse skyfile metadata: %s\n", err)
+		mf.logger.Debugf("Failed to parse skyfile metadata: %s", err)
 		return
 	}
-	mf.logger.Tracef("Successfully fetched metdata for skylink %v %s: %v\n", sl.ID, sl.Skylink, meta)
+	mf.logger.Tracef("Successfully fetched metdata for skylink %v %s: %v", sl.ID, sl.Skylink, meta)
 	err = mf.db.SkylinkUpdate(ctx, m.SkylinkID, meta.Filename, meta.Length)
 	if err != nil {
-		mf.logger.Debugf("Failed to update skyfile metadata: %s\n", err)
+		mf.logger.Debugf("Failed to update skyfile metadata: %s", err)
 		// We don't return here because we want to perform the next operation
 		// regardless of the success of the current one.
 	}
 	err = mf.db.UserUpdateUsedStorage(ctx, m.UserID, meta.Length)
 	if err != nil {
-		mf.logger.Debugf("Failed to update user's used storage: %s\n", err)
+		mf.logger.Debugf("Failed to update user's used storage: %s", err)
 		// This return might be redundant but it's better to have it than to
 		// forget to add it when we add more code below.
 		return
 	}
-	mf.logger.Tracef("Successfully updated skylink %v and user %v.\n", m.SkylinkID, m.UserID)
+	mf.logger.Tracef("Successfully updated skylink %v and user %v.", m.SkylinkID, m.UserID)
 }

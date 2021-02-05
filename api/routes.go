@@ -5,10 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"gitlab.com/NebulousLabs/errors"
-
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
@@ -30,7 +29,6 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
-		api.staticLogger.Debugln(" >>> Token from request:", tokenStr)
 		token, err := ValidateToken(api.staticLogger, tokenStr)
 		if err != nil {
 			api.staticLogger.Traceln(errors.AddContext(err, "error while validating token"))

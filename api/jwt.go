@@ -150,9 +150,6 @@ func oathkeeperPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
 // tokenFromRequest extracts the JWT token from the request and returns it.
 // It first checks the request headers and then the cookies.
 func tokenFromRequest(r *http.Request) (string, error) {
-	fmt.Println("\nauth header: ", r.Header.Get("Authorization"), "\n")
-	fmt.Println("\ncookie: ", r.Header.Get("Cookie"), "\n")
-
 	// Check the headers for a token.
 	authHeader := r.Header.Get("Authorization")
 	parts := strings.Split(authHeader, "Bearer")
@@ -174,7 +171,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 		return value, nil
 	}
 
-	return "", errors.New("no token found")
+	return "", errors.New("no authorisation found")
 }
 
 // tokenFromContext extracts the JWT token from the
