@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"gitlab.com/NebulousLabs/errors"
+
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"
 )
@@ -30,7 +32,7 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 		}
 		token, err := ValidateToken(api.staticLogger, tokenStr)
 		if err != nil {
-			api.staticLogger.Traceln("error while validating token", err)
+			api.staticLogger.Traceln(errors.AddContext(err, "error while validating token"))
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}

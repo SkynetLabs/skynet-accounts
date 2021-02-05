@@ -82,6 +82,7 @@ var (
 //  "sub": "695725d4-a345-4e68-919a-7395cb68484c"
 //}
 func ValidateToken(logger *logrus.Logger, t string) (*jwt.Token, error) {
+	logger.Traceln(" >>> Token string:", t)
 	keyForTokenWithLogger := func(token *jwt.Token) (interface{}, error) {
 		return keyForToken(logger, token)
 	}
