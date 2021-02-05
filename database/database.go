@@ -187,7 +187,7 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 		if err != nil {
 			return errors.AddContext(err, "failed to create indexes")
 		}
-		log.Debugf("Created new indexes: %v\n", names)
+		log.Debugf("Ensured index exists: %v", names)
 	}
 	return nil
 }

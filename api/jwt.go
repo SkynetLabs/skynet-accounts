@@ -82,7 +82,6 @@ var (
 //  "sub": "695725d4-a345-4e68-919a-7395cb68484c"
 //}
 func ValidateToken(logger *logrus.Logger, t string) (*jwt.Token, error) {
-	logger.Traceln(" >>> Token string:", t)
 	keyForTokenWithLogger := func(token *jwt.Token) (interface{}, error) {
 		return keyForToken(logger, token)
 	}
@@ -151,6 +150,9 @@ func oathkeeperPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
 // tokenFromRequest extracts the JWT token from the request and returns it.
 // It first checks the request headers and then the cookies.
 func tokenFromRequest(r *http.Request) (string, error) {
+	fmt.Println("auth header: ", r.Header.Get("Authorization"))
+	fmt.Println("cookie: ", r.Header.Get("Cookie"))
+
 	// Check the headers for a token.
 	authHeader := r.Header.Get("Authorization")
 	parts := strings.Split(authHeader, "Bearer")
@@ -179,7 +181,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 		return value, nil
 	}
 
-	return "", errors.New("no authorisation found")
+	return "", errors.New("no token found")
 }
 
 // tokenFromContext extracts the JWT token from the

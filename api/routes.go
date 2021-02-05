@@ -30,6 +30,7 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
+		api.staticLogger.Debugln(" >>> Token from request:", tokenStr)
 		token, err := ValidateToken(api.staticLogger, tokenStr)
 		if err != nil {
 			api.staticLogger.Traceln(errors.AddContext(err, "error while validating token"))
