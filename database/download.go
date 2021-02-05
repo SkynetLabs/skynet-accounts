@@ -70,12 +70,12 @@ func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, l
 }
 
 // DownloadsByUser fetches all downloads by this user
-func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, limit int) ([]DownloadResponseDTO, error) {
+func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, limit int, sortBy string, order bool) ([]DownloadResponseDTO, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
 	matchStage := bson.D{{"$match", bson.D{{"user_id", user.ID}}}}
-	return db.downloadsBy(ctx, matchStage, offset, limit)
+	return db.downloadsBy(ctx, matchStage, offset, limit, sortBy, order)
 }
 
 // downloadsBy is a helper function that allows us to fetch a list of downloads,
@@ -103,7 +103,7 @@ func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, limit int)
 // join with the `skylinks` collection in order to fetch some additional
 // data about each download. The last line converts the [12]byte `_id` to hex,
 // so we can easily handle it in JSON.
-func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, limit int) ([]DownloadResponseDTO, error) {
+func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, limit int, sortBy, order string) ([]DownloadResponseDTO, error) {
 	if offset < 0 {
 		offset = 0
 	}
@@ -112,6 +112,14 @@ func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, limit 
 	}
 	// Specify a pipeline that will join the downloads to the skylinks and will
 	// return combined data.
+	pipeline := []bson.D{}
+	if sortBy != "" {
+		mongoOrder := 1
+		if order == "desc" {
+			mongoOrder = -1
+		}
+		sortStage := bson.D{{"$sort", bson.D{{}}}}
+	}
 	skipStage := bson.D{{"$skip", offset}}
 	limitStage := bson.D{{"$limit", limit}}
 	lookupStage := bson.D{

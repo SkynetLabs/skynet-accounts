@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/lib"
 	"github.com/sirupsen/logrus"
@@ -59,6 +60,13 @@ var (
 	// ErrInvalidSkylink is returned when the given string is not a valid
 	// skylink.
 	ErrInvalidSkylink = errors.New("invalid skylink")
+
+	// ValidSortingValues defines a set to valid sorting values to be used when fetching uploads and downloads.
+	ValidSortingValues = map[string]string{
+		"date": "timestamp",
+		"name": "name",
+		"size": "size",
+	}
 )
 
 type (

@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
@@ -62,7 +63,9 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, p
 	}
 	offset, _ := strconv.Atoi(ps.ByName("offset"))
 	limit, _ := strconv.Atoi(ps.ByName("limit"))
-	ups, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, limit)
+	sortBy := strings.ToLower(ps.ByName("sortBy"))
+	order := strings.ToLower(ps.ByName("sortOrder"))
+	ups, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, limit, sortBy, order)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 	}
@@ -151,4 +154,12 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		return
 	}
 	WriteSuccess(w)
+}
+
+func validateSortBy(field string) string {
+
+}
+
+func validateSortOrder(order string) int {
+
 }
