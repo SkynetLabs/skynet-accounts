@@ -31,7 +31,7 @@ var (
 	dbDownloadsCollection = "downloads"
 
 	// defaultPageSize defines the default number of records to return.
-	defaultPageSize = 1000
+	defaultPageSize = 10
 
 	// mongoCompressors defines the compressors we are going to use for the
 	// connection to MongoDB
