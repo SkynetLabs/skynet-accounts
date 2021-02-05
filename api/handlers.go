@@ -14,90 +14,94 @@ import (
 // userHandler returns information about an existing user and create it if it
 // doesn't exist.
 func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	api.staticLogger.Tracef("Processing request: %v\n", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		WriteError(w, err, http.StatusUnauthorized)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	WriteJSON(w, u)
+	api.WriteJSON(w, u)
 }
 
 // userUploadsHandler returns all uploads made by the current user.
 func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	api.staticLogger.Tracef("Processing request: %v\n", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		WriteError(w, err, http.StatusUnauthorized)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	offset, _ := strconv.Atoi(ps.ByName("offset"))
 	limit, _ := strconv.Atoi(ps.ByName("limit"))
 	ups, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, limit)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 	}
-	WriteJSON(w, ups)
+	api.WriteJSON(w, ups)
 }
 
 // userDownloadsHandler returns all downloads made by the current user.
 func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	api.staticLogger.Tracef("Processing request: %v\n", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	offset, _ := strconv.Atoi(ps.ByName("offset"))
 	limit, _ := strconv.Atoi(ps.ByName("limit"))
 	ups, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, limit)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 	}
-	WriteJSON(w, ups)
+	api.WriteJSON(w, ups)
 }
 
 // trackUploadHandler registers a new upload in the system.
 func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	api.staticLogger.Tracef("Processing request: %v\n", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	sl := ps.ByName("skylink")
 	if sl == "" {
-		WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
+		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
 		return
 	}
 	skylink, err := api.staticDB.Skylink(req.Context(), sl)
 	if errors.Contains(err, database.ErrInvalidSkylink) {
-		WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	_, err = api.staticDB.UploadCreate(req.Context(), *u, *skylink)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if skylink.Size == 0 {
@@ -116,39 +120,40 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 			api.staticLogger.Debug("Failed to update user's used space:", err)
 		}
 	}
-	WriteSuccess(w)
+	api.WriteSuccess(w)
 }
 
 // trackDownloadHandler registers a new download in the system.
 func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	api.staticLogger.Tracef("Processing request: %v\n", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	sl := ps.ByName("skylink")
 	if sl == "" {
-		WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
+		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
 		return
 	}
 	skylink, err := api.staticDB.Skylink(req.Context(), sl)
 	if errors.Contains(err, database.ErrInvalidSkylink) {
-		WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink)
 	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	WriteSuccess(w)
+	api.WriteSuccess(w)
 }
