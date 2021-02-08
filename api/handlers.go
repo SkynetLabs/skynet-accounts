@@ -39,8 +39,11 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, ps 
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	offset, _ := strconv.Atoi(ps.ByName("offset"))
-	limit, _ := strconv.Atoi(ps.ByName("limit"))
+	offset, err1 := fetchOffset(ps)
+	limit, err2 := fetchLimit(ps)
+	if err = errors.Compose(err1, err2); err != nil {
+		WriteError(w, err, http.StatusBadRequest)
+	}
 	ups, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, limit)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
@@ -60,8 +63,11 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, p
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	offset, _ := strconv.Atoi(ps.ByName("offset"))
-	limit, _ := strconv.Atoi(ps.ByName("limit"))
+	offset, err1 := fetchOffset(ps)
+	limit, err2 := fetchLimit(ps)
+	if err = errors.Compose(err1, err2); err != nil {
+		WriteError(w, err, http.StatusBadRequest)
+	}
 	ups, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, limit)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
@@ -151,4 +157,25 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		return
 	}
 	WriteSuccess(w)
+}
+
+// fetchOffset extracts the offset from the params and validates its value.
+func fetchOffset(ps httprouter.Params) (int, error) {
+	offset, _ := strconv.Atoi(ps.ByName("offset"))
+	if offset < 0 {
+		return 0, errors.New("Invalid offset")
+	}
+	return offset, nil
+}
+
+// fetchLimit extracts the offset from the params and validates its value.
+func fetchLimit(ps httprouter.Params) (int, error) {
+	limit, _ := strconv.Atoi(ps.ByName("limit"))
+	if limit < 0 {
+		return 0, errors.New("Invalid limit")
+	}
+	if limit == 0 {
+		limit = database.DefaultPageSize
+	}
+	return limit, nil
 }
