@@ -29,10 +29,10 @@ type DownloadResponseDTO struct {
 
 // DownloadsResponseDTO defines the final format of our response to the caller.
 type DownloadsResponseDTO struct {
-	Items      []DownloadResponseDTO `json:"items"`
-	Offset     int                   `json:"offset"`
-	PageSize   int                   `json:"pageSize"`
-	TotalCount int                   `json:"totalCount"`
+	Items    []DownloadResponseDTO `json:"items"`
+	Offset   int                   `json:"offset"`
+	PageSize int                   `json:"pageSize"`
+	Count    int                   `json:"count"`
 }
 
 // DownloadByID fetches a single download from the DB.

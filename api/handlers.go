@@ -53,10 +53,10 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 		WriteError(w, err, http.StatusInternalServerError)
 	}
 	response := database.UploadsResponseDTO{
-		Items:      ups,
-		Offset:     offset,
-		PageSize:   limit,
-		TotalCount: total,
+		Items:    ups,
+		Offset:   offset,
+		PageSize: limit,
+		Count:    total,
 	}
 	WriteJSON(w, response)
 }
@@ -86,10 +86,10 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 		WriteError(w, err, http.StatusInternalServerError)
 	}
 	response := database.DownloadsResponseDTO{
-		Items:      downs,
-		Offset:     offset,
-		PageSize:   limit,
-		TotalCount: total,
+		Items:    downs,
+		Offset:   offset,
+		PageSize: limit,
+		Count:    total,
 	}
 	WriteJSON(w, response)
 }

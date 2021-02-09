@@ -29,10 +29,10 @@ type UploadResponseDTO struct {
 
 // UploadsResponseDTO defines the final format of our response to the caller.
 type UploadsResponseDTO struct {
-	Items      []UploadResponseDTO `json:"items"`
-	Offset     int                 `json:"offset"`
-	PageSize   int                 `json:"pageSize"`
-	TotalCount int                 `json:"totalCount"`
+	Items    []UploadResponseDTO `json:"items"`
+	Offset   int                 `json:"offset"`
+	PageSize int                 `json:"pageSize"`
+	Count    int                 `json:"count"`
 }
 
 // UploadByID fetches a single upload from the DB.
