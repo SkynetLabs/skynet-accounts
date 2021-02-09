@@ -212,9 +212,9 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 	return coll, nil
 }
 
-// generateUploadsDownloadsPipeline is a helper function that generates the
-// mongo pipeline for transforming an `Upload` or `Download` struct into the
-// respective `<Up/Down>loadResponseDTO` struct.
+// generateUploadsDownloadsPipeline generates a mongo pipeline for transforming
+// an `Upload` or `Download` struct into the respective
+// `<Up/Down>loadResponseDTO` struct.
 //
 // The Mongo query we want to ultimately execute is:
 //	db.downloads.aggregate([
@@ -258,4 +258,18 @@ func generateUploadsDownloadsPipeline(matchStage bson.D, offset, limit int) mong
 	}
 	projectStage := bson.D{{"$project", bson.D{{"fromSkylinks", 0}}}}
 	return mongo.Pipeline{matchStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+}
+
+// count returns the number of documents in the given collection that match the
+// given matchStage.
+func count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int, error) {
+	pipeline := mongo.Pipeline{matchStage, bson.D{{"$count", "count"}}}
+	c, err := coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return 0, err
+	}
+	if ok := c.Next(ctx); !ok {
+		return 0, c.Err()
+	}
+	return int(c.Current.Lookup("count").Int32()), nil
 }

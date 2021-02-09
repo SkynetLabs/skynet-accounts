@@ -17,13 +17,22 @@ type Upload struct {
 	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 }
 
-// UploadResponseDTO is the DTO we send as response to the caller.
+// UploadResponseDTO is the representation of an upload we send as response to
+// the caller.
 type UploadResponseDTO struct {
 	ID        string    `bson:"_id" json:"id"`
 	Skylink   string    `bson:"skylink" json:"skylink"`
 	Name      string    `bson:"name" json:"name"`
 	Size      uint64    `bson:"size" json:"size"`
 	Timestamp time.Time `bson:"timestamp" json:"uploadedOn"`
+}
+
+// UploadsResponseDTO defines the final format of our response to the caller.
+type UploadsResponseDTO struct {
+	Items      []UploadResponseDTO `json:"items"`
+	Offset     int                 `json:"offset"`
+	PageSize   int                 `json:"pageSize"`
+	TotalCount int                 `json:"totalCount"`
 }
 
 // UploadByID fetches a single upload from the DB.
@@ -59,36 +68,41 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 	return &up, nil
 }
 
-// UploadsBySkylink fetches all uploads of this skylink
-func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, limit int) ([]UploadResponseDTO, error) {
+// UploadsBySkylink fetches a page of uploads of this skylink and the total
+// number of such uploads.
+func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, limit int) ([]UploadResponseDTO, int, error) {
 	if skylink.ID.IsZero() {
-		return nil, errors.New("invalid skylink")
+		return nil, 0, errors.New("invalid skylink")
 	}
 	matchStage := bson.D{{"$match", bson.D{{"skylink_id", skylink.ID}}}}
 	return db.uploadsBy(ctx, matchStage, offset, limit)
 }
 
-// UploadsByUser fetches all uploads by this user
-func (db *DB) UploadsByUser(ctx context.Context, user User, offset, limit int) ([]UploadResponseDTO, error) {
+// UploadsByUser fetches a page of uploads by this user and the total number of
+// such uploads.
+func (db *DB) UploadsByUser(ctx context.Context, user User, offset, limit int) ([]UploadResponseDTO, int, error) {
 	if user.ID.IsZero() {
-		return nil, errors.New("invalid user")
+		return nil, 0, errors.New("invalid user")
 	}
 	matchStage := bson.D{{"$match", bson.D{{"user_id", user.ID}}}}
 	return db.uploadsBy(ctx, matchStage, offset, limit)
 }
 
-// uploadsBy is a helper function that allows us to fetch a list of downloads,
-// filtered by an arbitrary match criteria.
-func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, limit int) ([]UploadResponseDTO, error) {
-	pipeline := generateUploadsDownloadsPipeline(matchStage, offset, limit)
-	c, err := db.staticUploads.Aggregate(ctx, pipeline)
+// uploadsBy fetches a page of uploads, filtered by an arbitrary match criteria.
+// It also reports the total number of records in the list.
+func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, limit int) ([]UploadResponseDTO, int, error) {
+	cnt, err := count(ctx, db.staticUploads, matchStage)
+	if err != nil || cnt == 0 {
+		return []UploadResponseDTO{}, 0, err
+	}
+	c, err := db.staticUploads.Aggregate(ctx, generateUploadsDownloadsPipeline(matchStage, offset, limit))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	uploads := make([]UploadResponseDTO, 0)
 	err = c.All(ctx, &uploads)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return uploads, nil
+	return uploads, cnt, nil
 }

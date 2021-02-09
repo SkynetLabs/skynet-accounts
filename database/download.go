@@ -17,13 +17,22 @@ type Download struct {
 	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 }
 
-// DownloadResponseDTO is the DTO we send as response to the caller.
+// DownloadResponseDTO  is the representation of a download we send as response
+// to the caller.
 type DownloadResponseDTO struct {
 	ID        string    `bson:"_id" json:"id"`
 	Skylink   string    `bson:"skylink" json:"skylink"`
 	Name      string    `bson:"name" json:"name"`
 	Size      uint64    `bson:"size" json:"size"`
 	Timestamp time.Time `bson:"timestamp" json:"downloadedOn"`
+}
+
+// DownloadsResponseDTO defines the final format of our response to the caller.
+type DownloadsResponseDTO struct {
+	Items      []DownloadResponseDTO `json:"items"`
+	Offset     int                   `json:"offset"`
+	PageSize   int                   `json:"pageSize"`
+	TotalCount int                   `json:"totalCount"`
 }
 
 // DownloadByID fetches a single download from the DB.
@@ -59,36 +68,42 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink) (*
 	return &up, nil
 }
 
-// DownloadsBySkylink fetches all downloads of this skylink
-func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, limit int) ([]DownloadResponseDTO, error) {
+// DownloadsBySkylink fetches a page of downloads of this skylink and the total
+// number of such downloads.
+func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, limit int) ([]DownloadResponseDTO, int, error) {
 	if skylink.ID.IsZero() {
-		return nil, errors.New("invalid skylink")
+		return nil, 0, errors.New("invalid skylink")
 	}
 	matchStage := bson.D{{"$match", bson.D{{"skylink_id", skylink.ID}}}}
 	return db.downloadsBy(ctx, matchStage, offset, limit)
 }
 
-// DownloadsByUser fetches all downloads by this user
-func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, limit int) ([]DownloadResponseDTO, error) {
+// DownloadsByUser fetches a page of downloads by this user and the total number
+// of such downloads.
+func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, limit int) ([]DownloadResponseDTO, int, error) {
 	if user.ID.IsZero() {
-		return nil, errors.New("invalid user")
+		return nil, 0, errors.New("invalid user")
 	}
 	matchStage := bson.D{{"$match", bson.D{{"user_id", user.ID}}}}
 	return db.downloadsBy(ctx, matchStage, offset, limit)
 }
 
-// downloadsBy is a helper function that allows us to fetch a list of downloads,
-// filtered by an arbitrary match criteria.
-func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, limit int) ([]DownloadResponseDTO, error) {
+// downloadsBy fetches a page of downloads, filtered by an arbitrary match
+// criteria. It also reports the total number of records in the list.
+func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, limit int) ([]DownloadResponseDTO, int, error) {
+	cnt, err := count(ctx, db.staticDownloads, matchStage)
+	if err != nil || cnt == 0 {
+		return []DownloadResponseDTO{}, 0, err
+	}
 	pipeline := generateUploadsDownloadsPipeline(matchStage, offset, limit)
 	c, err := db.staticDownloads.Aggregate(ctx, pipeline)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	downloads := make([]DownloadResponseDTO, 0)
 	err = c.All(ctx, &downloads)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return downloads, nil
+	return downloads, cnt, nil
 }
