@@ -30,6 +30,9 @@ var (
 	// skynet's database.
 	dbDownloadsCollection = "downloads"
 
+	// DefaultPageSize defines the default number of records to return.
+	DefaultPageSize = 10
+
 	// mongoCompressors defines the compressors we are going to use for the
 	// connection to MongoDB
 	mongoCompressors = "zstd,zlib,snappy"
@@ -207,4 +210,66 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 		}
 	}
 	return coll, nil
+}
+
+// generateUploadsDownloadsPipeline generates a mongo pipeline for transforming
+// an `Upload` or `Download` struct into the respective
+// `<Up/Down>loadResponseDTO` struct.
+//
+// The Mongo query we want to ultimately execute is:
+//	db.downloads.aggregate([
+//		{ $match: { "user_id": ObjectId("5fda32ef6e0aba5d16c0d550") }},
+//		{ $skip: 1 },
+//		{ $limit: 5 },
+//		{ $lookup: {
+//				from: "skylinks",
+//				localField: "skylink_id",  // field in the downloads collection
+//				foreignField: "_id",	   // field in the skylinks collection
+//				as: "fromSkylinks"
+//		  }
+//		},
+//		{ $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$fromSkylinks", 0 ] }, "$$ROOT" ] } } },
+//		{ $project: { fromSkylinks: 0 } }
+//	])
+//
+// This query will get all downloads by the current user, skip $skip of them
+// and then fetch $limit of them, allowing us to paginate. It will then
+// join with the `skylinks` collection in order to fetch some additional
+// data about each download.
+func generateUploadsDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
+	skipStage := bson.D{{"$skip", offset}}
+	limitStage := bson.D{{"$limit", pageSize}}
+	lookupStage := bson.D{
+		{"$lookup", bson.D{
+			{"from", "skylinks"},
+			{"localField", "skylink_id"}, // field in the downloads collection
+			{"foreignField", "_id"},      // field in the skylinks collection
+			{"as", "fromSkylinks"},
+		}},
+	}
+	replaceStage := bson.D{
+		{"$replaceRoot", bson.D{
+			{"newRoot", bson.D{
+				{"$mergeObjects", bson.A{
+					bson.D{{"$arrayElemAt", bson.A{"$fromSkylinks", 0}}}, "$$ROOT"},
+				},
+			}},
+		}},
+	}
+	projectStage := bson.D{{"$project", bson.D{{"fromSkylinks", 0}}}}
+	return mongo.Pipeline{matchStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+}
+
+// count returns the number of documents in the given collection that match the
+// given matchStage.
+func count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int, error) {
+	pipeline := mongo.Pipeline{matchStage, bson.D{{"$count", "count"}}}
+	c, err := coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return 0, err
+	}
+	if ok := c.Next(ctx); !ok {
+		return 0, c.Err()
+	}
+	return int(c.Current.Lookup("count").Int32()), nil
 }
