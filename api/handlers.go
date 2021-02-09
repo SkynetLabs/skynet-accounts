@@ -187,7 +187,7 @@ func fetchOffset(form url.Values) (int, error) {
 	return offset, nil
 }
 
-// fetchLimit extracts the offset from the params and validates its value.
+// fetchLimit extracts the limit from the params and validates its value.
 func fetchLimit(form url.Values) (int, error) {
 	limit, _ := strconv.Atoi(form.Get("limit"))
 	if limit < 0 {
