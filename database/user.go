@@ -56,6 +56,7 @@ func (db *DB) UserByID(ctx context.Context, id string) (*User, error) {
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
+	defer func() { _ = c.Close(ctx) }()
 	// Get the first result.
 	if ok := c.Next(ctx); !ok {
 		return nil, ErrUserNotFound
@@ -151,6 +152,7 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
+	defer func() { _ = c.Close(ctx) }()
 	var users []*User
 	for c.Next(ctx) {
 		var u User

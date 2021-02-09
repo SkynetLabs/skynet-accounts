@@ -7,15 +7,32 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Download describes a single download of a skylink by a user.
 type Download struct {
-	ID        primitive.ObjectID  `bson:"_id,omitempty" json:"_id"`
-	UserID    primitive.ObjectID  `bson:"user_id,omitempty" json:"user_id"`
-	SkylinkID primitive.ObjectID  `bson:"skylink_id,omitempty" json:"skylink_id"`
-	Timestamp primitive.Timestamp `bson:"timestamp" json:"timestamp"`
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
+	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
+	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
+}
+
+// DownloadResponseDTO  is the representation of a download we send as response
+// to the caller.
+type DownloadResponseDTO struct {
+	ID        string    `bson:"_id" json:"id"`
+	Skylink   string    `bson:"skylink" json:"skylink"`
+	Name      string    `bson:"name" json:"name"`
+	Size      uint64    `bson:"size" json:"size"`
+	Timestamp time.Time `bson:"timestamp" json:"downloadedOn"`
+}
+
+// DownloadsResponseDTO defines the final format of our response to the caller.
+type DownloadsResponseDTO struct {
+	Items    []DownloadResponseDTO `json:"items"`
+	Offset   int                   `json:"offset"`
+	PageSize int                   `json:"pageSize"`
+	Count    int                   `json:"count"`
 }
 
 // DownloadByID fetches a single download from the DB.
@@ -41,7 +58,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink) (*
 	up := Download{
 		UserID:    user.ID,
 		SkylinkID: skylink.ID,
-		Timestamp: primitive.Timestamp{T: uint32(time.Now().Unix())},
+		Timestamp: time.Now().UTC(),
 	}
 	ior, err := db.staticDownloads.InsertOne(ctx, up)
 	if err != nil {
@@ -51,52 +68,42 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink) (*
 	return &up, nil
 }
 
-// DownloadsBySkylink fetches all downloads of this skylink
-func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, limit int) ([]Download, error) {
+// DownloadsBySkylink fetches a page of downloads of this skylink and the total
+// number of such downloads.
+func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
 	if skylink.ID.IsZero() {
-		return nil, errors.New("invalid skylink")
+		return nil, 0, errors.New("invalid skylink")
 	}
-	filter := bson.D{{"skylink_id", skylink.ID}}
-	opts := options.FindOptions{}
-	if offset > 0 {
-		opts.SetSkip(int64(offset))
-	}
-	if limit > 0 {
-		opts.SetLimit(int64(limit))
-	}
-	c, err := db.staticDownloads.Find(ctx, filter, &opts)
-	if err != nil {
-		return nil, err
-	}
-	downloads := make([]Download, 0)
-	err = c.All(ctx, &downloads)
-	if err != nil {
-		return nil, err
-	}
-	return downloads, nil
+	matchStage := bson.D{{"$match", bson.D{{"skylink_id", skylink.ID}}}}
+	return db.downloadsBy(ctx, matchStage, offset, pageSize)
 }
 
-// DownloadsByUser fetches all downloads by this user
-func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, limit int) ([]Download, error) {
+// DownloadsByUser fetches a page of downloads by this user and the total number
+// of such downloads.
+func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
 	if user.ID.IsZero() {
-		return nil, errors.New("invalid user")
+		return nil, 0, errors.New("invalid user")
 	}
-	filter := bson.D{{"user_id", user.ID}}
-	opts := options.FindOptions{}
-	if offset > 0 {
-		opts.SetSkip(int64(offset))
+	matchStage := bson.D{{"$match", bson.D{{"user_id", user.ID}}}}
+	return db.downloadsBy(ctx, matchStage, offset, pageSize)
+}
+
+// downloadsBy fetches a page of downloads, filtered by an arbitrary match
+// criteria. It also reports the total number of records in the list.
+func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
+	cnt, err := count(ctx, db.staticDownloads, matchStage)
+	if err != nil || cnt == 0 {
+		return []DownloadResponseDTO{}, 0, err
 	}
-	if limit > 0 {
-		opts.SetLimit(int64(limit))
-	}
-	c, err := db.staticDownloads.Find(ctx, filter, &opts)
+	pipeline := generateUploadsDownloadsPipeline(matchStage, offset, pageSize)
+	c, err := db.staticDownloads.Aggregate(ctx, pipeline)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	downloads := make([]Download, 0)
+	downloads := make([]DownloadResponseDTO, pageSize)
 	err = c.All(ctx, &downloads)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return downloads, nil
+	return downloads, cnt, nil
 }
