@@ -44,18 +44,18 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 		WriteError(w, err, http.StatusBadRequest)
 	}
 	offset, err1 := fetchOffset(req.Form)
-	limit, err2 := fetchLimit(req.Form)
+	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 	}
-	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, limit)
+	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 	}
 	response := database.UploadsResponseDTO{
 		Items:    ups,
 		Offset:   offset,
-		PageSize: limit,
+		PageSize: pageSize,
 		Count:    total,
 	}
 	WriteJSON(w, response)
@@ -77,18 +77,18 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 		WriteError(w, err, http.StatusBadRequest)
 	}
 	offset, err1 := fetchOffset(req.Form)
-	limit, err2 := fetchLimit(req.Form)
+	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 	}
-	downs, total, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, limit)
+	downs, total, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, pageSize)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 	}
 	response := database.DownloadsResponseDTO{
 		Items:    downs,
 		Offset:   offset,
-		PageSize: limit,
+		PageSize: pageSize,
 		Count:    total,
 	}
 	WriteJSON(w, response)
@@ -187,14 +187,14 @@ func fetchOffset(form url.Values) (int, error) {
 	return offset, nil
 }
 
-// fetchLimit extracts the limit from the params and validates its value.
-func fetchLimit(form url.Values) (int, error) {
-	limit, _ := strconv.Atoi(form.Get("limit"))
-	if limit < 0 {
-		return 0, errors.New("Invalid limit")
+// fetchPageSize extracts the page size from the params and validates its value.
+func fetchPageSize(form url.Values) (int, error) {
+	pageSize, _ := strconv.Atoi(form.Get("pageSize"))
+	if pageSize < 0 {
+		return 0, errors.New("Invalid page size")
 	}
-	if limit == 0 {
-		limit = database.DefaultPageSize
+	if pageSize == 0 {
+		pageSize = database.DefaultPageSize
 	}
-	return limit, nil
+	return pageSize, nil
 }

@@ -70,36 +70,36 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 
 // UploadsBySkylink fetches a page of uploads of this skylink and the total
 // number of such uploads.
-func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, limit int) ([]UploadResponseDTO, int, error) {
+func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]UploadResponseDTO, int, error) {
 	if skylink.ID.IsZero() {
 		return nil, 0, errors.New("invalid skylink")
 	}
 	matchStage := bson.D{{"$match", bson.D{{"skylink_id", skylink.ID}}}}
-	return db.uploadsBy(ctx, matchStage, offset, limit)
+	return db.uploadsBy(ctx, matchStage, offset, pageSize)
 }
 
 // UploadsByUser fetches a page of uploads by this user and the total number of
 // such uploads.
-func (db *DB) UploadsByUser(ctx context.Context, user User, offset, limit int) ([]UploadResponseDTO, int, error) {
+func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int) ([]UploadResponseDTO, int, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
 	}
 	matchStage := bson.D{{"$match", bson.D{{"user_id", user.ID}}}}
-	return db.uploadsBy(ctx, matchStage, offset, limit)
+	return db.uploadsBy(ctx, matchStage, offset, pageSize)
 }
 
 // uploadsBy fetches a page of uploads, filtered by an arbitrary match criteria.
 // It also reports the total number of records in the list.
-func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, limit int) ([]UploadResponseDTO, int, error) {
+func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]UploadResponseDTO, int, error) {
 	cnt, err := count(ctx, db.staticUploads, matchStage)
 	if err != nil || cnt == 0 {
 		return []UploadResponseDTO{}, 0, err
 	}
-	c, err := db.staticUploads.Aggregate(ctx, generateUploadsDownloadsPipeline(matchStage, offset, limit))
+	c, err := db.staticUploads.Aggregate(ctx, generateUploadsDownloadsPipeline(matchStage, offset, pageSize))
 	if err != nil {
 		return nil, 0, err
 	}
-	uploads := make([]UploadResponseDTO, 0)
+	uploads := make([]UploadResponseDTO, pageSize)
 	err = c.All(ctx, &uploads)
 	if err != nil {
 		return nil, 0, err
