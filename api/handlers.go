@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strconv"
 
@@ -43,12 +44,12 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 		return
 	}
 	if err = req.ParseForm(); err != nil {
-		WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusBadRequest)
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
-		WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusBadRequest)
 	}
 	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize)
 	if err != nil {
@@ -60,7 +61,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 		PageSize: pageSize,
 		Count:    total,
 	}
-	WriteJSON(w, response)
+	api.WriteJSON(w, response)
 }
 
 // userDownloadsHandler returns all downloads made by the current user.
@@ -77,12 +78,12 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 		return
 	}
 	if err = req.ParseForm(); err != nil {
-		WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusBadRequest)
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
-		WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusBadRequest)
 	}
 	downs, total, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, pageSize)
 	if err != nil {
@@ -94,7 +95,7 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 		PageSize: pageSize,
 		Count:    total,
 	}
-	WriteJSON(w, response)
+	api.WriteJSON(w, response)
 }
 
 // trackUploadHandler registers a new upload in the system.
