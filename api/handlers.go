@@ -15,7 +15,6 @@ import (
 // userHandler returns information about an existing user and create it if it
 // doesn't exist.
 func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	api.staticLogger.Tracef("Processing request: %v", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -31,7 +30,6 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 
 // userUploadsHandler returns all uploads made by the current user.
 func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	api.staticLogger.Tracef("Processing request: %v", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -65,7 +63,6 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 
 // userDownloadsHandler returns all downloads made by the current user.
 func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	api.staticLogger.Tracef("Processing request: %v", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -99,7 +96,6 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 
 // trackUploadHandler registers a new upload in the system.
 func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	api.staticLogger.Tracef("Processing request: %v", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -150,7 +146,6 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 
 // trackDownloadHandler registers a new download in the system.
 func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	api.staticLogger.Tracef("Processing request: %v", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
