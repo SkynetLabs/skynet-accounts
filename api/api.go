@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
@@ -56,12 +55,10 @@ func (api *API) Router() *httprouter.Router {
 }
 
 // WriteError an error to the API caller.
-func WriteError(w http.ResponseWriter, err error, code int) {
+func (api *API) WriteError(w http.ResponseWriter, err error, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
-	if build.DEBUG {
-		log.Println(code, err)
-	}
+	api.staticLogger.Debugln(code, err)
 	encodingErr := json.NewEncoder(w).Encode(err)
 	if _, isJSONErr := encodingErr.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.
@@ -73,9 +70,13 @@ func WriteError(w http.ResponseWriter, err error, code int) {
 // WriteJSON writes the object to the ResponseWriter. If the encoding fails, an
 // error is written instead. The Content-Type of the response header is set
 // accordingly.
-func WriteJSON(w http.ResponseWriter, obj interface{}) {
+func (api *API) WriteJSON(w http.ResponseWriter, obj interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	api.staticLogger.Debugln(http.StatusOK)
 	err := json.NewEncoder(w).Encode(obj)
+	if err != nil {
+		api.staticLogger.Debugln(err)
+	}
 	if _, isJSONErr := err.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.
 		// Specifically, only non-marshallable types should cause an error here.
@@ -86,6 +87,7 @@ func WriteJSON(w http.ResponseWriter, obj interface{}) {
 // WriteSuccess writes the HTTP header with status 204 No Content to the
 // ResponseWriter. WriteSuccess should only be used to indicate that the
 // requested action succeeded AND there is no data to return.
-func WriteSuccess(w http.ResponseWriter) {
+func (api *API) WriteSuccess(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
+	api.staticLogger.Debugln(http.StatusNoContent)
 }

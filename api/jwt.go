@@ -157,28 +157,20 @@ func tokenFromRequest(r *http.Request) (string, error) {
 		return strings.TrimSpace(parts[1]), nil
 	}
 
-	// Check the headers for a cookie.
-	cookieHeader := r.Header.Get("Cookie")
-	parts = strings.Split(cookieHeader, CookieName+"=")
-	if len(parts) == 2 {
-		return strings.TrimSpace(parts[1]), nil
-	}
-
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
 	if errors.Contains(err, http.ErrNoCookie) {
-		return "", errors.New("no authorisation found")
+		return "", errors.New("no cookie found")
 	}
 	if err != nil {
 		return "", errors.AddContext(err, "cookie exists but it's not valid")
 	}
 	var value string
 	err = secureCookie.Decode(CookieName, cookie.Value, &value)
-	if err == nil {
-		return value, nil
+	if err != nil {
+		return "", err
 	}
-
-	return "", errors.New("no authorisation found")
+	return value, nil
 }
 
 // tokenFromContext extracts the JWT token from the

@@ -31,6 +31,9 @@ var (
 	envDBUser = "SKYNET_DB_USER"
 	// envDBPass holds the name of the environment variable for DB password.
 	envDBPass = "SKYNET_DB_PASS" // #nosec G101: Potential hardcoded credentials
+	// envLogLevel holds the name of the environment variable which defines the
+	// desired log level.
+	envLogLevel = "SKYNET_ACCOUNTS_LOG_LEVEL"
 	// envPort holds the name of the environment variable for the port on which
 	// this service listens.
 	envPort = "SKYNET_ACCOUNTS_PORT"
@@ -94,6 +97,22 @@ func main() {
 
 // logLevel returns the desires log level.
 func logLevel() logrus.Level {
+	switch debugEnv, _ := os.LookupEnv(envLogLevel); debugEnv {
+	case "panic":
+		return logrus.PanicLevel
+	case "fatal":
+		return logrus.FatalLevel
+	case "error":
+		return logrus.ErrorLevel
+	case "warn":
+		return logrus.WarnLevel
+	case "info":
+		return logrus.InfoLevel
+	case "debug":
+		return logrus.DebugLevel
+	case "trace":
+		return logrus.TraceLevel
+	}
 	if build.DEBUG {
 		return logrus.TraceLevel
 	}
