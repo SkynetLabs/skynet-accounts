@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 
@@ -18,8 +19,26 @@ var (
 	// validation. It's available at oathkeeperPubKeyURL.
 	oathkeeperPubKeys *jwk.Set = nil
 
+	// kratosAddr holds the domain + port on which we can find Kratos.
+	// The point of this var is to be overridable via .env.
+	kratosAddr = func() string {
+		if kaddr := os.Getenv("KRATOS_ADDR"); kaddr != "" {
+			return kaddr
+		}
+		return "kratos:4433"
+	}()
+
+	// oathkeeperAddr holds the domain + port on which we can find Oathkeeper.
+	// The point of this var is to be overridable via .env.
+	oathkeeperAddr = func() string {
+		if oaddr := os.Getenv("OATHKEEPER_ADDR"); oaddr != "" {
+			return oaddr
+		}
+		return "oathkeeper:4455"
+	}()
+
 	// oathkeeperPubKeyURL is the URL on which we can find the public key.
-	oathkeeperPubKeyURL = "http://oathkeeper:4456/.well-known/jwks.json"
+	oathkeeperPubKeyURL = "http://" + oathkeeperAddr + "/.well-known/jwks.json"
 )
 
 // ValidateToken verifies the validity of a JWT token, both in terms of validity

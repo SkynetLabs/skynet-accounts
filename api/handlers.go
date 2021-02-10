@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strconv"
 
@@ -181,6 +182,27 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		return
 	}
 	api.WriteSuccess(w)
+}
+
+// proxyToKratos proxies this request to Kratos without interfering with it.
+func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	schema := req.URL.Scheme
+	if schema == "" {
+		schema = "http"
+	}
+	u, _ := url.Parse(schema + "://" + kratosAddr + req.RequestURI)
+
+	// create the reverse proxy
+	proxy := httputil.NewSingleHostReverseProxy(u)
+
+	// Update the headers to allow for SSL redirection
+	req.URL.Host = u.Host
+	req.URL.Scheme = u.Scheme
+	req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
+	req.Host = u.Host
+
+	// Note that ServeHttp is non blocking and uses a go routine under the hood
+	proxy.ServeHTTP(w, req)
 }
 
 // fetchOffset extracts the offset from the params and validates its value.
