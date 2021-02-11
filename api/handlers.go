@@ -196,6 +196,8 @@ func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httpro
 	req.RequestURI = strippedURL
 	req.URL.Host = u.Host
 	req.URL.Scheme = u.Scheme
+	req.URL.Path = strippedURL
+	req.URL.RawPath = strippedURL
 	req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
 	req.Host = u.Host
 
