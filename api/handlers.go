@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -192,14 +193,18 @@ func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httpro
 	// create the reverse proxy
 	proxy := httputil.NewSingleHostReverseProxy(u)
 
+	fmt.Printf("REQUEST BEFORE: %+v\n\n", req)
+
 	// Update the headers to allow for SSL redirection
 	req.RequestURI = strippedURL
 	req.URL.Host = u.Host
 	req.URL.Scheme = u.Scheme
 	req.URL.Path = strippedURL
-	req.URL.RawPath = strippedURL
+	//req.URL.RawPath = strippedURL
 	req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
 	req.Host = u.Host
+
+	fmt.Printf("REQUEST AFTER: %+v\n\n", req)
 
 	// Note that ServeHttp is non blocking and uses a go routine under the hood
 	proxy.ServeHTTP(w, req)
