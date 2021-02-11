@@ -22,6 +22,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/.ory/*path", api.proxyToKratos)
 	api.staticRouter.POST("/.ory/*path", api.proxyToKratos)
 	api.staticRouter.PUT("/.ory/*path", api.proxyToKratos)
+	api.staticRouter.PATCH("/.ory/*path", api.proxyToKratos)
 	api.staticRouter.DELETE("/.ory/*path", api.proxyToKratos)
 }
 
