@@ -187,12 +187,13 @@ func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httpro
 		schema = "http"
 	}
 	strippedURL := strings.ReplaceAll(req.RequestURI, "/.ory/kratos/public", "")
-	u, _ := url.Parse(schema + "://" + kratosAddr + strippedURL)
+	u, _ := url.Parse(schema + "://" + kratosAddr)
 
 	// create the reverse proxy
 	proxy := httputil.NewSingleHostReverseProxy(u)
 
 	// Update the headers to allow for SSL redirection
+	req.RequestURI = strippedURL
 	req.URL.Host = u.Host
 	req.URL.Scheme = u.Scheme
 	req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
