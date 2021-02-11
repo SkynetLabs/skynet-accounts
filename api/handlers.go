@@ -5,6 +5,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
@@ -185,7 +186,8 @@ func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httpro
 	if schema == "" {
 		schema = "http"
 	}
-	u, _ := url.Parse(schema + "://" + kratosAddr + req.RequestURI)
+	strippedURL := strings.ReplaceAll(req.RequestURI, "/.ory/kratos/public", "")
+	u, _ := url.Parse(schema + "://" + kratosAddr + strippedURL)
 
 	// create the reverse proxy
 	proxy := httputil.NewSingleHostReverseProxy(u)
