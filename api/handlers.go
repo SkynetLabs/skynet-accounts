@@ -182,6 +182,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 
 // proxyToKratos proxies this request to Kratos without interfering with it.
 func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	api.staticLogger.Traceln("PROXIED REQUEST:", req)
 	schema := req.URL.Scheme
 	if schema == "" {
 		schema = "http"
