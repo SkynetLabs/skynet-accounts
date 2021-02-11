@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -180,6 +181,23 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 	api.WriteSuccess(w)
 }
 
+type wrap struct {
+	wr http.ResponseWriter
+}
+
+func (w wrap) Header() http.Header {
+	return w.wr.Header()
+}
+func (w wrap) Write(b []byte) (int, error) {
+	fmt.Println(" >>> ", string(b))
+	return w.wr.Write(b)
+}
+
+func (w wrap) WriteHeader(statusCode int) {
+	fmt.Println(" > status_code ", statusCode)
+	w.wr.WriteHeader(statusCode)
+}
+
 // proxyToKratos proxies this request to Kratos without interfering with it.
 func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	api.staticLogger.Traceln("PROXIED REQUEST:", req)
@@ -205,8 +223,10 @@ func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httpro
 	req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
 	req.Host = u.Host
 
+	wrapper := wrap{wr: w}
+
 	// Note that ServeHttp is non blocking and uses a go routine under the hood
-	proxy.ServeHTTP(w, req)
+	proxy.ServeHTTP(wrapper, req)
 }
 
 // fetchOffset extracts the offset from the params and validates its value.
