@@ -192,7 +192,7 @@ func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httpro
 		return
 	}
 	strippedPath := strings.ReplaceAll(originalURL.Path, "/.ory/kratos/public", "")
-	u, _ := url.Parse(schema + "://" + kratosAddr)
+	u, _ := url.Parse(schema + "://" + KratosAddr)
 
 	// create the reverse proxy
 	proxy := httputil.NewSingleHostReverseProxy(u)
