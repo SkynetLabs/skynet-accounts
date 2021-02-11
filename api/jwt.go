@@ -151,14 +151,17 @@ func oathkeeperPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
 			return nil, err
 		}
 		defer r.Body.Close()
-		b, err := ioutil.ReadAll(r.Body)
+		var b []byte
+		b, err = ioutil.ReadAll(r.Body)
 		if err != nil {
 			logger.Warningln("ERROR while reading JWKS from oathkeeper", err)
 			return nil, err
 		}
-		set, err := jwk.ParseString(string(b))
+		var set *jwk.Set
+		set, err = jwk.ParseString(string(b))
 		if err != nil {
 			logger.Warningln("ERROR while parsing JWKS from oathkeeper", err)
+			logger.Warningln("JWKS string:", string(b))
 			return nil, err
 		}
 		oathkeeperPubKeys = set
