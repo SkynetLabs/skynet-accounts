@@ -16,6 +16,8 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
 	api.staticRouter.POST("/track/upload/:skylink", api.validate(api.trackUploadHandler))
 	api.staticRouter.POST("/track/download/:skylink", api.validate(api.trackDownloadHandler))
+	api.staticRouter.POST("/track/registry/read", api.validate(api.trackRegistryReadHandler))
+	api.staticRouter.POST("/track/registry/write", api.validate(api.trackRegistryWriteHandler))
 
 	// Kratos transparent proxy.
 	api.staticRouter.HEAD("/.ory/*path", api.proxyToKratos)

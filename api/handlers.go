@@ -67,7 +67,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
@@ -100,7 +100,7 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	sl := ps.ByName("skylink")
@@ -150,7 +150,7 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	sl := ps.ByName("skylink")
@@ -173,6 +173,46 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		return
 	}
 	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// trackRegistryReadHandler registers a new registry read in the system.
+func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	_, err = api.staticDB.RegistryReadCreate(req.Context(), *u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// trackRegistryWriteHandler registers a new registry read in the system.
+func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	_, err = api.staticDB.RegistryWriteCreate(req.Context(), *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

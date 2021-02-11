@@ -29,6 +29,12 @@ var (
 	// dbDownloadsCollection defines the name of the "downloads" collection within
 	// skynet's database.
 	dbDownloadsCollection = "downloads"
+	// dbRegistryReadsCollection defines the name of the "registry_reads"
+	// collection within skynet's database.
+	dbRegistryReadsCollection = "registry_reads"
+	// dbRegistryWritesCollection defines the name of the "registry_writes"
+	// collection within skynet's database.
+	dbRegistryWritesCollection = "registry_writes"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -64,13 +70,15 @@ var (
 type (
 	// DB represents a MongoDB database connection.
 	DB struct {
-		staticDB        *mongo.Database
-		staticUsers     *mongo.Collection
-		staticSkylinks  *mongo.Collection
-		staticUploads   *mongo.Collection
-		staticDownloads *mongo.Collection
-		staticDep       lib.Dependencies
-		staticLogger    *logrus.Logger
+		staticDB             *mongo.Database
+		staticUsers          *mongo.Collection
+		staticSkylinks       *mongo.Collection
+		staticUploads        *mongo.Collection
+		staticDownloads      *mongo.Collection
+		staticRegistryReads  *mongo.Collection
+		staticRegistryWrites *mongo.Collection
+		staticDep            lib.Dependencies
+		staticLogger         *logrus.Logger
 	}
 
 	// DBCredentials is a helper struct that binds together all values needed for
@@ -103,12 +111,14 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 		return nil, err
 	}
 	db := &DB{
-		staticDB:        database,
-		staticUsers:     database.Collection(dbUsersCollection),
-		staticSkylinks:  database.Collection(dbSkylinksCollection),
-		staticUploads:   database.Collection(dbUploadsCollection),
-		staticDownloads: database.Collection(dbDownloadsCollection),
-		staticLogger:    logger,
+		staticDB:             database,
+		staticUsers:          database.Collection(dbUsersCollection),
+		staticSkylinks:       database.Collection(dbSkylinksCollection),
+		staticUploads:        database.Collection(dbUploadsCollection),
+		staticDownloads:      database.Collection(dbDownloadsCollection),
+		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
+		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
+		staticLogger:         logger,
 	}
 	return db, nil
 }
@@ -179,6 +189,18 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("skylink_id"),
 			},
 		},
+		dbRegistryReadsCollection: {
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("user_id"),
+			},
+		},
+		dbRegistryWritesCollection: {
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("user_id"),
+			},
+		},
 	}
 	for collName, models := range schema {
 		coll, err := ensureCollection(ctx, db, collName)
@@ -186,7 +208,8 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 			return err
 		}
 		iv := coll.Indexes()
-		names, err := iv.CreateMany(ctx, models)
+		var names []string
+		names, err = iv.CreateMany(ctx, models)
 		if err != nil {
 			return errors.AddContext(err, "failed to create indexes")
 		}
@@ -200,13 +223,13 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 func ensureCollection(ctx context.Context, db *mongo.Database, collName string) (*mongo.Collection, error) {
 	coll := db.Collection(collName)
 	if coll == nil {
-		err := db.CreateCollection(ctx, dbUsersCollection)
+		err := db.CreateCollection(ctx, collName)
 		if err != nil {
 			return nil, err
 		}
-		coll = db.Collection(dbUsersCollection)
+		coll = db.Collection(collName)
 		if coll == nil {
-			return nil, errors.New("failed to create collection " + dbUsersCollection)
+			return nil, errors.New("failed to create collection " + collName)
 		}
 	}
 	return coll, nil

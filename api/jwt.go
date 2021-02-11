@@ -25,9 +25,6 @@ var (
 	// OathkeeperAddr holds the domain + port on which we can find Oathkeeper.
 	// The point of this var is to be overridable via .env.
 	OathkeeperAddr = "oathkeeper:4456"
-
-	// oathkeeperPubKeyURL is the URL on which we can find the public key.
-	oathkeeperPubKeyURL = "http://" + OathkeeperAddr + "/.well-known/jwks.json"
 )
 
 // ValidateToken verifies the validity of a JWT token, both in terms of validity
@@ -133,6 +130,7 @@ func keyForToken(logger *logrus.Logger, token *jwt.Token) (interface{}, error) {
 // Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
 func oathkeeperPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
 	if oathkeeperPubKeys == nil {
+		oathkeeperPubKeyURL := "http://" + OathkeeperAddr + "/.well-known/jwks.json"
 		logger.Traceln("fetching JWKS from oathkeeper:", oathkeeperPubKeyURL)
 		r, err := http.Get(oathkeeperPubKeyURL) // #nosec G107: Potential HTTP request made with variable url
 		if err != nil {
