@@ -34,7 +34,7 @@ var (
 		if oaddr := os.Getenv("OATHKEEPER_ADDR"); oaddr != "" {
 			return oaddr
 		}
-		return "oathkeeper:4455"
+		return "oathkeeper:4456"
 	}()
 
 	// oathkeeperPubKeyURL is the URL on which we can find the public key.
