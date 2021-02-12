@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gorilla/securecookie"
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -25,8 +26,10 @@ const (
 
 var (
 	secureCookie = func() *securecookie.SecureCookie {
-		var hashKey = []byte(os.Getenv(envCookieHashKey))
-		var blockKey = []byte(os.Getenv(envCookieEncKey))
+		_ = godotenv.Load()
+		// These keys need to be *exactly* 16 or 32 bytes long.
+		var hashKey = []byte(os.Getenv(envCookieHashKey))[:32]
+		var blockKey = []byte(os.Getenv(envCookieEncKey))[:32]
 		return securecookie.New(hashKey, blockKey)
 	}()
 )

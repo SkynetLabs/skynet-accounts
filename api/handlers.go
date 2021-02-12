@@ -15,9 +15,15 @@ import (
 
 // loginHandler starts a user session by issuing a cookie
 func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	_, _, token, err := tokenFromContext(req)
+	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
-		api.staticLogger.Traceln("Error fetching token from context:", err)
+		api.staticLogger.Traceln("Error fetching token from request:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	token, err := ValidateToken(api.staticLogger, tokenStr)
+	if err != nil {
+		api.staticLogger.Traceln("Error validating token:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
@@ -25,18 +31,6 @@ func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprou
 	if err != nil {
 		api.staticLogger.Traceln("Error checking token expiration:", err)
 		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
-	key, err := keyForToken(api.staticLogger, token)
-	if err != nil {
-		api.staticLogger.Traceln("Error fetching Oathkeeper's token key:", err)
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	tokenStr, err := token.SignedString(key)
-	if err != nil {
-		api.staticLogger.Traceln("Error signing token:", err)
-		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	err = writeCookie(w, tokenStr, exp)
