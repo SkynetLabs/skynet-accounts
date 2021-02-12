@@ -1,12 +1,10 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"strconv"
-	"strings"
+	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
@@ -14,6 +12,58 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 )
+
+// loginHandler starts a user session by issuing a cookie
+func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	_, _, token, err := tokenFromContext(req)
+	if err != nil {
+		api.staticLogger.Traceln("Error fetching token from context:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	exp, err := tokenExpiration(token)
+	if err != nil {
+		api.staticLogger.Traceln("Error checking token expiration:", err)
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	key, err := keyForToken(api.staticLogger, token)
+	if err != nil {
+		api.staticLogger.Traceln("Error fetching Oathkeeper's token key:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	tokenStr, err := token.SignedString(key)
+	if err != nil {
+		api.staticLogger.Traceln("Error signing token:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	err = writeCookie(w, tokenStr, exp)
+	if err != nil {
+		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// logoutHandler ends a user session by removing a cookie
+func (api *API) logoutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	_, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.staticLogger.Traceln("Error fetching token from context:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	err = writeCookie(w, "", time.Now().UTC().Unix()-1)
+	if err != nil {
+		api.staticLogger.Traceln("Error deleting cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
 
 // userHandler returns information about an existing user and create it if it
 // doesn't exist.
@@ -219,34 +269,6 @@ func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Reque
 		return
 	}
 	api.WriteSuccess(w)
-}
-
-// proxyToKratos proxies this request to Kratos without interfering with it.
-func (api *API) proxyToKratos(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	schema := req.URL.Scheme
-	if schema == "" {
-		schema = "http"
-	}
-	originalURL, err := url.Parse(req.RequestURI)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	strippedPath := strings.ReplaceAll(originalURL.Path, "/.ory/kratos/public", "")
-	u, _ := url.Parse(schema + "://" + KratosAddr)
-
-	// create the reverse proxy
-	proxy := httputil.NewSingleHostReverseProxy(u)
-
-	// Update the headers to allow for SSL redirection
-	req.URL.Host = u.Host
-	req.URL.Scheme = u.Scheme
-	req.URL.Path = strippedPath
-	req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
-	req.Host = u.Host
-
-	// Note that ServeHttp is non blocking and uses a go routine under the hood
-	proxy.ServeHTTP(w, req)
 }
 
 // fetchOffset extracts the offset from the params and validates its value.

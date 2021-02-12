@@ -165,7 +165,6 @@ func tokenFromRequest(r *http.Request) (string, error) {
 	if len(parts) == 2 {
 		return strings.TrimSpace(parts[1]), nil
 	}
-
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
 	if errors.Contains(err, http.ErrNoCookie) {
