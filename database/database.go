@@ -260,6 +260,7 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 // join with the `skylinks` collection in order to fetch some additional
 // data about each download.
 func generateUploadsDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
+	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
 	skipStage := bson.D{{"$skip", offset}}
 	limitStage := bson.D{{"$limit", pageSize}}
 	lookupStage := bson.D{
@@ -280,7 +281,7 @@ func generateUploadsDownloadsPipeline(matchStage bson.D, offset, pageSize int) m
 		}},
 	}
 	projectStage := bson.D{{"$project", bson.D{{"fromSkylinks", 0}}}}
-	return mongo.Pipeline{matchStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
 }
 
 // count returns the number of documents in the given collection that match the
