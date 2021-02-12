@@ -27,6 +27,34 @@ The tiers communicated by the API are numeric. This is the mapping:
 3. Premium 20.
 4. Premium 80.
 
+## Auth endpoints
+
+### POST `/login`
+
+Sets the `skynet-jwt` cookie.
+
+* Requires valid JWT: `true`
+* GET params: none
+* POST params: none
+* Returns:
+  - 204
+  - 400
+  - 401 (missing JWT)
+  - 500
+
+### POST `/logout`
+
+Removes the `skynet-jwt` cookie.
+
+* Requires valid JWT: `true`
+* GET params: none
+* POST params: none
+* Returns:
+  - 204
+  - 400
+  - 401 (missing JWT)
+  - 500
+
 ## User endpoints
 
 ### GET `/user`
