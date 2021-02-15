@@ -4,12 +4,11 @@ import (
 	"context"
 	"regexp"
 
-	"go.mongodb.org/mongo-driver/mongo/options"
-
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var skylinkRE = regexp.MustCompile("^.*([a-zA-Z0-9-_]{46}).*$")

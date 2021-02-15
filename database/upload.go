@@ -100,6 +100,7 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 	if err != nil {
 		return nil, 0, err
 	}
+	defer func() { _ = c.Close(ctx) }()
 	uploads := make([]UploadResponseDTO, pageSize)
 	err = c.All(ctx, &uploads)
 	if err != nil {
