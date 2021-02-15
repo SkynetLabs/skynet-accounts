@@ -8,9 +8,9 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
-	"gitlab.com/NebulousLabs/errors"
 
 	"github.com/julienschmidt/httprouter"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 // loginHandler starts a user session by issuing a cookie
@@ -179,13 +179,6 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 		api.staticMF.Queue <- metafetcher.Message{
 			UserID:    u.ID,
 			SkylinkID: skylink.ID,
-		}
-	} else {
-		err = api.staticDB.UserUpdateUsedStorage(req.Context(), u.ID, skylink.Size)
-		if err != nil {
-			// Log the error but return success - the record will be corrected
-			// later when we rescan the user's used space.
-			api.staticLogger.Debug("Failed to update user's used space:", err)
 		}
 	}
 	api.WriteSuccess(w)
