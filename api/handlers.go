@@ -198,6 +198,8 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
+	st := ps.ByName("status")
+	rg := ps.ByName("range")
 	sl := ps.ByName("skylink")
 	if sl == "" {
 		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
@@ -217,6 +219,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	api.staticLogger.Tracef("Downloading skylink %v, status %v, range %v\n", skylink, st, rg)
 	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
