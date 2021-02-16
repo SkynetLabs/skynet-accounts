@@ -336,12 +336,34 @@ func (db *DB) userUploadBandwidth(ctx context.Context, id primitive.ObjectID) (i
 // uses the cumulative downloaded amount, noted with each download record. Those
 // numbers account for the actual bandwidth used, as reported by nginx.
 func (db *DB) userDownloadBandwidth(ctx context.Context, id primitive.ObjectID) (int64, error) {
-	// TODO incremental downloads via 206s
 	matchStage := bson.D{{"$match", bson.D{{"user_id", id}}}}
 	groupStage := bson.D{{"$group", bson.D{
 		{"_id", "$user_id"},
-		{"bandwidth", bson.D{{"$sum", "$bytes_transferred"}}},
+		{"bandwidth", bson.D{{"$sum", "$bytes"}}},
 	}}}
+
+	// TODO Add an aggregation here that joins on the skylinks collection and
+	// 	if the bytes are 0 chooses skylink size, similar to generateDownloadsPipeline.
+	/*
+			db.downloads.aggregate([
+		    {$match: {"user_id": ObjectId("601be02c70d926e455896a6a")}},
+		    {$lookup: {
+		        from: "skylinks",
+		        localField: "skylink_id",
+		        foreignField: "_id",
+		        as: "skylink_data",
+		    }},
+		    { $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$skylink_data", 0 ] }, "$$ROOT" ] } } },
+		    { $project: {
+		        _id: 0,
+		        skylink: 1, name: 1, user_id: 1, skylink_id: 1, timestamp: 1,
+		        size: { "$cond": [
+		            {"$gt": ['$bytes', 0]},
+		            '$bytes',
+		            '$size'
+		            ] }
+		    }}
+	*/
 
 	pipeline := mongo.Pipeline{matchStage, groupStage}
 	c, err := db.staticDownloads.Aggregate(ctx, pipeline)

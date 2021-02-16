@@ -235,7 +235,7 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 	return coll, nil
 }
 
-// generateUploadsDownloadsPipeline generates a mongo pipeline for transforming
+// generateUploadsPipeline generates a mongo pipeline for transforming
 // an `Upload` or `Download` struct into the respective
 // `<Up/Down>loadResponseDTO` struct.
 //
@@ -259,7 +259,7 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 // and then fetch $limit of them, allowing us to paginate. It will then
 // join with the `skylinks` collection in order to fetch some additional
 // data about each download.
-func generateUploadsDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
+func generateUpoadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
 	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
 	skipStage := bson.D{{"$skip", offset}}
 	limitStage := bson.D{{"$limit", pageSize}}
@@ -281,6 +281,50 @@ func generateUploadsDownloadsPipeline(matchStage bson.D, offset, pageSize int) m
 		}},
 	}
 	projectStage := bson.D{{"$project", bson.D{{"fromSkylinks", 0}}}}
+	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+}
+
+// generateDownloadsPipeline is similar to generateUploadsPipeline. The only
+// difference is that it supports partial downloads via the `bytes` field in the
+// `downloads` collection.
+func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
+	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
+	skipStage := bson.D{{"$skip", offset}}
+	limitStage := bson.D{{"$limit", pageSize}}
+	lookupStage := bson.D{
+		{"$lookup", bson.D{
+			{"from", "skylinks"},
+			{"localField", "skylink_id"}, // field in the downloads collection
+			{"foreignField", "_id"},      // field in the skylinks collection
+			{"as", "fromSkylinks"},
+		}},
+	}
+	replaceStage := bson.D{
+		{"$replaceRoot", bson.D{
+			{"newRoot", bson.D{
+				{"$mergeObjects", bson.A{
+					bson.D{{"$arrayElemAt", bson.A{"$fromSkylinks", 0}}}, "$$ROOT"},
+				},
+			}},
+		}},
+	}
+	// This stage checks if the download has a non-zero `bytes` field and if so,
+	// it takes it as the download's size. Otherwise it reports the full
+	// skylink's size as download's size.
+	projectStage := bson.D{{"$project", bson.D{
+		{"skylink", 1},
+		{"name", 1},
+		{"user_id", 1},
+		{"skylink_id", 1},
+		{"timestamp", 1},
+		{"size", bson.D{
+			{"$cond", bson.A{
+				bson.D{{"$gt", bson.A{"$bytes", 0}}}, // if
+				"$bytes",                             // then
+				"$size",                              // else
+			}},
+		}},
+	}}}
 	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
 }
 
