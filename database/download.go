@@ -105,5 +105,5 @@ func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSi
 	if err != nil {
 		return nil, 0, err
 	}
-	return downloads, cnt, nil
+	return downloads, int(cnt), nil
 }

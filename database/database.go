@@ -286,14 +286,23 @@ func generateUploadsDownloadsPipeline(matchStage bson.D, offset, pageSize int) m
 
 // count returns the number of documents in the given collection that match the
 // given matchStage.
-func count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int, error) {
+func count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int64, error) {
 	pipeline := mongo.Pipeline{matchStage, bson.D{{"$count", "count"}}}
 	c, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
-		return 0, err
+		return 0, errors.AddContext(err, "DB query failed")
 	}
+	defer func() { _ = c.Close(ctx) }()
 	if ok := c.Next(ctx); !ok {
-		return 0, c.Err()
+		// No results found. This is expected.
+		return 0, nil
 	}
-	return int(c.Current.Lookup("count").Int32()), nil
+	// We need this struct, so we can safely decode both int32 and int64.
+	result := struct {
+		Count int64 `bson:"count"`
+	}{}
+	if err = c.Decode(&result); err != nil {
+		return 0, errors.AddContext(err, "failed to decode DB data")
+	}
+	return result.Count, nil
 }

@@ -14,13 +14,19 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// User status tiers.
 const (
+	// User status tiers.
 	TierReserved = iota
 	TierFree
 	TierPremium5
 	TierPremium20
 	TierPremium80
+
+	MB = 1024 * 1024
+
+	// Prices
+	PriceBandwidthRegistryWrite = 5 * MB
+	PriceBandwidthRegistryRead  = MB
 )
 
 type (
@@ -162,7 +168,7 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	defer func() { _ = c.Close(ctx) }()
 
 	var users []*User
-	errs := []error{}
+	var errs []error
 	for c.Next(ctx) {
 		var u User
 		if err = c.Decode(&u); err != nil {
@@ -187,7 +193,7 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 // userBandwidth reports the total bandwidth used by the user.
 func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, error) {
 	var bandwidthAtomic int64
-	errs := []error{}
+	var errs []error
 	var errsMux sync.Mutex
 	regErr := func(msg string, e error) {
 		db.staticLogger.Info(msg, e)
@@ -205,6 +211,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's upload bandwidth used:", err)
 			return
 		}
+		db.staticLogger.Traceln("User upload bandwidth:", bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
@@ -215,6 +222,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's download bandwidth used:", err)
 			return
 		}
+		db.staticLogger.Traceln("User download bandwidth:", bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
@@ -225,6 +233,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's registry write bandwidth used:", err)
 			return
 		}
+		db.staticLogger.Traceln("User registry write bandwidth:", bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
@@ -235,6 +244,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's registry read bandwidth used:", err)
 			return
 		}
+		db.staticLogger.Traceln("User registry read bandwidth:", bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 
@@ -323,14 +333,22 @@ func (db *DB) userDownloadBandwidth(ctx context.Context, id primitive.ObjectID) 
 
 // userRegistryWriteBandwidth reports the bandwidth used by the user's registry
 // writes.
-func (db *DB) userRegistryWriteBandwidth(_ context.Context, _ primitive.ObjectID) (int64, error) {
-	// TODO Implement
-	return 0, nil
+func (db *DB) userRegistryWriteBandwidth(ctx context.Context, userId primitive.ObjectID) (int64, error) {
+	matchStage := bson.D{{"$match", bson.D{{"user_id", userId}}}}
+	writes, err := count(ctx, db.staticRegistryWrites, matchStage)
+	if err != nil {
+		return 0, errors.AddContext(err, "failed to fetch registry write bandwidth")
+	}
+	return writes * PriceBandwidthRegistryWrite, nil
 }
 
 // userRegistryReadBandwidth reports the bandwidth used by the user's registry
 // reads.
-func (db *DB) userRegistryReadBandwidth(_ context.Context, _ primitive.ObjectID) (int64, error) {
-	// TODO Implement
-	return 0, nil
+func (db *DB) userRegistryReadBandwidth(ctx context.Context, userId primitive.ObjectID) (int64, error) {
+	matchStage := bson.D{{"$match", bson.D{{"user_id", userId}}}}
+	reads, err := count(ctx, db.staticRegistryReads, matchStage)
+	if err != nil {
+		return 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
+	}
+	return reads * PriceBandwidthRegistryRead, nil
 }
