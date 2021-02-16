@@ -14,6 +14,7 @@ type Download struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
 	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
+	Bytes     int64              `bson:"bytes" json:"bytes"`
 	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 }
 
@@ -47,8 +48,9 @@ func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Downloa
 	return &d, nil
 }
 
-// DownloadCreate registers a new download.
-func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink) (*Download, error) {
+// DownloadCreate registers a new download. Marks partial downloads by supplying
+// the `bytes` param. If `bytes` is 0 we assume a full download.
+func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, bytes int64) (*Download, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
@@ -58,6 +60,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink) (*
 	up := Download{
 		UserID:    user.ID,
 		SkylinkID: skylink.ID,
+		Bytes:     bytes,
 		Timestamp: time.Now().UTC(),
 	}
 	ior, err := db.staticDownloads.InsertOne(ctx, up)

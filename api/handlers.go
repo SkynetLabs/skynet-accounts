@@ -177,8 +177,8 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 		// Queue the skylink to have its meta data fetched and updated in the
 		// DB, as well as the user's used space to be updated.
 		api.staticMF.Queue <- metafetcher.Message{
-			UserID:    u.ID,
-			SkylinkID: skylink.ID,
+			UploaderID: u.ID,
+			SkylinkID:  skylink.ID,
 		}
 	} else {
 		err = api.staticDB.UserUpdateUsedStorage(req.Context(), u.ID, skylink.Size)
@@ -198,8 +198,18 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	st := ps.ByName("status")
-	rg := ps.ByName("range")
+
+	_ = req.ParseForm()
+	downloadedBytes, err := strconv.ParseInt(req.Form.Get("bytes"), 10, 64)
+	if err != nil {
+		api.staticLogger.Traceln("Failed to parse bytes downloaded:", err)
+		downloadedBytes = 0
+	}
+	if downloadedBytes < 0 {
+		api.WriteError(w, errors.New("negative download size"), http.StatusBadRequest)
+		return
+	}
+
 	sl := ps.ByName("skylink")
 	if sl == "" {
 		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
@@ -214,23 +224,28 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.staticLogger.Tracef("Downloading skylink %v, status %v, range %v\n", skylink, st, rg)
-	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink)
+	// If the size of the download is not supplied, assume the entire file was
+	// downloaded.
+	if downloadedBytes == 0 && skylink.Size > 0 {
+		downloadedBytes = skylink.Size
+	}
+	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	// Zero size means that we haven't fetched the skyfile's size yet.
+	// Queue the skylink to have its meta data fetched. We do not specify a user
+	// here because this is not an upload, so nobody's used storage needs to be
+	// adjusted.
 	if skylink.Size == 0 {
-		// Zero size means that we haven't fetched the skyfile's size yet.
-		// Queue the skylink to have its meta data fetched and updated in the
-		// DB, as well as the user's used space to be updated.
 		api.staticMF.Queue <- metafetcher.Message{
-			UserID:    u.ID,
 			SkylinkID: skylink.ID,
 		}
 	}
