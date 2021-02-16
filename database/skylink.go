@@ -90,6 +90,20 @@ func (db *DB) SkylinkUpdate(ctx context.Context, id primitive.ObjectID, name str
 	return nil
 }
 
+// SkylinkDownloadsUpdate changes the size of the full downloads of this
+// skylink. Those should have zero `bytes` in the DB. This method should be
+// called from the fetcher.
+func (db *DB) SkylinkDownloadsUpdate(ctx context.Context, id primitive.ObjectID, bytes int64) error {
+	filter := bson.M{"_id": id}
+	updates := bson.M{}
+	updates["bytes"] = bytes
+	_, err := db.staticDownloads.UpdateMany(ctx, filter, bson.M{"$set": updates})
+	if err != nil {
+		return errors.AddContext(err, "failed to update")
+	}
+	return nil
+}
+
 // validateSkylink extracts the skylink hash from the given skylink that might
 // have protocol, path, etc. within it.
 func validateSkylink(skylink string) (string, error) {
