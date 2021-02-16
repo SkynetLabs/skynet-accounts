@@ -201,7 +201,7 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 		}
 		u.BandwidthUsed, err = db.userBandwidth(ctx, u.ID)
 		if err != nil {
-			db.staticLogger.Debugf("Failed to fetch bandwidth used for user (%s: %s): %v\n", fieldName, fieldValue, err)
+			db.staticLogger.Debugf("Failed to fetch bandwidth used for user (%s: %s): %v", fieldName, fieldValue, err)
 			errs = append(errs, err)
 		}
 		users = append(users, &u)
@@ -236,7 +236,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's upload bandwidth used:", err)
 			return
 		}
-		db.staticLogger.Tracef("User %s upload bandwidth: %v\n", id.Hex(), bw)
+		db.staticLogger.Tracef("User %s upload bandwidth: %v", id.Hex(), bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
@@ -247,7 +247,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's download bandwidth used:", err)
 			return
 		}
-		db.staticLogger.Tracef("User %s download bandwidth: %v\n", id.Hex(), bw)
+		db.staticLogger.Tracef("User %s download bandwidth: %v", id.Hex(), bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
@@ -258,7 +258,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's registry write bandwidth used:", err)
 			return
 		}
-		db.staticLogger.Tracef("User %s registry write bandwidth: %v\n", id.Hex(), bw)
+		db.staticLogger.Tracef("User %s registry write bandwidth: %v", id.Hex(), bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
@@ -269,7 +269,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's registry read bandwidth used:", err)
 			return
 		}
-		db.staticLogger.Tracef("User %s registry read bandwidth: %v\n", id.Hex(), bw)
+		db.staticLogger.Tracef("User %s registry read bandwidth: %v", id.Hex(), bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 

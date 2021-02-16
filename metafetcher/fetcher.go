@@ -108,7 +108,11 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	client := http.Client{}
 	res, err := client.Do(&req)
 	if err != nil || res.StatusCode > 399 {
-		mf.logger.Tracef("Failed to fetch skyfile. Skylink: %s, error: %v", sl.Skylink, err)
+		var statusCode int
+		if res != nil {
+			statusCode = res.StatusCode
+		}
+		mf.logger.Tracef("Failed to fetch skyfile. Skylink: %s, status: %v, error: %v", sl.Skylink, statusCode, err)
 		if m.Attempts >= maxAttempts {
 			mf.logger.Debugf("Message exceeded its maximum number of attempts, dropping: %v", m)
 			return
