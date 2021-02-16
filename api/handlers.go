@@ -180,6 +180,13 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 			UserID:    u.ID,
 			SkylinkID: skylink.ID,
 		}
+	} else {
+		err = api.staticDB.UserUpdateUsedStorage(req.Context(), u.ID, skylink.Size)
+		if err != nil {
+			// Log the error but return success - the record will be corrected
+			// later when we rescan the user's used space.
+			api.staticLogger.Debug("Failed to update user's used space:", err)
+		}
 	}
 	api.WriteSuccess(w)
 }

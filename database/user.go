@@ -31,6 +31,7 @@ type (
 		ID            primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Sub           string             `bson:"sub" json:"sub"`
 		Tier          int                `bson:"tier" json:"tier"`
+		StorageUsed   int64              `bson:"storage_used" json:"storageUsed"`
 		BandwidthUsed int64              `bson:"-" json:"bandwidthUsed"`
 	}
 )
@@ -134,6 +135,17 @@ func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 		return errors.AddContext(err, "failed to update")
 	}
 	return nil
+}
+
+// UserUpdateUsedStorage changes the user's used storage by adding the given
+// delta. If the delta is negative the change will be a decrease.
+func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, delta int64) error {
+	filter := bson.M{"_id": id}
+	update := bson.M{"$inc": bson.M{
+		"storage_used": delta,
+	}}
+	_, err := db.staticUsers.UpdateOne(ctx, filter, update)
+	return err
 }
 
 // managedUsersByField finds all users that have a given field value.
