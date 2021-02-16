@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -22,11 +23,31 @@ const (
 	TierPremium20
 	TierPremium80
 
-	MB = 1024 * 1024
+	KB = 1024
+	MB = 1024 * KB
 
 	// Prices
+
 	PriceBandwidthRegistryWrite = 5 * MB
 	PriceBandwidthRegistryRead  = MB
+
+	// PriceBandwidthUploadBase is the baseline bandwidth price for each upload.
+	// This is the cost of uploading the base sector.
+	PriceBandwidthUploadBase = 40 * MB
+	// PriceBandwidthUploadIncrement is the bandwidth price per 40MB beyond
+	// the base sector (beyond the first 4MB). Rounded up.
+	PriceBandwidthUploadIncrement = 120 * MB
+	// PriceBandwidthDownloadBase is the baseline bandwidth price for each Download.
+	PriceBandwidthDownloadBase = 200 * KB
+	// PriceBandwidthDownloadIncrement is the bandwidth price per 64B. Rounded up.
+	PriceBandwidthDownloadIncrement = 64
+
+	// PriceStorageUploadBase is the baseline storage price for each upload.
+	// This is the cost of uploading the base sector.
+	PriceStorageUploadBase = 4 * MB
+	// PriceStorageUploadIncrement is the storage price for each 40MB beyond
+	// the base sector (beyond the first 4MB). Rounded up.
+	PriceStorageUploadIncrement = 40 * MB
 )
 
 type (
@@ -143,12 +164,16 @@ func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserUpdateUsedStorage changes the user's used storage by adding the given
-// delta. If the delta is negative the change will be a decrease.
-func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, delta int64) error {
+// UserUpdateUsedStorage changes the user's used storage respective to the size
+// of the upload.
+func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, uploadSize int64) error {
+	if uploadSize <= 0 {
+		return errors.New("invalid upload size, it needs to be positive, got: " + strconv.Itoa(int(uploadSize)))
+	}
+	storageInc := PriceStorageUploadBase + numChunks(uint64(uploadSize))*PriceStorageUploadIncrement
 	filter := bson.M{"_id": id}
 	update := bson.M{"$inc": bson.M{
-		"storage_used": delta,
+		"storage_used": storageInc,
 	}}
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update)
 	return err
@@ -211,7 +236,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's upload bandwidth used:", err)
 			return
 		}
-		db.staticLogger.Traceln("User upload bandwidth:", bw)
+		db.staticLogger.Tracef("User %s upload bandwidth: %v\n", id.Hex(), bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
@@ -222,7 +247,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's download bandwidth used:", err)
 			return
 		}
-		db.staticLogger.Traceln("User download bandwidth:", bw)
+		db.staticLogger.Tracef("User %s download bandwidth: %v\n", id.Hex(), bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
@@ -233,7 +258,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's registry write bandwidth used:", err)
 			return
 		}
-		db.staticLogger.Traceln("User registry write bandwidth:", bw)
+		db.staticLogger.Tracef("User %s registry write bandwidth: %v\n", id.Hex(), bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
@@ -244,7 +269,7 @@ func (db *DB) userBandwidth(ctx context.Context, id primitive.ObjectID) (int64, 
 			regErr("Failed to get user's registry read bandwidth used:", err)
 			return
 		}
-		db.staticLogger.Traceln("User registry read bandwidth:", bw)
+		db.staticLogger.Tracef("User %s registry read bandwidth: %v\n", id.Hex(), bw)
 		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 
@@ -276,35 +301,33 @@ func (db *DB) userUploadBandwidth(ctx context.Context, id primitive.ObjectID) (i
 			}},
 		}},
 	}
-	groupStage := bson.D{{"$group", bson.D{
-		{"_id", "$user_id"},
-		{"bandwidth", bson.D{{"$sum", "$size"}}},
-	}}}
+	projectStage := bson.D{{"$project", bson.D{{"skylink", 0}}}}
 
-	pipeline := mongo.Pipeline{matchStage, lookupStage, replaceStage, groupStage}
+	pipeline := mongo.Pipeline{matchStage, lookupStage, replaceStage, projectStage}
 	c, err := db.staticUploads.Aggregate(ctx, pipeline)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = c.Close(ctx) }()
-	if ok := c.Next(ctx); !ok {
-		// No results found. This is expected.
-		return 0, nil
-	}
+	var bandwidth int64
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
-		Bandwidth int64 `bson:"bandwidth"`
+		Size uint64 `bson:"size"`
 	}{}
-	if err = c.Decode(&result); err != nil {
-		return 0, errors.AddContext(err, "failed to decode DB data")
+	for c.Next(ctx) {
+		if err = c.Decode(&result); err != nil {
+			return 0, errors.AddContext(err, "failed to decode DB data")
+		}
+		bandwidth += PriceBandwidthUploadBase + int64(numChunks(result.Size))*PriceBandwidthUploadIncrement
 	}
-	return result.Bandwidth, nil
+	return bandwidth, nil
 }
 
 // userDownloadBandwidth reports the download bandwidth used by the user. It
 // uses the cumulative downloaded amount, noted with each download record. Those
 // numbers account for the actual bandwidth used, as reported by nginx.
 func (db *DB) userDownloadBandwidth(ctx context.Context, id primitive.ObjectID) (int64, error) {
+	// TODO incremental downloads via 206s
 	matchStage := bson.D{{"$match", bson.D{{"user_id", id}}}}
 	groupStage := bson.D{{"$group", bson.D{
 		{"_id", "$user_id"},
@@ -351,4 +374,17 @@ func (db *DB) userRegistryReadBandwidth(ctx context.Context, userId primitive.Ob
 		return 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
 	}
 	return reads * PriceBandwidthRegistryRead, nil
+}
+
+// numChunks returns the number of 40MB chunks a file of this size uses, beyond
+// the 4MB in the base sector.
+func numChunks(size uint64) uint64 {
+	if size <= 4*MB {
+		return 0
+	}
+	chunksBeyondBase := (size - 4*MB) / (40 * MB)
+	if (size-4*MB)%(40*MB) > 0 {
+		chunksBeyondBase++
+	}
+	return chunksBeyondBase
 }
