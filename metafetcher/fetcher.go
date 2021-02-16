@@ -83,6 +83,14 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	// Check if we have already fetched the size of this skylink and skip the
 	// HTTP call if we have.
 	if sl.Size != 0 {
+		err = mf.db.UserUpdateUsedStorage(ctx, m.UserID, sl.Size)
+		if err != nil {
+			mf.logger.Debugf("Failed to update user's used storage: %s", err)
+			// This return might be redundant but it's better to have it than to
+			// forget to add it when we add more code below.
+			return
+		}
+		mf.logger.Tracef("Successfully incremented the used storage ofuser %v with the size of skyfile %v.", m.UserID, m.SkylinkID)
 		return
 	}
 	// Make a HEAD request directly to the local `sia` container. We do that, so
@@ -129,6 +137,13 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		mf.logger.Debugf("Failed to update skyfile metadata: %s", err)
 		// We don't return here because we want to perform the next operation
 		// regardless of the success of the current one.
+	}
+	err = mf.db.UserUpdateUsedStorage(ctx, m.UserID, meta.Length)
+	if err != nil {
+		mf.logger.Debugf("Failed to update user's used storage: %s", err)
+		// This return might be redundant but it's better to have it than to
+		// forget to add it when we add more code below.
+		return
 	}
 	mf.logger.Tracef("Successfully updated skylink %v.", m.SkylinkID)
 }
