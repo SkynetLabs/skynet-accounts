@@ -289,19 +289,28 @@ func (db *DB) userUploadBandwidth(ctx context.Context, id primitive.ObjectID) (i
 			{"from", "skylinks"},
 			{"localField", "skylink_id"},
 			{"foreignField", "_id"},
-			{"as", "skylink"},
+			{"as", "skylink_data"},
 		}},
 	}
 	replaceStage := bson.D{
 		{"$replaceRoot", bson.D{
 			{"newRoot", bson.D{
 				{"$mergeObjects", bson.A{
-					bson.D{{"$arrayElemAt", bson.A{"$skylink", 0}}}, "$$ROOT"},
+					bson.D{{"$arrayElemAt", bson.A{"$skylink_data", 0}}}, "$$ROOT"},
 				},
 			}},
 		}},
 	}
-	projectStage := bson.D{{"$project", bson.D{{"skylink", 0}}}}
+	// These are the fields we don't need.
+	projectStage := bson.D{{"$project", bson.D{
+		{"_id", 0},
+		{"user_id", 0},
+		{"skylink", 0},
+		{"skylink_data", 0},
+		{"name", 0},
+		{"skylink_id", 0},
+		{"timestamp", 0},
+	}}}
 
 	pipeline := mongo.Pipeline{matchStage, lookupStage, replaceStage, projectStage}
 	c, err := db.staticUploads.Aggregate(ctx, pipeline)
