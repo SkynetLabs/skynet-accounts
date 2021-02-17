@@ -7,6 +7,7 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"gitlab.com/NebulousLabs/errors"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // TestDatabase_UserBySub ensures UserBySub works as expected.
@@ -52,8 +53,12 @@ func TestDatabase_UserByID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	id, err := primitive.ObjectIDFromHex("5fac383fdafc482e510627c3")
+	if err != nil {
+		t.Fatalf("Expected to be able to parse id hex string, got %v\n", err)
+	}
 	// Test finding a non-existent user. This should fail.
-	_, err = db.UserByID(ctx, "5fac383fdafc482e510627c3")
+	_, err = db.UserByID(ctx, id)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error ErrUserNotFound, got %v\n", err)
 	}
@@ -69,7 +74,7 @@ func TestDatabase_UserByID(t *testing.T) {
 	}(u)
 
 	// Test finding an existent user. This should pass.
-	u1, err := db.UserByID(ctx, u.ID.Hex())
+	u1, err := db.UserByID(ctx, u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +106,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to update user:", err)
 	}
-	u1, err := db.UserByID(ctx, u.ID.Hex())
+	u1, err := db.UserByID(ctx, u.ID)
 	if err != nil {
 		t.Fatal("Failed to load user:", err)
 	}
@@ -128,7 +133,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Make sure the user is there.
-	fu, err := db.UserByID(ctx, u.ID.Hex())
+	fu, err := db.UserByID(ctx, u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +146,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Make sure the user is not there anymore.
-	_, err = db.UserByID(ctx, u.ID.Hex())
+	_, err = db.UserByID(ctx, u.ID)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatal(err)
 	}
