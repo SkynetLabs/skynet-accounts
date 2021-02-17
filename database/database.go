@@ -259,7 +259,7 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 // and then fetch $limit of them, allowing us to paginate. It will then
 // join with the `skylinks` collection in order to fetch some additional
 // data about each download.
-func generateUpoadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
+func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
 	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
 	skipStage := bson.D{{"$skip", offset}}
 	limitStage := bson.D{{"$limit", pageSize}}
