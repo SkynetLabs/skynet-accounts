@@ -105,5 +105,8 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 	if err != nil {
 		return nil, 0, err
 	}
+	for _, ul := range uploads {
+		ul.Size = storageUsed(ul.Size)
+	}
 	return uploads, int(cnt), nil
 }

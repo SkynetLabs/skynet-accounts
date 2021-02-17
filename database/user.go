@@ -186,10 +186,9 @@ func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, 
 	if uploadSize <= 0 {
 		return errors.New("invalid upload size, it needs to be positive, got: " + strconv.Itoa(int(uploadSize)))
 	}
-	storageInc := PriceStorageUploadBase + numChunks(uint64(uploadSize))*PriceStorageUploadIncrement
 	filter := bson.M{"_id": id}
 	update := bson.M{"$inc": bson.M{
-		"storage_used": storageInc,
+		"storage_used": storageUsed(uint64(uploadSize)),
 	}}
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update)
 	return err
@@ -461,4 +460,10 @@ func numChunks(size uint64) uint64 {
 		chunksBeyondBase++
 	}
 	return chunksBeyondBase
+}
+
+// storageUsed calculates how much storage an upload with a given size actually
+// uses.
+func storageUsed(uploadSize uint64) uint64 {
+	return PriceStorageUploadBase + numChunks(uploadSize)*PriceStorageUploadIncrement
 }
