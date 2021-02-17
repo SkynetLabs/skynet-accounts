@@ -159,6 +159,6 @@ func DBTestCredentials() database.DBCredentials {
 		User:     "admin",
 		Password: "aO4tV5tC1oU3oQ7u",
 		Host:     "localhost",
-		Port:     "27017",
+		Port:     "17017",
 	}
 }
