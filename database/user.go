@@ -17,38 +17,44 @@ import (
 )
 
 const (
-	// User status tiers.
+	// TierReserved reserved
 	TierReserved = iota
+	// TierFree free
 	TierFree
+	// TierPremium5 5
 	TierPremium5
+	// TierPremium20 20
 	TierPremium20
+	// TierPremium80 80
 	TierPremium80
 
-	KB = 1024
-	MB = 1024 * KB
+	// KiB kilobyte
+	KiB = 1024
+	// MiB megabyte
+	MiB = 1024 * KiB
 
-	// Prices
-
-	PriceBandwidthRegistryWrite = 5 * MB
-	PriceBandwidthRegistryRead  = MB
+	// PriceBandwidthRegistryWrite the bandwidth cost of a single registry write
+	PriceBandwidthRegistryWrite = 5 * MiB
+	// PriceBandwidthRegistryRead the bandwidth cost of a single registry read
+	PriceBandwidthRegistryRead = MiB
 
 	// PriceBandwidthUploadBase is the baseline bandwidth price for each upload.
 	// This is the cost of uploading the base sector.
-	PriceBandwidthUploadBase = 40 * MB
+	PriceBandwidthUploadBase = 40 * MiB
 	// PriceBandwidthUploadIncrement is the bandwidth price per 40MB beyond
 	// the base sector (beyond the first 4MB). Rounded up.
-	PriceBandwidthUploadIncrement = 120 * MB
+	PriceBandwidthUploadIncrement = 120 * MiB
 	// PriceBandwidthDownloadBase is the baseline bandwidth price for each Download.
-	PriceBandwidthDownloadBase = 200 * KB
+	PriceBandwidthDownloadBase = 200 * KiB
 	// PriceBandwidthDownloadIncrement is the bandwidth price per 64B. Rounded up.
 	PriceBandwidthDownloadIncrement = 64
 
 	// PriceStorageUploadBase is the baseline storage price for each upload.
 	// This is the cost of uploading the base sector.
-	PriceStorageUploadBase = 4 * MB
+	PriceStorageUploadBase = 4 * MiB
 	// PriceStorageUploadIncrement is the storage price for each 40MB beyond
 	// the base sector (beyond the first 4MB). Rounded up.
-	PriceStorageUploadIncrement = 40 * MB
+	PriceStorageUploadIncrement = 40 * MiB
 )
 
 type (
@@ -59,7 +65,7 @@ type (
 		ID              primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Sub             string             `bson:"sub" json:"sub"`
 		Tier            int                `bson:"tier" json:"tier"`
-		StorageUsed     int64              `bson:"storage_used" json:"storageUsed"`
+		StorageUsed     int64              `bson:"storage_used" json:"StorageUsed"`
 		SubscribedUntil time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
 	}
 	// UserDetails builds on top of User and provides additional information,
@@ -137,13 +143,19 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 
 // UserDetails returns the full user profile information.
 func (db *DB) UserDetails(ctx context.Context, user *User) (*UserDetails, error) {
+	// Refresh the user from the DB.
+	u, err := db.UserByID(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	// Fetch the details.
 	bandwidthUsed, err := db.userBandwidth(ctx, user.ID)
 	if err != nil {
 		db.staticLogger.Debugf("Failed to fetch bandwidth used for user (%v): %v", user.Sub, err)
 		return nil, err
 	}
 	return &UserDetails{
-		User:          *user,
+		User:          *u,
 		BandwidthUsed: bandwidthUsed,
 	}, err
 }
@@ -188,7 +200,7 @@ func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, 
 	}
 	filter := bson.M{"_id": id}
 	update := bson.M{"$inc": bson.M{
-		"storage_used": storageUsed(uint64(uploadSize)),
+		"storage_used": StorageUsed(uint64(uploadSize)),
 	}}
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update)
 	return err
@@ -452,18 +464,18 @@ func (db *DB) monthStart(ctx context.Context, userId primitive.ObjectID) (time.T
 // numChunks returns the number of 40MB chunks a file of this size uses, beyond
 // the 4MB in the base sector.
 func numChunks(size uint64) uint64 {
-	if size <= 4*MB {
+	if size <= 4*MiB {
 		return 0
 	}
-	chunksBeyondBase := (size - 4*MB) / (40 * MB)
-	if (size-4*MB)%(40*MB) > 0 {
+	chunksBeyondBase := (size - 4*MiB) / (40 * MiB)
+	if (size-4*MiB)%(40*MiB) > 0 {
 		chunksBeyondBase++
 	}
 	return chunksBeyondBase
 }
 
-// storageUsed calculates how much storage an upload with a given size actually
+// StorageUsed calculates how much storage an upload with a given size actually
 // uses.
-func storageUsed(uploadSize uint64) uint64 {
+func StorageUsed(uploadSize uint64) uint64 {
 	return PriceStorageUploadBase + numChunks(uploadSize)*PriceStorageUploadIncrement
 }

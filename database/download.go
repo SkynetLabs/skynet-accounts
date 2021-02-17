@@ -77,6 +77,9 @@ func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, p
 	if skylink.ID.IsZero() {
 		return nil, 0, errors.New("invalid skylink")
 	}
+	if err := validateOffsetPageSize(offset, pageSize); err != nil {
+		return nil, 0, err
+	}
 	matchStage := bson.D{{"$match", bson.D{{"skylink_id", skylink.ID}}}}
 	return db.downloadsBy(ctx, matchStage, offset, pageSize)
 }
@@ -86,6 +89,9 @@ func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, p
 func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
+	}
+	if err := validateOffsetPageSize(offset, pageSize); err != nil {
+		return nil, 0, err
 	}
 	matchStage := bson.D{{"$match", bson.D{{"user_id", user.ID}}}}
 	return db.downloadsBy(ctx, matchStage, offset, pageSize)
