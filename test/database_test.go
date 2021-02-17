@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )

@@ -6,8 +6,8 @@ import (
 	"net/url"
 
 	"github.com/NebulousLabs/skynet-accounts/lib"
-	"github.com/sirupsen/logrus"
 
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

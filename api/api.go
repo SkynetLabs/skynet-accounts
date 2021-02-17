@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/NebulousLabs/skynet-accounts/metafetcher"
-
-	"github.com/sirupsen/logrus"
-
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
