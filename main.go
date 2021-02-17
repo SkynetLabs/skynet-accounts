@@ -78,6 +78,12 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
 	}
+	if kaddr := os.Getenv("KRATOS_ADDR"); kaddr != "" {
+		api.KratosAddr = kaddr
+	}
+	if oaddr := os.Getenv("OATHKEEPER_ADDR"); oaddr != "" {
+		api.OathkeeperAddr = oaddr
+	}
 
 	ctx := context.Background()
 	logger := logrus.New()

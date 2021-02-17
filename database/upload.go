@@ -95,7 +95,8 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 	if err != nil || cnt == 0 {
 		return []UploadResponseDTO{}, 0, err
 	}
-	c, err := db.staticUploads.Aggregate(ctx, generateUploadsDownloadsPipeline(matchStage, offset, pageSize))
+	pipeline := generateUploadsDownloadsPipeline(matchStage, offset, pageSize)
+	c, err := db.staticUploads.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, 0, err
 	}

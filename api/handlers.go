@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
@@ -11,6 +12,52 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 )
+
+// loginHandler starts a user session by issuing a cookie
+func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	tokenStr, err := tokenFromRequest(req)
+	if err != nil {
+		api.staticLogger.Traceln("Error fetching token from request:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	token, err := ValidateToken(api.staticLogger, tokenStr)
+	if err != nil {
+		api.staticLogger.Traceln("Error validating token:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	exp, err := tokenExpiration(token)
+	if err != nil {
+		api.staticLogger.Traceln("Error checking token expiration:", err)
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	err = writeCookie(w, tokenStr, exp)
+	if err != nil {
+		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// logoutHandler ends a user session by removing a cookie
+func (api *API) logoutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	_, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.staticLogger.Traceln("Error fetching token from context:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	err = writeCookie(w, "", time.Now().UTC().Unix()-1)
+	if err != nil {
+		api.staticLogger.Traceln("Error deleting cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
 
 // userHandler returns information about an existing user and create it if it
 // doesn't exist.
@@ -65,7 +112,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
@@ -98,7 +145,7 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	sl := ps.ByName("skylink")
@@ -148,7 +195,7 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	sl := ps.ByName("skylink")
@@ -171,6 +218,46 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		return
 	}
 	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// trackRegistryReadHandler registers a new registry read in the system.
+func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	_, err = api.staticDB.RegistryReadCreate(req.Context(), *u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// trackRegistryWriteHandler registers a new registry read in the system.
+func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	_, err = api.staticDB.RegistryWriteCreate(req.Context(), *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
