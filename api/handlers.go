@@ -72,7 +72,12 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteJSON(w, u)
+	ud, err := api.staticDB.UserDetails(req.Context(), u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, ud)
 }
 
 // userUploadsHandler returns all uploads made by the current user.

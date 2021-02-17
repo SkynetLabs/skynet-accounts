@@ -60,8 +60,13 @@ type (
 		Sub             string             `bson:"sub" json:"sub"`
 		Tier            int                `bson:"tier" json:"tier"`
 		StorageUsed     int64              `bson:"storage_used" json:"storageUsed"`
-		BandwidthUsed   int64              `bson:"-" json:"bandwidthUsed"`
 		SubscribedUntil time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
+	}
+	// UserDetails builds on top of User and provides additional information,
+	// typically more expensive to fetch than a single DB query.
+	UserDetails struct {
+		User
+		BandwidthUsed int64 `bson:"-" json:"bandwidthUsed"`
 	}
 )
 
@@ -130,6 +135,19 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 	return u, nil
 }
 
+// UserDetails returns the full user profile information.
+func (db *DB) UserDetails(ctx context.Context, user *User) (*UserDetails, error) {
+	bandwidthUsed, err := db.userBandwidth(ctx, user.ID)
+	if err != nil {
+		db.staticLogger.Debugf("Failed to fetch bandwidth used for user (%v): %v", user.Sub, err)
+		return nil, err
+	}
+	return &UserDetails{
+		User:          *user,
+		BandwidthUsed: bandwidthUsed,
+	}, err
+}
+
 // UserDelete deletes a user by their ID.
 func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if u.ID.IsZero() {
@@ -180,9 +198,6 @@ func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, 
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
-	// TODO Add filtering on current period and so on. For the moment we'll
-	// 	report overall data.
-
 	filter := bson.D{{fieldName, fieldValue}}
 	c, err := db.staticUsers.Find(ctx, filter)
 	if err != nil {
@@ -191,24 +206,15 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	defer func() { _ = c.Close(ctx) }()
 
 	var users []*User
-	var errs []error
 	for c.Next(ctx) {
 		var u User
 		if err = c.Decode(&u); err != nil {
 			return nil, errors.AddContext(err, "failed to parse value from DB")
 		}
-		u.BandwidthUsed, err = db.userBandwidth(ctx, u.ID)
-		if err != nil {
-			db.staticLogger.Debugf("Failed to fetch bandwidth used for user (%s: %s): %v", fieldName, fieldValue, err)
-			errs = append(errs, err)
-		}
 		users = append(users, &u)
 	}
 	if len(users) == 0 {
 		return users, ErrUserNotFound
-	}
-	if len(errs) > 0 {
-		return nil, errors.Compose(errs...)
 	}
 	return users, nil
 }
@@ -345,52 +351,58 @@ func (db *DB) userDownloadBandwidth(ctx context.Context, id primitive.ObjectID, 
 		{"user_id", id},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
-	groupStage := bson.D{{"$group", bson.D{
-		{"_id", "$user_id"},
-		{"bandwidth", bson.D{{"$sum", "$bytes"}}},
+	lookupStage := bson.D{
+		{"$lookup", bson.D{
+			{"from", "skylinks"},
+			{"localField", "skylink_id"}, // field in the downloads collection
+			{"foreignField", "_id"},      // field in the skylinks collection
+			{"as", "fromSkylinks"},
+		}},
+	}
+	replaceStage := bson.D{
+		{"$replaceRoot", bson.D{
+			{"newRoot", bson.D{
+				{"$mergeObjects", bson.A{
+					bson.D{{"$arrayElemAt", bson.A{"$fromSkylinks", 0}}}, "$$ROOT"},
+				},
+			}},
+		}},
+	}
+	// This stage checks if the download has a non-zero `bytes` field and if so,
+	// it takes it as the download's size. Otherwise it reports the full
+	// skylink's size as download's size.
+	projectStage := bson.D{{"$project", bson.D{
+		{"size", bson.D{
+			{"$cond", bson.A{
+				bson.D{{"$gt", bson.A{"$bytes", 0}}}, // if
+				"$bytes",                             // then
+				"$size",                              // else
+			}},
+		}},
 	}}}
 
-	// TODO Add an aggregation here that joins on the skylinks collection and
-	// 	if the bytes are 0 chooses skylink size, similar to generateDownloadsPipeline.
-	/*
-			db.downloads.aggregate([
-		    {$match: {"user_id": ObjectId("601be02c70d926e455896a6a")}},
-		    {$lookup: {
-		        from: "skylinks",
-		        localField: "skylink_id",
-		        foreignField: "_id",
-		        as: "skylink_data",
-		    }},
-		    { $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$skylink_data", 0 ] }, "$$ROOT" ] } } },
-		    { $project: {
-		        _id: 0,
-		        skylink: 1, name: 1, user_id: 1, skylink_id: 1, timestamp: 1,
-		        size: { "$cond": [
-		            {"$gt": ['$bytes', 0]},
-		            '$bytes',
-		            '$size'
-		            ] }
-		    }}
-	*/
-
-	pipeline := mongo.Pipeline{matchStage, groupStage}
+	pipeline := mongo.Pipeline{matchStage, lookupStage, replaceStage, projectStage}
 	c, err := db.staticDownloads.Aggregate(ctx, pipeline)
 	if err != nil {
 		return 0, errors.AddContext(err, "DB query failed")
 	}
 	defer func() { _ = c.Close(ctx) }()
-	if ok := c.Next(ctx); !ok {
-		// No results found. This is expected.
-		return 0, nil
-	}
+	var bandwidth int64
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
-		Bandwidth int64 `bson:"bandwidth"`
+		Size uint64 `bson:"size"`
 	}{}
-	if err = c.Decode(&result); err != nil {
-		return 0, errors.AddContext(err, "failed to decode DB data")
+	for c.Next(ctx) {
+		if err = c.Decode(&result); err != nil {
+			return 0, errors.AddContext(err, "failed to decode DB data")
+		}
+		var incomplete uint64
+		if result.Size%64 > 0 {
+			incomplete = 1
+		}
+		bandwidth += PriceBandwidthDownloadBase + int64(result.Size/64+incomplete)*PriceBandwidthDownloadIncrement
 	}
-	return result.Bandwidth, nil
+	return bandwidth, nil
 }
 
 // userRegistryWriteBandwidth reports the bandwidth used by the user's registry
