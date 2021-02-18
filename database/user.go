@@ -65,7 +65,7 @@ type (
 		ID              primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Sub             string             `bson:"sub" json:"sub"`
 		Tier            int                `bson:"tier" json:"tier"`
-		StorageUsed     int64              `bson:"storage_used" json:"StorageUsed"`
+		StorageUsed     int64              `bson:"storage_used" json:"storageUsed"`
 		SubscribedUntil time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
 	}
 	// UserDetails builds on top of User and provides additional information,
