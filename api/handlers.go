@@ -203,8 +203,8 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		downloadedBytes = 0
 		api.staticLogger.Traceln("Failed to parse bytes downloaded:", err)
 	}
-	if downloadedBytes < 0 {
-		api.WriteError(w, errors.New("negative download size"), http.StatusBadRequest)
+	if downloadedBytes <= 0 {
+		api.WriteError(w, errors.New("download size needs to be positive"), http.StatusBadRequest)
 		return
 	}
 
@@ -227,11 +227,6 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
-	}
-	// If the size of the download is not supplied, assume the entire file was
-	// downloaded.
-	if downloadedBytes == 0 && skylink.Size > 0 {
-		downloadedBytes = skylink.Size
 	}
 	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
 	if err != nil {
