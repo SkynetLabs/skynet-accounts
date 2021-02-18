@@ -24,7 +24,7 @@ type UploadResponseDTO struct {
 	ID        string    `bson:"_id" json:"id"`
 	Skylink   string    `bson:"skylink" json:"skylink"`
 	Name      string    `bson:"name" json:"name"`
-	Size      uint64    `bson:"size" json:"size"`
+	Size      int64     `bson:"size" json:"size"`
 	Timestamp time.Time `bson:"timestamp" json:"uploadedOn"`
 }
 

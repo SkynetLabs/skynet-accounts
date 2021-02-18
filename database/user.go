@@ -200,7 +200,7 @@ func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, 
 	}
 	filter := bson.M{"_id": id}
 	update := bson.M{"$inc": bson.M{
-		"storage_used": StorageUsed(uint64(uploadSize)),
+		"storage_used": StorageUsed(uploadSize),
 	}}
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update)
 	return err
@@ -343,13 +343,13 @@ func (db *DB) userUploadBandwidth(ctx context.Context, id primitive.ObjectID, mo
 	var bandwidth int64
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
-		Size uint64 `bson:"size"`
+		Size int64 `bson:"size"`
 	}{}
 	for c.Next(ctx) {
 		if err = c.Decode(&result); err != nil {
 			return 0, errors.AddContext(err, "failed to decode DB data")
 		}
-		bandwidth += PriceBandwidthUploadBase + int64(numChunks(result.Size))*PriceBandwidthUploadIncrement
+		bandwidth += BandwidthUploadCost(result.Size)
 	}
 	return bandwidth, nil
 }
@@ -401,17 +401,13 @@ func (db *DB) userDownloadBandwidth(ctx context.Context, id primitive.ObjectID, 
 	var bandwidth int64
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
-		Size uint64 `bson:"size"`
+		Size int64 `bson:"size"`
 	}{}
 	for c.Next(ctx) {
 		if err = c.Decode(&result); err != nil {
 			return 0, errors.AddContext(err, "failed to decode DB data")
 		}
-		var incomplete uint64
-		if result.Size%64 > 0 {
-			incomplete = 1
-		}
-		bandwidth += PriceBandwidthDownloadBase + int64(result.Size/64+incomplete)*PriceBandwidthDownloadIncrement
+		bandwidth += BandwidthDownloadCost(result.Size)
 	}
 	return bandwidth, nil
 }
@@ -461,9 +457,9 @@ func (db *DB) monthStart(ctx context.Context, userId primitive.ObjectID) (time.T
 	return monthStart, nil
 }
 
-// numChunks returns the number of 40MB chunks a file of this size uses, beyond
+// NumChunks returns the number of 40MB chunks a file of this size uses, beyond
 // the 4MB in the base sector.
-func numChunks(size uint64) uint64 {
+func NumChunks(size int64) int64 {
 	if size <= 4*MiB {
 		return 0
 	}
@@ -476,6 +472,22 @@ func numChunks(size uint64) uint64 {
 
 // StorageUsed calculates how much storage an upload with a given size actually
 // uses.
-func StorageUsed(uploadSize uint64) uint64 {
-	return PriceStorageUploadBase + numChunks(uploadSize)*PriceStorageUploadIncrement
+func StorageUsed(uploadSize int64) int64 {
+	return PriceStorageUploadBase + NumChunks(uploadSize)*PriceStorageUploadIncrement
+}
+
+// BandwidthUploadCost calculates the bandwidth cost of an upload with the given
+// size.
+func BandwidthUploadCost(size int64) int64 {
+	return PriceBandwidthUploadBase + NumChunks(size)*PriceBandwidthUploadIncrement
+}
+
+// BandwidthDownloadCost calculates the bandwidth cost of a download with the
+// given size.
+func BandwidthDownloadCost(size int64) int64 {
+	chunks := size / 64
+	if size%64 > 0 {
+		chunks++
+	}
+	return PriceBandwidthDownloadBase + chunks*PriceBandwidthDownloadIncrement
 }
