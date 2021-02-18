@@ -25,7 +25,7 @@ func TestDatabase_UserBySub(t *testing.T) {
 	// Test finding a non-existent user. This should fail.
 	_, err = db.UserBySub(ctx, sub, false)
 	if !errors.Contains(err, database.ErrUserNotFound) {
-		t.Fatalf("Expected error ErrUserNotFound, got %v\n", err)
+		t.Fatalf("Expected error ErrUserNotFound, got %v", err)
 	}
 
 	// Add a user to find.
@@ -43,7 +43,7 @@ func TestDatabase_UserBySub(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(u, u1) {
-		t.Fatalf("User not equal to original: %v vs %v\n", u, u1)
+		t.Fatalf("User not equal to original: %v vs %v", u, u1)
 	}
 }
 
@@ -56,12 +56,12 @@ func TestDatabase_UserByID(t *testing.T) {
 	}
 	id, err := primitive.ObjectIDFromHex("5fac383fdafc482e510627c3")
 	if err != nil {
-		t.Fatalf("Expected to be able to parse id hex string, got %v\n", err)
+		t.Fatalf("Expected to be able to parse id hex string, got %v", err)
 	}
 	// Test finding a non-existent user. This should fail.
 	_, err = db.UserByID(ctx, id)
 	if !errors.Contains(err, database.ErrUserNotFound) {
-		t.Fatalf("Expected error ErrUserNotFound, got %v\n", err)
+		t.Fatalf("Expected error ErrUserNotFound, got %v", err)
 	}
 
 	// Add a user to find.
@@ -80,7 +80,7 @@ func TestDatabase_UserByID(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(u, u1) {
-		t.Fatalf("User not equal to original: %v vs %v\n", u, u1)
+		t.Fatalf("User not equal to original: %v vs %v", u, u1)
 	}
 }
 
@@ -112,7 +112,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 		t.Fatal("Failed to load user:", err)
 	}
 	if u1.Tier != database.TierPremium5 {
-		t.Fatalf("Expected tier '%d', got '%d'\n", database.TierPremium5, u1.Tier)
+		t.Fatalf("Expected tier '%d', got '%d'", database.TierPremium5, u1.Tier)
 	}
 }
 

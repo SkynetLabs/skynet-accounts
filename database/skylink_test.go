@@ -29,13 +29,13 @@ func TestValidateSkylink(t *testing.T) {
 	for _, tt := range tests {
 		out, err := validateSkylink(tt.in)
 		if tt.valid && err != nil {
-			t.Fatalf("expected %s to be valid, got error %s\n", tt.in, err)
+			t.Fatalf("expected %s to be valid, got error %s", tt.in, err)
 		}
 		if !tt.valid && err == nil {
-			t.Fatalf("expected %s to be invalid\n", tt.in)
+			t.Fatalf("expected %s to be invalid", tt.in)
 		}
 		if out != tt.out {
-			t.Fatalf("expected %s to have output %s, got %s\n", tt.in, tt.out, out)
+			t.Fatalf("expected %s to have output %s, got %s", tt.in, tt.out, out)
 		}
 	}
 }

@@ -25,7 +25,7 @@ func (api *API) buildHTTPRoutes() {
 // validate ensures that the user making the request has logged in.
 func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		api.staticLogger.Tracef("Processing request: %+v\n", req)
+		api.staticLogger.Tracef("Processing request: %+v", req)
 		tokenStr, err := tokenFromRequest(req)
 		if err != nil {
 			api.staticLogger.Traceln("Error fetching token from request:", err)

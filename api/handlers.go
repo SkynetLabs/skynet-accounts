@@ -207,8 +207,8 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 	_ = req.ParseForm()
 	downloadedBytes, err := strconv.ParseInt(req.Form.Get("bytes"), 10, 64)
 	if err != nil {
-		api.staticLogger.Traceln("Failed to parse bytes downloaded:", err)
 		downloadedBytes = 0
+		api.staticLogger.Traceln("Failed to parse bytes downloaded:", err)
 	}
 	if downloadedBytes < 0 {
 		api.WriteError(w, errors.New("negative download size"), http.StatusBadRequest)
