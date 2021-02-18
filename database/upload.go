@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"gitlab.com/NebulousLabs/errors"
@@ -47,7 +48,8 @@ func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, e
 	return &d, nil
 }
 
-// UploadCreate registers a new upload.
+// UploadCreate registers a new upload and counts it towards the user's used
+// storage.
 func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Upload, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
@@ -65,6 +67,14 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 		return nil, err
 	}
 	up.ID = ior.InsertedID.(primitive.ObjectID)
+	if skylink.Size > 0 {
+		err = db.UserUpdateUsedStorage(ctx, user.ID, skylink.Size)
+		if err != nil {
+			// Do not fail on error, just log a message.
+			msg := fmt.Sprintf("Failed to update user's used storage for user %s and skylink %v.", user.ID.Hex(), skylink)
+			db.staticLogger.Debugln(msg, err)
+		}
+	}
 	return &up, nil
 }
 

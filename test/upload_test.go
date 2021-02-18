@@ -51,6 +51,14 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to update skylink.", err)
 	}
+	// Get the updated skylink.
+	skylink, err = db.Skylink(ctx, sl)
+	if err != nil {
+		t.Fatal("Failed to fetch skylink from DB.", err)
+	}
+	if skylink.Size != testUploadSize {
+		t.Fatalf("Expected skylink size to be %d, got %d.", testUploadSize, skylink.Size)
+	}
 	// Register an upload.
 	up, err := db.UploadCreate(ctx, *u, *skylink)
 	if err != nil {
@@ -61,12 +69,6 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	}
 	if up.SkylinkID != skylink.ID {
 		t.Fatal("Expected upload's skylinkIs to match the given skylink's id.")
-	}
-	// TODO The need to manually trigger this makes me think that we should probably bake it into UploadCreate().
-	// Update the user's used storage. This will normally be done by the fetcher.
-	err = db.UserUpdateUsedStorage(ctx, u.ID, testUploadSize)
-	if err != nil {
-		t.Fatal("Failed to update the uploader's used storage.", err)
 	}
 	// Fetch the user's uploads.
 	ups, n, err := db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
