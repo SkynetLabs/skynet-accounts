@@ -26,7 +26,6 @@ func TestUserBandwidth(t *testing.T) {
 		_ = db.UserDelete(nil, user)
 	}(u)
 
-	// skylinkLen is the upload's file size, not the used storage.
 	testUploadSizeSmall := int64(1 + fastrand.Intn(4*database.MiB))
 	expectedUploadBandwidthSmall := database.BandwidthUploadCost(testUploadSizeSmall)
 	skylinkSmall, err := createTestUpload(ctx, db, u, testUploadSizeSmall)

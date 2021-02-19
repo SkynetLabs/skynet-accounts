@@ -32,7 +32,6 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// skylinkLen is the upload's file size, not the used storage.
 	testUploadSize := int64(1 + fastrand.Intn(1e10))
 	// Add a test user.
 	sub := string(fastrand.Bytes(userSubLen))

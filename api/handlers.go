@@ -234,11 +234,6 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	// If the size of the download is not supplied, assume the entire file was
-	// downloaded.
-	if downloadedBytes == 0 && skylink.Size > 0 {
-		downloadedBytes = skylink.Size
-	}
 	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -276,7 +271,7 @@ func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Reques
 	api.WriteSuccess(w)
 }
 
-// trackRegistryWriteHandler registers a new registry read in the system.
+// trackRegistryWriteHandler registers a new registry write in the system.
 func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
