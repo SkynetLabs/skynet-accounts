@@ -9,7 +9,8 @@ import (
 	"gitlab.com/NebulousLabs/fastrand"
 )
 
-func TestUserBandwidth(t *testing.T) {
+// TestUserStats ensures we report accurate statistics for users.
+func TestUserStats(t *testing.T) {
 	ctx := context.Background()
 	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
@@ -26,63 +27,89 @@ func TestUserBandwidth(t *testing.T) {
 		_ = db.UserDelete(nil, user)
 	}(u)
 
-	testUploadSizeSmall := int64(1 + fastrand.Intn(4*database.MiB))
-	expectedUploadBandwidthSmall := database.BandwidthUploadCost(testUploadSizeSmall)
+	testUploadSizeSmall := int64(1 + fastrand.Intn(4*database.MiB-1))
+	testUploadSizeBig := int64(4*database.MiB + 1 + fastrand.Intn(4*database.MiB))
+	expectedUploadBandwidth := int64(0)
+	expectedDownloadBandwidth := int64(0)
+
+	// Create a small upload.
 	skylinkSmall, err := createTestUpload(ctx, db, u, testUploadSizeSmall)
 	if err != nil {
 		t.Fatal(err)
 	}
-	details, err := db.UserDetails(ctx, u)
+	expectedUploadBandwidth = database.BandwidthUploadCost(testUploadSizeSmall)
+	// Check the stats.
+	stats, err := db.UserStats(ctx, *u)
 	if err != nil {
-		t.Fatal("Failed to fetch user details.", err)
+		t.Fatal("Failed to fetch user stats.", err)
 	}
-	if details.BandwidthUsed != expectedUploadBandwidthSmall {
-		t.Fatalf("Expected used bandwidth of %d (%d MiB), got %d (%d MiB).", expectedUploadBandwidthSmall, expectedUploadBandwidthSmall/database.MiB, details.BandwidthUsed, details.BandwidthUsed/database.MiB)
+	if stats.NumUploads != 1 {
+		t.Fatalf("Expected a total of %d uploads, got %d.", 1, stats.NumUploads)
+	}
+	if stats.BandwidthUploads != expectedUploadBandwidth {
+		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedUploadBandwidth, expectedUploadBandwidth/database.MiB,
+			stats.BandwidthUploads, stats.BandwidthUploads/database.MiB)
 	}
 
-	testUploadSizeBig := int64(4*database.MiB + 1 + fastrand.Intn(4*database.MiB))
-	expectedUploadBandwidthBig := database.BandwidthUploadCost(testUploadSizeBig)
+	// Create a big upload.
 	skylinkBig, err := createTestUpload(ctx, db, u, testUploadSizeBig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	details, err = db.UserDetails(ctx, u)
+	expectedUploadBandwidth += database.BandwidthUploadCost(testUploadSizeBig)
+	// Check the stats.
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
-		t.Fatal("Failed to fetch user details.", err)
+		t.Fatal("Failed to fetch user stats.", err)
 	}
-	expectedBandwidth := expectedUploadBandwidthSmall + expectedUploadBandwidthBig
-	if details.BandwidthUsed != expectedBandwidth {
-		t.Fatalf("Expected used bandwidth of %d (%d MiB), got %d (%d MiB).", expectedBandwidth, expectedBandwidth/database.MiB, details.BandwidthUsed, details.BandwidthUsed/database.MiB)
+	if stats.NumUploads != 2 {
+		t.Fatalf("Expected a total of %d uploads, got %d.", 2, stats.NumUploads)
+	}
+	if stats.BandwidthUploads != expectedUploadBandwidth {
+		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedUploadBandwidth, expectedUploadBandwidth/database.MiB,
+			stats.BandwidthUploads, stats.BandwidthUploads/database.MiB)
 	}
 
-	// Register a download.
+	// Register a small download.
 	smallDownload := int64(1 + fastrand.Intn(4*database.MiB))
 	_, err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
-	// Check bandwidth.
-	details, err = db.UserDetails(ctx, u)
+	expectedDownloadBandwidth += database.BandwidthDownloadCost(smallDownload)
+	// Check the stats.
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
-		t.Fatal("Failed to fetch user details.", err)
+		t.Fatal("Failed to fetch user stats.", err)
 	}
-	expectedBandwidth += database.BandwidthDownloadCost(smallDownload)
-	if details.BandwidthUsed != expectedBandwidth {
-		t.Fatalf("Expected used bandwidth of %d (%d MiB), got %d (%d MiB).", expectedBandwidth, expectedBandwidth/database.MiB, details.BandwidthUsed, details.BandwidthUsed/database.MiB)
+	if stats.NumDownloads != 1 {
+		t.Fatalf("Expected a total of %d downloads, got %d.", 1, stats.NumDownloads)
 	}
-	// Register another download.
+	if stats.BandwidthDownloads != expectedDownloadBandwidth {
+		t.Fatalf("Expected download bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedDownloadBandwidth, expectedDownloadBandwidth/database.MiB,
+			stats.BandwidthDownloads, stats.BandwidthDownloads/database.MiB)
+	}
+	// Register a big download.
 	bigDownload := int64(100*database.MiB + fastrand.Intn(4*database.MiB))
 	_, err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
+	expectedDownloadBandwidth += database.BandwidthDownloadCost(bigDownload)
 	// Check bandwidth.
-	details, err = db.UserDetails(ctx, u)
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
-		t.Fatal("Failed to fetch user details.", err)
+		t.Fatal("Failed to fetch user stats.", err)
 	}
-	expectedBandwidth += database.BandwidthDownloadCost(bigDownload)
-	if details.BandwidthUsed != expectedBandwidth {
-		t.Fatalf("Expected used bandwidth of %d (%d MiB), got %d (%d MiB).", expectedBandwidth, expectedBandwidth/database.MiB, details.BandwidthUsed, details.BandwidthUsed/database.MiB)
+	if stats.NumDownloads != 2 {
+		t.Fatalf("Expected a total of %d downloads, got %d.", 2, stats.NumDownloads)
+	}
+	if stats.BandwidthDownloads != expectedDownloadBandwidth {
+		t.Fatalf("Expected download bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedDownloadBandwidth, expectedDownloadBandwidth/database.MiB,
+			stats.BandwidthDownloads, stats.BandwidthDownloads/database.MiB)
 	}
 }

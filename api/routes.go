@@ -18,6 +18,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/track/registry/write", api.validate(api.trackRegistryWriteHandler))
 
 	api.staticRouter.GET("/user", api.validate(api.userHandler))
+	api.staticRouter.GET("/user/stats", api.validate(api.userStatsHandler))
 	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsHandler))
 	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
 }
