@@ -39,7 +39,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedUploadBandwidth = database.BandwidthUploadCost(testUploadSizeSmall)
 	// Check the stats.
-	stats, err := db.UserStats(ctx, *u)
+	stats, err := db.UserStats(ctx, u.ID)
 	if err != nil {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
@@ -59,7 +59,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedUploadBandwidth += database.BandwidthUploadCost(testUploadSizeBig)
 	// Check the stats.
-	stats, err = db.UserStats(ctx, *u)
+	stats, err = db.UserStats(ctx, u.ID)
 	if err != nil {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
@@ -80,7 +80,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedDownloadBandwidth += database.BandwidthDownloadCost(smallDownload)
 	// Check the stats.
-	stats, err = db.UserStats(ctx, *u)
+	stats, err = db.UserStats(ctx, u.ID)
 	if err != nil {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
@@ -100,7 +100,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedDownloadBandwidth += database.BandwidthDownloadCost(bigDownload)
 	// Check bandwidth.
-	stats, err = db.UserStats(ctx, *u)
+	stats, err = db.UserStats(ctx, u.ID)
 	if err != nil {
 		t.Fatal("Failed to fetch user stats.", err)
 	}

@@ -57,15 +57,17 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	}
 	storageUsed := database.StorageUsed(testUploadSize)
 	if ups[0].Size != storageUsed {
-		t.Fatalf("Expected the reported size of an upload with file size of %d (%d MiB) to be its used storage of %d (%d MiB), got %d (%d MiB).", testUploadSize, testUploadSize/database.MiB, storageUsed, storageUsed/database.MiB, ups[0].Size, ups[0].Size/database.MiB)
+		t.Fatalf("Expected the reported size of an upload with file size of %d (%d MiB) to be its used storage of %d (%d MiB), got %d (%d MiB).",
+			testUploadSize, testUploadSize/database.MiB, storageUsed, storageUsed/database.MiB, ups[0].Size, ups[0].Size/database.MiB)
 	}
 	// Refresh the user's record and make sure we report storage used accurately.
-	user, err := db.UserByID(ctx, u.ID)
+	stats, err := db.UserStats(ctx, u.ID)
 	if err != nil {
 		t.Fatal("Failed to fetch user.", err)
 	}
-	if user.StorageUsed != storageUsed {
-		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).", storageUsed, storageUsed/database.MiB, user.StorageUsed, user.StorageUsed/database.MiB)
+	if stats.StorageUsed != storageUsed {
+		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).",
+			storageUsed, storageUsed/database.MiB, stats.StorageUsed, stats.StorageUsed/database.MiB)
 	}
 }
 

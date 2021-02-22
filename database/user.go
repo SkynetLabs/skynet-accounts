@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"strconv"
 	"sync"
 	"time"
 
@@ -64,12 +63,11 @@ type (
 		ID              primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Sub             string             `bson:"sub" json:"sub"`
 		Tier            int                `bson:"tier" json:"tier"`
-		StorageUsed     int64              `bson:"storage_used" json:"storageUsed"`
 		SubscribedUntil time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
-		User
+		StorageUsed        int64 `bson:"-" json:"storageUsed"`
 		NumRegReads        int64 `bson:"-" json:"numRegReads"`
 		NumRegWrites       int64 `bson:"-" json:"numRegWrites"`
 		NumUploads         int   `bson:"-" json:"numUploads"`
@@ -149,13 +147,8 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 }
 
 // UserStats returns statistical information about the user.
-func (db *DB) UserStats(ctx context.Context, user User) (*UserStats, error) {
-	// Refresh the user from the DB.
-	u, err := db.UserByID(ctx, user.ID)
-	if err != nil {
-		return nil, err
-	}
-	return db.userStats(ctx, *u)
+func (db *DB) UserStats(ctx context.Context, uid primitive.ObjectID) (*UserStats, error) {
+	return db.userStats(ctx, uid)
 }
 
 // UserDelete deletes a user by their ID.
@@ -190,20 +183,6 @@ func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserUpdateUsedStorage changes the user's used storage respective to the size
-// of the upload.
-func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, uploadSize int64) error {
-	if uploadSize <= 0 {
-		return errors.New("invalid upload size, it needs to be positive, got: " + strconv.Itoa(int(uploadSize)))
-	}
-	filter := bson.M{"_id": id}
-	update := bson.M{"$inc": bson.M{
-		"storage_used": StorageUsed(uploadSize),
-	}}
-	_, err := db.staticUsers.UpdateOne(ctx, filter, update)
-	return err
-}
-
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
@@ -229,10 +208,8 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 }
 
 // userStats reports statistical information about the user.
-func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
-	stats := UserStats{
-		User: u,
-	}
+func (db *DB) userStats(ctx context.Context, uid primitive.ObjectID) (*UserStats, error) {
+	stats := UserStats{}
 	var errs []error
 	var errsMux sync.Mutex
 	regErr := func(msg string, e error) {
@@ -241,7 +218,7 @@ func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
 		errs = append(errs, e)
 		errsMux.Unlock()
 	}
-	monthStart, err := db.monthStart(ctx, u.ID)
+	monthStart, err := db.monthStart(ctx, uid)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to calculate the start of month for user")
 	}
@@ -250,20 +227,21 @@ func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, size, bw, err := db.userUploadStats(ctx, u.ID, monthStart)
+		n, size, storage, bw, err := db.userUploadStats(ctx, uid, monthStart)
 		if err != nil {
 			regErr("Failed to get user's upload bandwidth used:", err)
 			return
 		}
 		stats.NumUploads = n
 		stats.TotalUploadsSize = size
+		stats.StorageUsed = storage
 		stats.BandwidthUploads = bw
-		db.staticLogger.Tracef("User %s upload bandwidth: %v", u.ID.Hex(), bw)
+		db.staticLogger.Tracef("User %s upload bandwidth: %v", uid.Hex(), bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, size, bw, err := db.userDownloadStats(ctx, u.ID, monthStart)
+		n, size, bw, err := db.userDownloadStats(ctx, uid, monthStart)
 		if err != nil {
 			regErr("Failed to get user's download bandwidth used:", err)
 			return
@@ -271,31 +249,31 @@ func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
 		stats.NumDownloads = n
 		stats.TotalDownloadsSize = size
 		stats.BandwidthDownloads = bw
-		db.staticLogger.Tracef("User %s download bandwidth: %v", u.ID.Hex(), bw)
+		db.staticLogger.Tracef("User %s download bandwidth: %v", uid.Hex(), bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, bw, err := db.userRegistryWriteStats(ctx, u.ID, monthStart)
+		n, bw, err := db.userRegistryWriteStats(ctx, uid, monthStart)
 		if err != nil {
 			regErr("Failed to get user's registry write bandwidth used:", err)
 			return
 		}
 		stats.NumRegWrites = n
 		stats.BandwidthRegWrites = bw
-		db.staticLogger.Tracef("User %s registry write bandwidth: %v", u.ID.Hex(), bw)
+		db.staticLogger.Tracef("User %s registry write bandwidth: %v", uid.Hex(), bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, bw, err := db.userRegistryReadStats(ctx, u.ID, monthStart)
+		n, bw, err := db.userRegistryReadStats(ctx, uid, monthStart)
 		if err != nil {
 			regErr("Failed to get user's registry read bandwidth used:", err)
 			return
 		}
 		stats.NumRegReads = n
 		stats.BandwidthRegReads = bw
-		db.staticLogger.Tracef("User %s registry read bandwidth: %v", u.ID.Hex(), bw)
+		db.staticLogger.Tracef("User %s registry read bandwidth: %v", uid.Hex(), bw)
 	}()
 
 	wg.Wait()
@@ -307,7 +285,7 @@ func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
 
 // userUploadStats reports on the user's uploads - count, total size and total
 // bandwidth used. It uses the total size of the uploaded skyfiles as basis.
-func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, totalBandwidth int64, err error) {
+func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, storageUsed int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", id},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
@@ -357,9 +335,10 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 		}
 		count++
 		totalSize += result.Size
+		storageUsed += StorageUsed(result.Size)
 		totalBandwidth += BandwidthUploadCost(result.Size)
 	}
-	return count, totalSize, totalBandwidth, nil
+	return count, totalSize, storageUsed, totalBandwidth, nil
 }
 
 // userDownloadStats reports on the user's downloads - count, total size and

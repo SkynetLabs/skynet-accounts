@@ -91,7 +91,7 @@ func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	ud, err := api.staticDB.UserStats(req.Context(), *u)
+	ud, err := api.staticDB.UserStats(req.Context(), u.ID)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
