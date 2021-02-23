@@ -33,7 +33,7 @@ func TestStorageUsed(t *testing.T) {
 		{size: 0, result: SizeBaseSector},
 		{size: 1 * MiB, result: SizeBaseSector},
 		{size: 4 * MiB, result: SizeBaseSector},
-		{size: 5 * MiB, result: SizeBaseSector},
+		{size: 5 * MiB, result: SizeBaseSector + SizeChunk},
 		{size: 50 * MiB, result: SizeBaseSector + 2*SizeChunk},
 		{size: 500 * MiB, result: SizeBaseSector + 13*SizeChunk},
 	}
