@@ -112,4 +112,82 @@ func TestUserStats(t *testing.T) {
 			expectedDownloadBandwidth, expectedDownloadBandwidth/database.MiB,
 			stats.BandwidthDownloads, stats.BandwidthDownloads/database.MiB)
 	}
+
+	// Register a registry read.
+	_, err = db.RegistryReadCreate(ctx, *u)
+	if err != nil {
+		t.Fatal("Failed to register a registry read.", err)
+	}
+	expectedRegReadBandwidth := int64(database.PriceBandwidthRegistryRead)
+	// Check bandwidth.
+	stats, err = db.UserStats(ctx, u.ID)
+	if err != nil {
+		t.Fatal("Failed to fetch user details.", err)
+	}
+	if stats.NumRegReads != 1 {
+		t.Fatalf("Expected a total of %d registry reads, got %d.", 1, stats.NumRegReads)
+	}
+	if stats.BandwidthRegReads != expectedRegReadBandwidth {
+		t.Fatalf("Expected registry read bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedRegReadBandwidth, expectedRegReadBandwidth/database.MiB,
+			stats.BandwidthRegReads, stats.BandwidthRegReads/database.MiB)
+	}
+	// Register a registry read.
+	_, err = db.RegistryReadCreate(ctx, *u)
+	if err != nil {
+		t.Fatal("Failed to register a registry read.", err)
+	}
+	expectedRegReadBandwidth += int64(database.PriceBandwidthRegistryRead)
+	// Check bandwidth.
+	stats, err = db.UserStats(ctx, u.ID)
+	if err != nil {
+		t.Fatal("Failed to fetch user details.", err)
+	}
+	if stats.NumRegReads != 2 {
+		t.Fatalf("Expected a total of %d registry reads, got %d.", 2, stats.NumRegReads)
+	}
+	if stats.BandwidthRegReads != expectedRegReadBandwidth {
+		t.Fatalf("Expected registry read bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedRegReadBandwidth, expectedRegReadBandwidth/database.MiB,
+			stats.BandwidthRegReads, stats.BandwidthRegReads/database.MiB)
+	}
+
+	// Register a registry write.
+	_, err = db.RegistryWriteCreate(ctx, *u)
+	if err != nil {
+		t.Fatal("Failed to register a registry write.", err)
+	}
+	expectedRegWriteBandwidth := int64(database.PriceBandwidthRegistryWrite)
+	// Check bandwidth.
+	stats, err = db.UserStats(ctx, u.ID)
+	if err != nil {
+		t.Fatal("Failed to fetch user details.", err)
+	}
+	if stats.NumRegWrites != 1 {
+		t.Fatalf("Expected a total of %d registry writes, got %d.", 1, stats.NumRegWrites)
+	}
+	if stats.BandwidthRegWrites != expectedRegWriteBandwidth {
+		t.Fatalf("Expected registry write bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedRegWriteBandwidth, expectedRegWriteBandwidth/database.MiB,
+			stats.BandwidthRegWrites, stats.BandwidthRegWrites/database.MiB)
+	}
+	// Register a registry write.
+	_, err = db.RegistryWriteCreate(ctx, *u)
+	if err != nil {
+		t.Fatal("Failed to register a registry write.", err)
+	}
+	expectedRegWriteBandwidth += int64(database.PriceBandwidthRegistryWrite)
+	// Check bandwidth.
+	stats, err = db.UserStats(ctx, u.ID)
+	if err != nil {
+		t.Fatal("Failed to fetch user details.", err)
+	}
+	if stats.NumRegWrites != 2 {
+		t.Fatalf("Expected a total of %d registry writes, got %d.", 2, stats.NumRegWrites)
+	}
+	if stats.BandwidthRegWrites != expectedRegWriteBandwidth {
+		t.Fatalf("Expected registry write bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedRegWriteBandwidth, expectedRegWriteBandwidth/database.MiB,
+			stats.BandwidthRegWrites, stats.BandwidthRegWrites/database.MiB)
+	}
 }
