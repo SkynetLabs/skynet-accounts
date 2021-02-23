@@ -254,7 +254,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
+	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

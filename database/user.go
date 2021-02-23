@@ -156,8 +156,8 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 }
 
 // UserStats returns statistical information about the user.
-func (db *DB) UserStats(ctx context.Context, u User) (*UserStats, error) {
-	return db.userStats(ctx, u)
+func (db *DB) UserStats(ctx context.Context, user User) (*UserStats, error) {
+	return db.userStats(ctx, user)
 }
 
 // UserDelete deletes a user by their ID.
@@ -221,7 +221,7 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 }
 
 // userStats reports statistical information about the user.
-func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
+func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 	stats := UserStats{}
 	var errs []error
 	var errsMux sync.Mutex
@@ -231,13 +231,13 @@ func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
 		errs = append(errs, e)
 		errsMux.Unlock()
 	}
-	startOfMonth := monthStart(u.SubscribedUntil)
+	startOfMonth := monthStart(user.SubscribedUntil)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, size, storage, bw, err := db.userUploadStats(ctx, u.ID, startOfMonth)
+		n, size, storage, bw, err := db.userUploadStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's upload bandwidth used:", err)
 			return
@@ -246,12 +246,12 @@ func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
 		stats.TotalUploadsSize = size
 		stats.StorageUsed = storage
 		stats.BandwidthUploads = bw
-		db.staticLogger.Tracef("User %s upload bandwidth: %v", u.ID.Hex(), bw)
+		db.staticLogger.Tracef("User %s upload bandwidth: %v", user.ID.Hex(), bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, size, bw, err := db.userDownloadStats(ctx, u.ID, startOfMonth)
+		n, size, bw, err := db.userDownloadStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's download bandwidth used:", err)
 			return
@@ -259,31 +259,31 @@ func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
 		stats.NumDownloads = n
 		stats.TotalDownloadsSize = size
 		stats.BandwidthDownloads = bw
-		db.staticLogger.Tracef("User %s download bandwidth: %v", u.ID.Hex(), bw)
+		db.staticLogger.Tracef("User %s download bandwidth: %v", user.ID.Hex(), bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, bw, err := db.userRegistryWriteStats(ctx, u.ID, startOfMonth)
+		n, bw, err := db.userRegistryWriteStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's registry write bandwidth used:", err)
 			return
 		}
 		stats.NumRegWrites = n
 		stats.BandwidthRegWrites = bw
-		db.staticLogger.Tracef("User %s registry write bandwidth: %v", u.ID.Hex(), bw)
+		db.staticLogger.Tracef("User %s registry write bandwidth: %v", user.ID.Hex(), bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, bw, err := db.userRegistryReadStats(ctx, u.ID, startOfMonth)
+		n, bw, err := db.userRegistryReadStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's registry read bandwidth used:", err)
 			return
 		}
 		stats.NumRegReads = n
 		stats.BandwidthRegReads = bw
-		db.staticLogger.Tracef("User %s registry read bandwidth: %v", u.ID.Hex(), bw)
+		db.staticLogger.Tracef("User %s registry read bandwidth: %v", user.ID.Hex(), bw)
 	}()
 
 	wg.Wait()
