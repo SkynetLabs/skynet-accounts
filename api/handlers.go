@@ -30,7 +30,7 @@ func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprou
 	exp, err := tokenExpiration(token)
 	if err != nil {
 		api.staticLogger.Traceln("Error checking token expiration:", err)
-		api.WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	err = writeCookie(w, tokenStr, exp)
@@ -91,7 +91,7 @@ func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	ud, err := api.staticDB.UserStats(req.Context(), u.ID)
+	ud, err := api.staticDB.UserStats(req.Context(), *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -198,12 +198,13 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 	}
 	if skylink.Size == 0 {
 		// Zero size means that we haven't fetched the skyfile's size yet.
-		// Queue the skylink to have its meta data fetched and updated in the
-		// DB, as well as the user's used space to be updated.
-		api.staticMF.Queue <- metafetcher.Message{
-			UploaderID: u.ID,
-			SkylinkID:  skylink.ID,
-		}
+		// Queue the skylink to have its meta data fetched and updated in the DB.
+		go func() {
+			api.staticMF.Queue <- metafetcher.Message{
+				UploaderID: u.ID,
+				SkylinkID:  skylink.ID,
+			}
+		}()
 	}
 	api.WriteSuccess(w)
 }
@@ -258,14 +259,16 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	// Zero size means that we haven't fetched the skyfile's size yet.
-	// Queue the skylink to have its meta data fetched. We do not specify a user
-	// here because this is not an upload, so nobody's used storage needs to be
-	// adjusted.
 	if skylink.Size == 0 {
-		api.staticMF.Queue <- metafetcher.Message{
-			SkylinkID: skylink.ID,
-		}
+		// Zero size means that we haven't fetched the skyfile's size yet.
+		// Queue the skylink to have its meta data fetched. We do not specify a user
+		// here because this is not an upload, so nobody's used storage needs to be
+		// adjusted.
+		go func() {
+			api.staticMF.Queue <- metafetcher.Message{
+				SkylinkID: skylink.ID,
+			}
+		}()
 	}
 	api.WriteSuccess(w)
 }

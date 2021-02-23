@@ -61,7 +61,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 			testUploadSize, testUploadSize/database.MiB, storageUsed, storageUsed/database.MiB, ups[0].Size, ups[0].Size/database.MiB)
 	}
 	// Refresh the user's record and make sure we report storage used accurately.
-	stats, err := db.UserStats(ctx, u.ID)
+	stats, err := db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user.", err)
 	}

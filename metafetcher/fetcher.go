@@ -77,7 +77,7 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 			return
 		}
 		m.Attempts++
-		mf.Queue <- m
+		go func() { mf.Queue <- m }()
 		return
 	}
 	// Check if we have already fetched the size of this skylink and skip the
@@ -110,7 +110,7 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 			return
 		}
 		m.Attempts++
-		mf.Queue <- m
+		go func() { mf.Queue <- m }()
 		return
 	}
 	mhs, ok := res.Header["Skynet-File-Metadata"]

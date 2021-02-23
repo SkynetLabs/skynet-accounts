@@ -31,6 +31,11 @@ const (
 	// MiB megabyte
 	MiB = 1024 * KiB
 
+	// SizeBaseSector is the size of a base sector.
+	SizeBaseSector = 4 * MiB
+	// SizeChunk is the size of a chunk.
+	SizeChunk = 40 * MiB
+
 	// PriceBandwidthRegistryWrite the bandwidth cost of a single registry write
 	PriceBandwidthRegistryWrite = 5 * MiB
 	// PriceBandwidthRegistryRead the bandwidth cost of a single registry read
@@ -39,8 +44,8 @@ const (
 	// PriceBandwidthUploadBase is the baseline bandwidth price for each upload.
 	// This is the cost of uploading the base sector.
 	PriceBandwidthUploadBase = 40 * MiB
-	// PriceBandwidthUploadIncrement is the bandwidth price per 40MB beyond
-	// the base sector (beyond the first 4MB). Rounded up.
+	// PriceBandwidthUploadIncrement is the bandwidth price per 40MB uploaded
+	// data, beyond the base sector (beyond the first 4MB). Rounded up.
 	PriceBandwidthUploadIncrement = 120 * MiB
 	// PriceBandwidthDownloadBase is the baseline bandwidth price for each Download.
 	PriceBandwidthDownloadBase = 200 * KiB
@@ -151,8 +156,8 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 }
 
 // UserStats returns statistical information about the user.
-func (db *DB) UserStats(ctx context.Context, uid primitive.ObjectID) (*UserStats, error) {
-	return db.userStats(ctx, uid)
+func (db *DB) UserStats(ctx context.Context, u User) (*UserStats, error) {
+	return db.userStats(ctx, u)
 }
 
 // UserDelete deletes a user by their ID.
@@ -216,7 +221,7 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 }
 
 // userStats reports statistical information about the user.
-func (db *DB) userStats(ctx context.Context, uid primitive.ObjectID) (*UserStats, error) {
+func (db *DB) userStats(ctx context.Context, u User) (*UserStats, error) {
 	stats := UserStats{}
 	var errs []error
 	var errsMux sync.Mutex
@@ -226,16 +231,13 @@ func (db *DB) userStats(ctx context.Context, uid primitive.ObjectID) (*UserStats
 		errs = append(errs, e)
 		errsMux.Unlock()
 	}
-	monthStart, err := db.monthStart(ctx, uid)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to calculate the start of month for user")
-	}
+	startOfMonth := monthStart(u.SubscribedUntil)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, size, storage, bw, err := db.userUploadStats(ctx, uid, monthStart)
+		n, size, storage, bw, err := db.userUploadStats(ctx, u.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's upload bandwidth used:", err)
 			return
@@ -244,12 +246,12 @@ func (db *DB) userStats(ctx context.Context, uid primitive.ObjectID) (*UserStats
 		stats.TotalUploadsSize = size
 		stats.StorageUsed = storage
 		stats.BandwidthUploads = bw
-		db.staticLogger.Tracef("User %s upload bandwidth: %v", uid.Hex(), bw)
+		db.staticLogger.Tracef("User %s upload bandwidth: %v", u.ID.Hex(), bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, size, bw, err := db.userDownloadStats(ctx, uid, monthStart)
+		n, size, bw, err := db.userDownloadStats(ctx, u.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's download bandwidth used:", err)
 			return
@@ -257,31 +259,31 @@ func (db *DB) userStats(ctx context.Context, uid primitive.ObjectID) (*UserStats
 		stats.NumDownloads = n
 		stats.TotalDownloadsSize = size
 		stats.BandwidthDownloads = bw
-		db.staticLogger.Tracef("User %s download bandwidth: %v", uid.Hex(), bw)
+		db.staticLogger.Tracef("User %s download bandwidth: %v", u.ID.Hex(), bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, bw, err := db.userRegistryWriteStats(ctx, uid, monthStart)
+		n, bw, err := db.userRegistryWriteStats(ctx, u.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's registry write bandwidth used:", err)
 			return
 		}
 		stats.NumRegWrites = n
 		stats.BandwidthRegWrites = bw
-		db.staticLogger.Tracef("User %s registry write bandwidth: %v", uid.Hex(), bw)
+		db.staticLogger.Tracef("User %s registry write bandwidth: %v", u.ID.Hex(), bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, bw, err := db.userRegistryReadStats(ctx, uid, monthStart)
+		n, bw, err := db.userRegistryReadStats(ctx, u.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's registry read bandwidth used:", err)
 			return
 		}
 		stats.NumRegReads = n
 		stats.BandwidthRegReads = bw
-		db.staticLogger.Tracef("User %s registry read bandwidth: %v", uid.Hex(), bw)
+		db.staticLogger.Tracef("User %s registry read bandwidth: %v", u.ID.Hex(), bw)
 	}()
 
 	wg.Wait()
@@ -426,7 +428,7 @@ func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.Objec
 		{"user_id", userId},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
-	writes, err := count(ctx, db.staticRegistryWrites, matchStage)
+	writes, err := db.count(ctx, db.staticRegistryWrites, matchStage)
 	if err != nil {
 		return 0, 0, errors.AddContext(err, "failed to fetch registry write bandwidth")
 	}
@@ -440,38 +442,37 @@ func (db *DB) userRegistryReadStats(ctx context.Context, userId primitive.Object
 		{"user_id", userId},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
-	reads, err := count(ctx, db.staticRegistryReads, matchStage)
+	reads, err := db.count(ctx, db.staticRegistryReads, matchStage)
 	if err != nil {
 		return 0, 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
 	}
 	return reads, reads * PriceBandwidthRegistryRead, nil
 }
 
-// monthStart returns the start of the user's subscription month. Users get
-// their bandwidth quota reset at the start of the month.
-func (db *DB) monthStart(ctx context.Context, userId primitive.ObjectID) (time.Time, error) {
-	user, err := db.UserByID(ctx, userId)
-	if err != nil {
-		return time.Time{}, errors.AddContext(err, "failed to fetch user")
-	}
+// monthStart returns the start of the user's subscription month.
+// Users get their bandwidth quota reset at the start of the month.
+func monthStart(subscribedUntil time.Time) time.Time {
 	now := time.Now().UTC()
-	daysDelta := now.Day() - user.SubscribedUntil.Day()
-	d := now.AddDate(0, 0, -1*daysDelta)
-	if daysDelta <= 0 {
-		d = now.AddDate(0, -1, daysDelta)
-	}
-	monthStart := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
-	return monthStart, nil
+	// Check how many days are left until the end of the user's subscription
+	// month. Then calculate when the last subscription month started. We don't
+	// care if the user is no longer subscribed and their sub expired 3 months
+	// ago, all we care about here is the day of the month on which that
+	// happened because that is the day from which we count their statistics for
+	// the month. If they were never subscribed we use Jan 1st 1970 for
+	// SubscribedUntil.
+	daysDelta := subscribedUntil.Day() - now.Day()
+	d := now.AddDate(0, -1, daysDelta)
+	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// NumChunks returns the number of 40MB chunks a file of this size uses, beyond
+// numChunks returns the number of 40MB chunks a file of this size uses, beyond
 // the 4MB in the base sector.
-func NumChunks(size int64) int64 {
-	if size <= 4*MiB {
+func numChunks(size int64) int64 {
+	if size <= SizeBaseSector {
 		return 0
 	}
-	chunksBeyondBase := (size - 4*MiB) / (40 * MiB)
-	if (size-4*MiB)%(40*MiB) > 0 {
+	chunksBeyondBase := (size - SizeBaseSector) / SizeChunk
+	if (size-SizeBaseSector)%SizeChunk > 0 {
 		chunksBeyondBase++
 	}
 	return chunksBeyondBase
@@ -480,13 +481,14 @@ func NumChunks(size int64) int64 {
 // StorageUsed calculates how much storage an upload with a given size actually
 // uses.
 func StorageUsed(uploadSize int64) int64 {
-	return PriceStorageUploadBase + NumChunks(uploadSize)*PriceStorageUploadIncrement
+	return PriceStorageUploadBase + numChunks(uploadSize)*PriceStorageUploadIncrement
 }
 
 // BandwidthUploadCost calculates the bandwidth cost of an upload with the given
-// size.
+// size. The base sector is uploaded with 10x redundancy. Each chunk is uploaded
+// with 3x redundancy.
 func BandwidthUploadCost(size int64) int64 {
-	return PriceBandwidthUploadBase + NumChunks(size)*PriceBandwidthUploadIncrement
+	return PriceBandwidthUploadBase + numChunks(size)*PriceBandwidthUploadIncrement
 }
 
 // BandwidthDownloadCost calculates the bandwidth cost of a download with the

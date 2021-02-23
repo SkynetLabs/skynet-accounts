@@ -330,7 +330,7 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 
 // count returns the number of documents in the given collection that match the
 // given matchStage.
-func count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int64, error) {
+func (db *DB) count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int64, error) {
 	pipeline := mongo.Pipeline{matchStage, bson.D{{"$count", "count"}}}
 	c, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {

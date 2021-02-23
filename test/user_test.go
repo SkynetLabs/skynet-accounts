@@ -39,7 +39,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedUploadBandwidth = database.BandwidthUploadCost(testUploadSizeSmall)
 	// Check the stats.
-	stats, err := db.UserStats(ctx, u.ID)
+	stats, err := db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
@@ -59,7 +59,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedUploadBandwidth += database.BandwidthUploadCost(testUploadSizeBig)
 	// Check the stats.
-	stats, err = db.UserStats(ctx, u.ID)
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
@@ -80,7 +80,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedDownloadBandwidth += database.BandwidthDownloadCost(smallDownload)
 	// Check the stats.
-	stats, err = db.UserStats(ctx, u.ID)
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
@@ -100,7 +100,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedDownloadBandwidth += database.BandwidthDownloadCost(bigDownload)
 	// Check bandwidth.
-	stats, err = db.UserStats(ctx, u.ID)
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
@@ -120,7 +120,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedRegReadBandwidth := int64(database.PriceBandwidthRegistryRead)
 	// Check bandwidth.
-	stats, err = db.UserStats(ctx, u.ID)
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user details.", err)
 	}
@@ -139,7 +139,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedRegReadBandwidth += int64(database.PriceBandwidthRegistryRead)
 	// Check bandwidth.
-	stats, err = db.UserStats(ctx, u.ID)
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user details.", err)
 	}
@@ -159,7 +159,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedRegWriteBandwidth := int64(database.PriceBandwidthRegistryWrite)
 	// Check bandwidth.
-	stats, err = db.UserStats(ctx, u.ID)
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user details.", err)
 	}
@@ -178,7 +178,7 @@ func TestUserStats(t *testing.T) {
 	}
 	expectedRegWriteBandwidth += int64(database.PriceBandwidthRegistryWrite)
 	// Check bandwidth.
-	stats, err = db.UserStats(ctx, u.ID)
+	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user details.", err)
 	}

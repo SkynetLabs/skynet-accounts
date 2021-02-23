@@ -100,7 +100,7 @@ func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize i
 // downloadsBy fetches a page of downloads, filtered by an arbitrary match
 // criteria. It also reports the total number of records in the list.
 func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
-	cnt, err := count(ctx, db.staticDownloads, matchStage)
+	cnt, err := db.count(ctx, db.staticDownloads, matchStage)
 	if err != nil || cnt == 0 {
 		return []DownloadResponseDTO{}, 0, err
 	}

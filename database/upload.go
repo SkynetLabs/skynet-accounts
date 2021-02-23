@@ -101,7 +101,7 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 	if err := validateOffsetPageSize(offset, pageSize); err != nil {
 		return nil, 0, err
 	}
-	cnt, err := count(ctx, db.staticUploads, matchStage)
+	cnt, err := db.count(ctx, db.staticUploads, matchStage)
 	if err != nil || cnt == 0 {
 		return []UploadResponseDTO{}, 0, err
 	}
