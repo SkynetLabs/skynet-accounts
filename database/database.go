@@ -6,8 +6,8 @@ import (
 	"net/url"
 
 	"github.com/NebulousLabs/skynet-accounts/lib"
-	"github.com/sirupsen/logrus"
 
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -29,6 +29,12 @@ var (
 	// dbDownloadsCollection defines the name of the "downloads" collection within
 	// skynet's database.
 	dbDownloadsCollection = "downloads"
+	// dbRegistryReadsCollection defines the name of the "registry_reads"
+	// collection within skynet's database.
+	dbRegistryReadsCollection = "registry_reads"
+	// dbRegistryWritesCollection defines the name of the "registry_writes"
+	// collection within skynet's database.
+	dbRegistryWritesCollection = "registry_writes"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -64,13 +70,15 @@ var (
 type (
 	// DB represents a MongoDB database connection.
 	DB struct {
-		staticDB        *mongo.Database
-		staticUsers     *mongo.Collection
-		staticSkylinks  *mongo.Collection
-		staticUploads   *mongo.Collection
-		staticDownloads *mongo.Collection
-		staticDep       lib.Dependencies
-		staticLogger    *logrus.Logger
+		staticDB             *mongo.Database
+		staticUsers          *mongo.Collection
+		staticSkylinks       *mongo.Collection
+		staticUploads        *mongo.Collection
+		staticDownloads      *mongo.Collection
+		staticRegistryReads  *mongo.Collection
+		staticRegistryWrites *mongo.Collection
+		staticDep            lib.Dependencies
+		staticLogger         *logrus.Logger
 	}
 
 	// DBCredentials is a helper struct that binds together all values needed for
@@ -103,12 +111,14 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 		return nil, err
 	}
 	db := &DB{
-		staticDB:        database,
-		staticUsers:     database.Collection(dbUsersCollection),
-		staticSkylinks:  database.Collection(dbSkylinksCollection),
-		staticUploads:   database.Collection(dbUploadsCollection),
-		staticDownloads: database.Collection(dbDownloadsCollection),
-		staticLogger:    logger,
+		staticDB:             database,
+		staticUsers:          database.Collection(dbUsersCollection),
+		staticSkylinks:       database.Collection(dbSkylinksCollection),
+		staticUploads:        database.Collection(dbUploadsCollection),
+		staticDownloads:      database.Collection(dbDownloadsCollection),
+		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
+		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
+		staticLogger:         logger,
 	}
 	return db, nil
 }
@@ -179,6 +189,18 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("skylink_id"),
 			},
 		},
+		dbRegistryReadsCollection: {
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("user_id"),
+			},
+		},
+		dbRegistryWritesCollection: {
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("user_id"),
+			},
+		},
 	}
 	for collName, models := range schema {
 		coll, err := ensureCollection(ctx, db, collName)
@@ -186,7 +208,8 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 			return err
 		}
 		iv := coll.Indexes()
-		names, err := iv.CreateMany(ctx, models)
+		var names []string
+		names, err = iv.CreateMany(ctx, models)
 		if err != nil {
 			return errors.AddContext(err, "failed to create indexes")
 		}
@@ -200,19 +223,19 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 func ensureCollection(ctx context.Context, db *mongo.Database, collName string) (*mongo.Collection, error) {
 	coll := db.Collection(collName)
 	if coll == nil {
-		err := db.CreateCollection(ctx, dbUsersCollection)
+		err := db.CreateCollection(ctx, collName)
 		if err != nil {
 			return nil, err
 		}
-		coll = db.Collection(dbUsersCollection)
+		coll = db.Collection(collName)
 		if coll == nil {
-			return nil, errors.New("failed to create collection " + dbUsersCollection)
+			return nil, errors.New("failed to create collection " + collName)
 		}
 	}
 	return coll, nil
 }
 
-// generateUploadsDownloadsPipeline generates a mongo pipeline for transforming
+// generateUploadsPipeline generates a mongo pipeline for transforming
 // an `Upload` or `Download` struct into the respective
 // `<Up/Down>loadResponseDTO` struct.
 //
@@ -236,7 +259,8 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 // and then fetch $limit of them, allowing us to paginate. It will then
 // join with the `skylinks` collection in order to fetch some additional
 // data about each download.
-func generateUploadsDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
+func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
+	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
 	skipStage := bson.D{{"$skip", offset}}
 	limitStage := bson.D{{"$limit", pageSize}}
 	lookupStage := bson.D{
@@ -257,19 +281,72 @@ func generateUploadsDownloadsPipeline(matchStage bson.D, offset, pageSize int) m
 		}},
 	}
 	projectStage := bson.D{{"$project", bson.D{{"fromSkylinks", 0}}}}
-	return mongo.Pipeline{matchStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+}
+
+// generateDownloadsPipeline is similar to generateUploadsPipeline. The only
+// difference is that it supports partial downloads via the `bytes` field in the
+// `downloads` collection.
+func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
+	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
+	skipStage := bson.D{{"$skip", offset}}
+	limitStage := bson.D{{"$limit", pageSize}}
+	lookupStage := bson.D{
+		{"$lookup", bson.D{
+			{"from", "skylinks"},
+			{"localField", "skylink_id"}, // field in the downloads collection
+			{"foreignField", "_id"},      // field in the skylinks collection
+			{"as", "fromSkylinks"},
+		}},
+	}
+	replaceStage := bson.D{
+		{"$replaceRoot", bson.D{
+			{"newRoot", bson.D{
+				{"$mergeObjects", bson.A{
+					bson.D{{"$arrayElemAt", bson.A{"$fromSkylinks", 0}}}, "$$ROOT"},
+				},
+			}},
+		}},
+	}
+	// This stage checks if the download has a non-zero `bytes` field and if so,
+	// it takes it as the download's size. Otherwise it reports the full
+	// skylink's size as download's size.
+	projectStage := bson.D{{"$project", bson.D{
+		{"skylink", 1},
+		{"name", 1},
+		{"user_id", 1},
+		{"skylink_id", 1},
+		{"timestamp", 1},
+		{"size", bson.D{
+			{"$cond", bson.A{
+				bson.D{{"$gt", bson.A{"$bytes", 0}}}, // if
+				"$bytes",                             // then
+				"$size",                              // else
+			}},
+		}},
+	}}}
+	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
 }
 
 // count returns the number of documents in the given collection that match the
 // given matchStage.
-func count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int, error) {
+func count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int64, error) {
 	pipeline := mongo.Pipeline{matchStage, bson.D{{"$count", "count"}}}
 	c, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
-		return 0, err
+		return 0, errors.AddContext(err, "DB query failed")
 	}
+	defer func() { _ = c.Close(ctx) }()
 	if ok := c.Next(ctx); !ok {
-		return 0, c.Err()
+		// No results found. This is expected.
+		return 0, nil
 	}
-	return int(c.Current.Lookup("count").Int32()), nil
+	// We need this struct, so we can safely decode both int32 and int64.
+	result := struct {
+		Count int64 `bson:"count"`
+	}{}
+	if err = c.Decode(&result); err != nil {
+		return 0, errors.AddContext(err, "failed to decode DB data")
+	}
+	return result.Count, nil
 }

@@ -6,13 +6,12 @@ import (
 	"time"
 
 	"github.com/gorilla/securecookie"
+	"github.com/joho/godotenv"
 )
 
 const (
 	// CookieName is the name of the cookie where we store the user's JWT token.
 	CookieName = "skynet-jwt"
-	// cookieValidity specifies for how long the cookie is valid. In seconds.
-	cookieValidity = 604800 // one week
 
 	// envCookieDomain holds the name of the environment variable for the
 	// domain name of the portal
@@ -27,14 +26,17 @@ const (
 
 var (
 	secureCookie = func() *securecookie.SecureCookie {
-		var hashKey = []byte(os.Getenv(envCookieHashKey))
-		var blockKey = []byte(os.Getenv(envCookieEncKey))
+		_ = godotenv.Load()
+		// These keys need to be *exactly* 16 or 32 bytes long.
+		var hashKey = []byte(os.Getenv(envCookieHashKey))[:32]
+		var blockKey = []byte(os.Getenv(envCookieEncKey))[:32]
 		return securecookie.New(hashKey, blockKey)
 	}()
 )
 
 // writeCookie is a helper function that writes the given JWT token as a
 // secure cookie.
+// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie
 func writeCookie(w http.ResponseWriter, token string, exp int64) error {
 	encodedValue, err := secureCookie.Encode(CookieName, token)
 	if err != nil {
@@ -51,8 +53,7 @@ func writeCookie(w http.ResponseWriter, token string, exp int64) error {
 		HttpOnly: true,
 		Path:     "/",
 		Domain:   domain,
-		Expires:  time.Unix(exp, 0),
-		MaxAge:   cookieValidity,
+		MaxAge:   int(exp - time.Now().UTC().Unix()),
 		Secure:   true, // do not send over insecure channels, e.g. HTTP
 		SameSite: 1,    // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00
 	}

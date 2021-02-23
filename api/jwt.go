@@ -18,8 +18,13 @@ var (
 	// validation. It's available at oathkeeperPubKeyURL.
 	oathkeeperPubKeys *jwk.Set = nil
 
-	// oathkeeperPubKeyURL is the URL on which we can find the public key.
-	oathkeeperPubKeyURL = "http://oathkeeper:4456/.well-known/jwks.json"
+	// KratosAddr holds the domain + port on which we can find Kratos.
+	// The point of this var is to be overridable via .env.
+	KratosAddr = "kratos:4433"
+
+	// OathkeeperAddr holds the domain + port on which we can find Oathkeeper.
+	// The point of this var is to be overridable via .env.
+	OathkeeperAddr = "oathkeeper:4456"
 )
 
 // ValidateToken verifies the validity of a JWT token, both in terms of validity
@@ -125,21 +130,25 @@ func keyForToken(logger *logrus.Logger, token *jwt.Token) (interface{}, error) {
 // Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
 func oathkeeperPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
 	if oathkeeperPubKeys == nil {
-		logger.Traceln("fetching JWKS from oathkeeper")
+		oathkeeperPubKeyURL := "http://" + OathkeeperAddr + "/.well-known/jwks.json"
+		logger.Traceln("fetching JWKS from oathkeeper:", oathkeeperPubKeyURL)
 		r, err := http.Get(oathkeeperPubKeyURL) // #nosec G107: Potential HTTP request made with variable url
 		if err != nil {
 			logger.Warningln("ERROR while fetching JWKS from oathkeeper", err)
 			return nil, err
 		}
 		defer r.Body.Close()
-		b, err := ioutil.ReadAll(r.Body)
+		var b []byte
+		b, err = ioutil.ReadAll(r.Body)
 		if err != nil {
 			logger.Warningln("ERROR while reading JWKS from oathkeeper", err)
 			return nil, err
 		}
-		set, err := jwk.ParseString(string(b))
+		var set *jwk.Set
+		set, err = jwk.ParseString(string(b))
 		if err != nil {
 			logger.Warningln("ERROR while parsing JWKS from oathkeeper", err)
+			logger.Warningln("JWKS string:", string(b))
 			return nil, err
 		}
 		oathkeeperPubKeys = set
@@ -156,7 +165,6 @@ func tokenFromRequest(r *http.Request) (string, error) {
 	if len(parts) == 2 {
 		return strings.TrimSpace(parts[1]), nil
 	}
-
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
 	if errors.Contains(err, http.ErrNoCookie) {

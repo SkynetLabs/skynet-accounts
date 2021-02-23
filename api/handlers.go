@@ -4,13 +4,60 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
-	"gitlab.com/NebulousLabs/errors"
 
 	"github.com/julienschmidt/httprouter"
+	"gitlab.com/NebulousLabs/errors"
 )
+
+// loginHandler starts a user session by issuing a cookie
+func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	tokenStr, err := tokenFromRequest(req)
+	if err != nil {
+		api.staticLogger.Traceln("Error fetching token from request:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	token, err := ValidateToken(api.staticLogger, tokenStr)
+	if err != nil {
+		api.staticLogger.Traceln("Error validating token:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	exp, err := tokenExpiration(token)
+	if err != nil {
+		api.staticLogger.Traceln("Error checking token expiration:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	err = writeCookie(w, tokenStr, exp)
+	if err != nil {
+		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// logoutHandler ends a user session by removing a cookie
+func (api *API) logoutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	_, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.staticLogger.Traceln("Error fetching token from context:", err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	err = writeCookie(w, "", time.Now().UTC().Unix()-1)
+	if err != nil {
+		api.staticLogger.Traceln("Error deleting cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
 
 // userHandler returns information about an existing user and create it if it
 // doesn't exist.
@@ -25,7 +72,12 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteJSON(w, u)
+	ud, err := api.staticDB.UserDetails(req.Context(), u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, ud)
 }
 
 // userUploadsHandler returns all uploads made by the current user.
@@ -65,7 +117,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
@@ -98,7 +150,7 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	sl := ps.ByName("skylink")
@@ -127,19 +179,13 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 	}
 	if skylink.Size == 0 {
 		// Zero size means that we haven't fetched the skyfile's size yet.
-		// Queue the skylink to have its meta data fetched and updated in the
-		// DB, as well as the user's used space to be updated.
-		api.staticMF.Queue <- metafetcher.Message{
-			UserID:    u.ID,
-			SkylinkID: skylink.ID,
-		}
-	} else {
-		err = api.staticDB.UserUpdateUsedStorage(req.Context(), u.ID, skylink.Size)
-		if err != nil {
-			// Log the error but return success - the record will be corrected
-			// later when we rescan the user's used space.
-			api.staticLogger.Debug("Failed to update user's used space:", err)
-		}
+		// Queue the skylink to have its meta data fetched and updated in the DB.
+		go func() {
+			api.staticMF.Queue <- metafetcher.Message{
+				UploaderID: u.ID,
+				SkylinkID:  skylink.ID,
+			}
+		}()
 	}
 	api.WriteSuccess(w)
 }
@@ -148,9 +194,27 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
+
+	_ = req.ParseForm()
+	downloadedBytes, err := strconv.ParseInt(req.Form.Get("bytes"), 10, 64)
+	if err != nil {
+		downloadedBytes = 0
+		api.staticLogger.Traceln("Failed to parse bytes downloaded:", err)
+	}
+	if downloadedBytes < 0 {
+		api.WriteError(w, errors.New("negative download size"), http.StatusBadRequest)
+		return
+	}
+	// We don't need to track zero-sized downloads. Those are usually additional
+	// control requests made by browsers.
+	if downloadedBytes == 0 {
+		api.WriteSuccess(w)
+		return
+	}
+
 	sl := ps.ByName("skylink")
 	if sl == "" {
 		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
@@ -165,12 +229,64 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink)
+	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if skylink.Size == 0 {
+		// Zero size means that we haven't fetched the skyfile's size yet.
+		// Queue the skylink to have its meta data fetched. We do not specify a user
+		// here because this is not an upload, so nobody's used storage needs to be
+		// adjusted.
+		go func() {
+			api.staticMF.Queue <- metafetcher.Message{
+				SkylinkID: skylink.ID,
+			}
+		}()
+	}
+	api.WriteSuccess(w)
+}
+
+// trackRegistryReadHandler registers a new registry read in the system.
+func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	_, err = api.staticDB.RegistryReadCreate(req.Context(), *u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// trackRegistryWriteHandler registers a new registry write in the system.
+func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	_, err = api.staticDB.RegistryWriteCreate(req.Context(), *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

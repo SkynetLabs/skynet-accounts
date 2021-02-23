@@ -21,9 +21,9 @@ const maxAttempts = 3
 // the metadata for a given skylink and then add its size to the used space of
 // a given user.
 type Message struct {
-	UserID    primitive.ObjectID
-	SkylinkID primitive.ObjectID
-	Attempts  uint8
+	UploaderID primitive.ObjectID
+	SkylinkID  primitive.ObjectID
+	Attempts   uint8
 }
 
 // MetaFetcher is a background task that listens for messages on its queue and
@@ -65,9 +65,9 @@ func (mf *MetaFetcher) threadedStartQueueWatcher(ctx context.Context) {
 }
 
 // processMessage tries to download the metadata for the given skylink and
-// update the skylink's record in the database. It will also update the user's
-// used storage. If it fails to download it will put the message back in the
-// queue and retry it later a maximum of maxAttempts times.
+// update the skylink's record in the database. If it fails to download it will
+// put the message back in the queue and retry it later a maximum of maxAttempts
+// times.
 func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	sl, err := mf.db.SkylinkByID(ctx, m.SkylinkID)
 	if err != nil {
@@ -77,20 +77,23 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 			return
 		}
 		m.Attempts++
-		mf.Queue <- m
+		go func() { mf.Queue <- m }()
 		return
 	}
 	// Check if we have already fetched the size of this skylink and skip the
 	// HTTP call if we have.
 	if sl.Size != 0 {
-		err = mf.db.UserUpdateUsedStorage(ctx, m.UserID, sl.Size)
-		if err != nil {
-			mf.logger.Debugf("Failed to update user's used storage: %s", err)
-			// This return might be redundant but it's better to have it than to
-			// forget to add it when we add more code below.
-			return
+		// Update the uploading user, if needed.
+		if !m.UploaderID.IsZero() {
+			err = mf.db.UserUpdateUsedStorage(ctx, m.UploaderID, sl.Size)
+			if err != nil {
+				mf.logger.Debugf("Failed to update user's used storage: %s", err)
+				// This return might be redundant but it's better to have it than to
+				// forget to add it when we add more code below.
+				return
+			}
+			mf.logger.Tracef("Successfully incremented the used storage of user %v with the size of skyfile %v.", m.UploaderID, m.SkylinkID)
 		}
-		mf.logger.Tracef("Successfully incremented the used storage ofuser %v with the size of skyfile %v.", m.UserID, m.SkylinkID)
 		return
 	}
 	// Make a HEAD request directly to the local `sia` container. We do that, so
@@ -108,13 +111,17 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	client := http.Client{}
 	res, err := client.Do(&req)
 	if err != nil || res.StatusCode > 399 {
-		mf.logger.Tracef("Failed to fetch skyfile. Skylink: %s, error: %v", sl.Skylink, err)
+		var statusCode int
+		if res != nil {
+			statusCode = res.StatusCode
+		}
+		mf.logger.Tracef("Failed to fetch skyfile. Skylink: %s, status: %v, error: %v", sl.Skylink, statusCode, err)
 		if m.Attempts >= maxAttempts {
 			mf.logger.Debugf("Message exceeded its maximum number of attempts, dropping: %v", m)
 			return
 		}
 		m.Attempts++
-		mf.Queue <- m
+		go func() { mf.Queue <- m }()
 		return
 	}
 	mhs, ok := res.Header["Skynet-File-Metadata"]
@@ -135,15 +142,23 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	err = mf.db.SkylinkUpdate(ctx, m.SkylinkID, meta.Filename, meta.Length)
 	if err != nil {
 		mf.logger.Debugf("Failed to update skyfile metadata: %s", err)
-		// We don't return here because we want to perform the next operation
+		// We don't return here because we want to perform the next operations
 		// regardless of the success of the current one.
 	}
-	err = mf.db.UserUpdateUsedStorage(ctx, m.UserID, meta.Length)
+	err = mf.db.SkylinkDownloadsUpdate(ctx, m.SkylinkID, meta.Length)
 	if err != nil {
-		mf.logger.Debugf("Failed to update user's used storage: %s", err)
-		// This return might be redundant but it's better to have it than to
-		// forget to add it when we add more code below.
-		return
+		mf.logger.Debugf("Failed to update skyfile downloads: %s", err)
+		// We don't return here because we want to perform the next operations
+		// regardless of the success of the current one.
 	}
-	mf.logger.Tracef("Successfully updated skylink %v and user %v.", m.SkylinkID, m.UserID)
+	if !m.UploaderID.IsZero() {
+		err = mf.db.UserUpdateUsedStorage(ctx, m.UploaderID, meta.Length)
+		if err != nil {
+			mf.logger.Debugf("Failed to update user's used storage: %s", err)
+			// This return might be redundant but it's better to have it than to
+			// forget to add it when we add more code below.
+			return
+		}
+	}
+	mf.logger.Tracef("Successfully updated skylink %v.", m.SkylinkID)
 }

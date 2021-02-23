@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+
 	"gitlab.com/NebulousLabs/errors"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // TestDatabase_UserBySub ensures UserBySub works as expected.
@@ -23,7 +25,7 @@ func TestDatabase_UserBySub(t *testing.T) {
 	// Test finding a non-existent user. This should fail.
 	_, err = db.UserBySub(ctx, sub, false)
 	if !errors.Contains(err, database.ErrUserNotFound) {
-		t.Fatalf("Expected error ErrUserNotFound, got %v\n", err)
+		t.Fatalf("Expected error ErrUserNotFound, got %v", err)
 	}
 
 	// Add a user to find.
@@ -41,7 +43,7 @@ func TestDatabase_UserBySub(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(u, u1) {
-		t.Fatalf("User not equal to original: %v vs %v\n", u, u1)
+		t.Fatalf("User not equal to original: %v vs %v", u, u1)
 	}
 }
 
@@ -52,10 +54,14 @@ func TestDatabase_UserByID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	id, err := primitive.ObjectIDFromHex("5fac383fdafc482e510627c3")
+	if err != nil {
+		t.Fatalf("Expected to be able to parse id hex string, got %v", err)
+	}
 	// Test finding a non-existent user. This should fail.
-	_, err = db.UserByID(ctx, "5fac383fdafc482e510627c3")
+	_, err = db.UserByID(ctx, id)
 	if !errors.Contains(err, database.ErrUserNotFound) {
-		t.Fatalf("Expected error ErrUserNotFound, got %v\n", err)
+		t.Fatalf("Expected error ErrUserNotFound, got %v", err)
 	}
 
 	// Add a user to find.
@@ -69,12 +75,12 @@ func TestDatabase_UserByID(t *testing.T) {
 	}(u)
 
 	// Test finding an existent user. This should pass.
-	u1, err := db.UserByID(ctx, u.ID.Hex())
+	u1, err := db.UserByID(ctx, u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(u, u1) {
-		t.Fatalf("User not equal to original: %v vs %v\n", u, u1)
+		t.Fatalf("User not equal to original: %v vs %v", u, u1)
 	}
 }
 
@@ -101,12 +107,12 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to update user:", err)
 	}
-	u1, err := db.UserByID(ctx, u.ID.Hex())
+	u1, err := db.UserByID(ctx, u.ID)
 	if err != nil {
 		t.Fatal("Failed to load user:", err)
 	}
 	if u1.Tier != database.TierPremium5 {
-		t.Fatalf("Expected tier '%d', got '%d'\n", database.TierPremium5, u1.Tier)
+		t.Fatalf("Expected tier '%d', got '%d'", database.TierPremium5, u1.Tier)
 	}
 }
 
@@ -128,7 +134,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Make sure the user is there.
-	fu, err := db.UserByID(ctx, u.ID.Hex())
+	fu, err := db.UserByID(ctx, u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +147,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Make sure the user is not there anymore.
-	_, err = db.UserByID(ctx, u.ID.Hex())
+	_, err = db.UserByID(ctx, u.ID)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatal(err)
 	}
@@ -153,6 +159,6 @@ func DBTestCredentials() database.DBCredentials {
 		User:     "admin",
 		Password: "aO4tV5tC1oU3oQ7u",
 		Host:     "localhost",
-		Port:     "27017",
+		Port:     "17017",
 	}
 }

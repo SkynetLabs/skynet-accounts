@@ -14,6 +14,7 @@ type Download struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
 	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
+	Bytes     int64              `bson:"bytes" json:"bytes"`
 	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 }
 
@@ -47,8 +48,9 @@ func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Downloa
 	return &d, nil
 }
 
-// DownloadCreate registers a new download.
-func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink) (*Download, error) {
+// DownloadCreate registers a new download. Marks partial downloads by supplying
+// the `bytes` param. If `bytes` is 0 we assume a full download.
+func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, bytes int64) (*Download, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
@@ -58,6 +60,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink) (*
 	up := Download{
 		UserID:    user.ID,
 		SkylinkID: skylink.ID,
+		Bytes:     bytes,
 		Timestamp: time.Now().UTC(),
 	}
 	ior, err := db.staticDownloads.InsertOne(ctx, up)
@@ -74,6 +77,9 @@ func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, p
 	if skylink.ID.IsZero() {
 		return nil, 0, errors.New("invalid skylink")
 	}
+	if err := validateOffsetPageSize(offset, pageSize); err != nil {
+		return nil, 0, err
+	}
 	matchStage := bson.D{{"$match", bson.D{{"skylink_id", skylink.ID}}}}
 	return db.downloadsBy(ctx, matchStage, offset, pageSize)
 }
@@ -83,6 +89,9 @@ func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, p
 func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
+	}
+	if err := validateOffsetPageSize(offset, pageSize); err != nil {
+		return nil, 0, err
 	}
 	matchStage := bson.D{{"$match", bson.D{{"user_id", user.ID}}}}
 	return db.downloadsBy(ctx, matchStage, offset, pageSize)
@@ -95,8 +104,7 @@ func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSi
 	if err != nil || cnt == 0 {
 		return []DownloadResponseDTO{}, 0, err
 	}
-	pipeline := generateUploadsDownloadsPipeline(matchStage, offset, pageSize)
-	c, err := db.staticDownloads.Aggregate(ctx, pipeline)
+	c, err := db.staticDownloads.Aggregate(ctx, generateDownloadsPipeline(matchStage, offset, pageSize))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -105,5 +113,5 @@ func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSi
 	if err != nil {
 		return nil, 0, err
 	}
-	return downloads, cnt, nil
+	return downloads, int(cnt), nil
 }

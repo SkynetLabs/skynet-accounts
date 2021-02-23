@@ -4,12 +4,11 @@ import (
 	"context"
 	"regexp"
 
-	"go.mongodb.org/mongo-driver/mongo/options"
-
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var skylinkRE = regexp.MustCompile("^.*([a-zA-Z0-9-_]{46}).*$")
@@ -45,8 +44,7 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 		// zero because in that case it's a valid array of ints which happen to
 		// be zeros.
 		upsert := bson.M{"$set": bson.M{
-			"skylink": skylinkRec.Skylink,
-			"size":    skylinkRec.Size,
+			"skylink": skylinkHash,
 		}}
 		opts := options.Update().SetUpsert(true)
 		var ur *mongo.UpdateResult
@@ -85,6 +83,20 @@ func (db *DB) SkylinkUpdate(ctx context.Context, id primitive.ObjectID, name str
 		updates["size"] = size
 	}
 	_, err := db.staticSkylinks.UpdateOne(ctx, filter, bson.M{"$set": updates})
+	if err != nil {
+		return errors.AddContext(err, "failed to update")
+	}
+	return nil
+}
+
+// SkylinkDownloadsUpdate changes the size of the full downloads of this
+// skylink. Those should have zero `bytes` in the DB. This method should be
+// called from the fetcher.
+func (db *DB) SkylinkDownloadsUpdate(ctx context.Context, id primitive.ObjectID, bytes int64) error {
+	filter := bson.M{"_id": id}
+	updates := bson.M{}
+	updates["bytes"] = bytes
+	_, err := db.staticDownloads.UpdateMany(ctx, filter, bson.M{"$set": updates})
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
 	}
