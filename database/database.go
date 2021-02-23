@@ -336,7 +336,12 @@ func count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int6
 	if err != nil {
 		return 0, errors.AddContext(err, "DB query failed")
 	}
-	defer func() { _ = c.Close(ctx) }()
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
+
 	if ok := c.Next(ctx); !ok {
 		// No results found. This is expected.
 		return 0, nil

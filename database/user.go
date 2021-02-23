@@ -101,7 +101,11 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
-	defer func() { _ = c.Close(ctx) }()
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
 	// Get the first result.
 	if ok := c.Next(ctx); !ok {
 		return nil, ErrUserNotFound
@@ -191,7 +195,11 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to find user")
 	}
-	defer func() { _ = c.Close(ctx) }()
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
 
 	var users []*User
 	for c.Next(ctx) {
@@ -323,7 +331,12 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 	if err != nil {
 		return
 	}
-	defer func() { _ = c.Close(ctx) }()
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
+
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
 		Size int64 `bson:"size"`
@@ -384,7 +397,12 @@ func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, mont
 		err = errors.AddContext(err, "DB query failed")
 		return
 	}
-	defer func() { _ = c.Close(ctx) }()
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
+
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
 		Size int64 `bson:"size"`
