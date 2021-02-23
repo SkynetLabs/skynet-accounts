@@ -18,8 +18,15 @@ SKYNET_DB_USER="username"
 SKYNET_DB_PASS="password"
 SKYNET_ACCOUNTS_PORT=3000
 COOKIE_DOMAIN="siasky.net"
-COOKIE_HASH_KEY=""
-COOKIE_ENC_KEY=""
+COOKIE_HASH_KEY="any thirty-two byte string is ok"
+COOKIE_ENC_KEY="any thirty-two byte string is ok"
+```
+
+There are some optional ones, as well:
+```.env
+SKYNET_ACCOUNTS_LOG_LEVEL=trace
+KRATOS_ADDR=localhost:4433
+OATHKEEPER_ADDR=localhost:4456
 ```
 
 ## Recommended reading

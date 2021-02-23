@@ -16,7 +16,7 @@ func TestNumChunks(t *testing.T) {
 		{size: 500 * MiB, result: 13},
 	}
 	for _, tt := range tests {
-		res := NumChunks(tt.size)
+		res := numChunks(tt.size)
 		if res != tt.result {
 			t.Errorf("Expected a %d MiB file to result into %d chunks, got %d.",
 				tt.size/MiB, tt.result, res)
@@ -30,12 +30,12 @@ func TestStorageUsed(t *testing.T) {
 		size   int64
 		result int64
 	}{
-		{size: 0, result: 4 * MiB},
-		{size: 1 * MiB, result: 4 * MiB},
-		{size: 4 * MiB, result: 4 * MiB},
-		{size: 5 * MiB, result: (4 + 40) * MiB},
-		{size: 50 * MiB, result: (4 + 2*40) * MiB},
-		{size: 500 * MiB, result: (4 + 13*40) * MiB},
+		{size: 0, result: SizeBaseSector},
+		{size: 1 * MiB, result: SizeBaseSector},
+		{size: 4 * MiB, result: SizeBaseSector},
+		{size: 5 * MiB, result: SizeBaseSector},
+		{size: 50 * MiB, result: SizeBaseSector + 2*SizeChunk},
+		{size: 500 * MiB, result: SizeBaseSector + 13*SizeChunk},
 	}
 	for _, tt := range tests {
 		res := StorageUsed(tt.size)
@@ -52,12 +52,12 @@ func TestBandwidthUploadCost(t *testing.T) {
 		size   int64
 		result int64
 	}{
-		{size: 0, result: 40 * MiB},
-		{size: 1 * MiB, result: 40 * MiB},
-		{size: 4 * MiB, result: 40 * MiB},
-		{size: 5 * MiB, result: (40 + 120) * MiB},
-		{size: 50 * MiB, result: (40 + 2*120) * MiB},
-		{size: 500 * MiB, result: (40 + 13*120) * MiB},
+		{size: 0, result: 10 * SizeBaseSector},
+		{size: 1 * MiB, result: 10 * SizeBaseSector},
+		{size: 4 * MiB, result: 10 * SizeBaseSector},
+		{size: 5 * MiB, result: 10*SizeBaseSector + 3*SizeChunk},
+		{size: 50 * MiB, result: 10*SizeBaseSector + 2*3*SizeChunk},
+		{size: 500 * MiB, result: 10*SizeBaseSector + 13*3*SizeChunk},
 	}
 	for _, tt := range tests {
 		res := BandwidthUploadCost(tt.size)

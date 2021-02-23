@@ -9,6 +9,8 @@ import (
 	"gitlab.com/NebulousLabs/fastrand"
 )
 
+// TestUserBandwidth ensures that uploads and downloads result are correctly
+// billed in terms of bandwidth.
 func TestUserBandwidth(t *testing.T) {
 	ctx := context.Background()
 	db, err := database.New(ctx, DBTestCredentials(), nil)
