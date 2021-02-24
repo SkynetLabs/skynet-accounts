@@ -358,6 +358,7 @@ func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Reque
 
 // stripeCheckoutHandler ...
 func (api *API) stripeCheckoutHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	api.staticLogger.Tracef("Processing request: %+v", req)
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -383,6 +384,7 @@ func (api *API) stripeCheckoutHandler(w http.ResponseWriter, req *http.Request, 
 
 // stripeWebhookHandler ...
 func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	api.staticLogger.Tracef("Processing request: %+v", req)
 	bodyBytes, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
