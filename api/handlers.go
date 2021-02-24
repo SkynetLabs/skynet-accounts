@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -102,14 +103,10 @@ func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ htt
 }
 
 // userPutHandler allows changing some user information.
-func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
-		return
-	}
-	if err = req.ParseForm(); err != nil {
-		api.WriteError(w, errors.New("bad form data"), http.StatusBadRequest)
 		return
 	}
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
@@ -117,11 +114,26 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, ps http
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	// Read and validate the parameters. Set them on the user struct.
-	stripeId := req.Form.Get("stripeCustomerId")
-	if stripeId != "" {
+	// Read body.
+	bodyBytes, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = errors.AddContext(err, "failed to read request body")
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	defer func() { _ = req.Body.Close() }()
+	payload := struct {
+		StripeID string `json:"stripeCustomerId"`
+	}{}
+	err = json.Unmarshal(bodyBytes, &payload)
+	if err != nil {
+		err = errors.AddContext(err, "failed to parse request body")
+		api.WriteError(w, err, http.StatusBadRequest)
+	}
+	// Update user struct.
+	if payload.StripeID != "" {
 		// Check if a user already has this customer id.
-		eu, err := api.staticDB.UserByStripeID(req.Context(), stripeId)
+		eu, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
 		if err != nil && err != database.ErrUserNotFound {
 			api.WriteError(w, err, http.StatusInternalServerError)
 			return
@@ -131,7 +143,7 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, ps http
 			api.WriteError(w, err, http.StatusBadRequest)
 			return
 		}
-		u.StripeId = stripeId
+		u.StripeId = payload.StripeID
 	}
 	// Save the changed user to the DB.
 	err = api.staticDB.UserSave(req.Context(), u)
@@ -390,6 +402,7 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { _ = req.Body.Close() }()
 	api.staticLogger.Debugf("WH >>> ps: %v", ps)
 	api.staticLogger.Debugf("WH >>> body: %v", string(bodyBytes))
 	api.WriteSuccess(w)
