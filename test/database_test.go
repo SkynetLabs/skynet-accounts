@@ -84,7 +84,7 @@ func TestDatabase_UserByID(t *testing.T) {
 	}
 }
 
-// TestDatabase_UserUpdate ensures UserUpdate works as expected.
+// TestDatabase_UserUpdate ensures UserSave works as expected.
 func TestDatabase_UserUpdate(t *testing.T) {
 	ctx := context.Background()
 	db, err := database.New(ctx, DBTestCredentials(), nil)
@@ -103,7 +103,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 
 	// Test changing the user's tier.
 	u.Tier = database.TierPremium5
-	err = db.UserUpdate(ctx, u)
+	err = db.UserSave(ctx, u)
 	if err != nil {
 		t.Fatal("Failed to update user:", err)
 	}

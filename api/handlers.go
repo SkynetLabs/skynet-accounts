@@ -99,6 +99,56 @@ func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ htt
 	api.WriteJSON(w, ud)
 }
 
+// userPutHandler allows changing some user information.
+func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	sub, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	if err = req.ParseForm(); err != nil {
+		api.WriteError(w, errors.New("bad form data"), http.StatusBadRequest)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Read and validate the parameters. Set them on the user struct.
+	tierStr := req.Form.Get("tier")
+	if tierStr != "" {
+		tier, err := strconv.Atoi(tierStr)
+		if err != nil || !validTier(tier) {
+			api.WriteError(w, errors.New("invalid tier value"), http.StatusBadRequest)
+			return
+		}
+		u.Tier = tier
+	}
+	stripeId := req.Form.Get("stripeCustomerId")
+	if stripeId != "" {
+		// Check if a user already has this customer id.
+		eu, err := api.staticDB.UserByStripeID(req.Context(), stripeId)
+		if err != nil && err != database.ErrUserNotFound {
+			api.WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
+		if err == nil && eu.ID.Hex() != u.ID.Hex() {
+			err = errors.New("this stripe customer id belongs to another user")
+			api.WriteError(w, err, http.StatusBadRequest)
+			return
+		}
+		u.StripeId = stripeId
+	}
+	// Save the changed user to the DB.
+	err = api.staticDB.UserSave(req.Context(), u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, u)
+}
+
 // userUploadsHandler returns all uploads made by the current user.
 func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := tokenFromContext(req)
@@ -332,4 +382,9 @@ func fetchPageSize(form url.Values) (int, error) {
 		pageSize = database.DefaultPageSize
 	}
 	return pageSize, nil
+}
+
+// validTier is a sanity check helper that ensures the given tier value is valid.
+func validTier(t int) bool {
+	return t > 0 && t <= 4
 }

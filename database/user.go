@@ -69,6 +69,7 @@ type (
 		Sub             string             `bson:"sub" json:"sub"`
 		Tier            int                `bson:"tier" json:"tier"`
 		SubscribedUntil time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
+		StripeId        string             `bson:"stripe_id" json:"stripeCustomerId"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
@@ -127,6 +128,34 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	return &u, nil
 }
 
+// UserByStripeID finds a user by their Stripe customer id.
+func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
+	filter := bson.D{{"stripe_id", id}}
+	c, err := db.staticUsers.Find(ctx, filter)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to Find")
+	}
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
+	// Get the first result.
+	if ok := c.Next(ctx); !ok {
+		return nil, ErrUserNotFound
+	}
+	// Ensure there are no more results.
+	if ok := c.Next(ctx); ok {
+		build.Critical("more than one user found for stripe customer id", id)
+	}
+	var u User
+	err = c.Decode(&u)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to parse value from DB")
+	}
+	return &u, nil
+}
+
 // UserCreate creates a new user in the DB.
 func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, error) {
 	// Check for an existing user with this sub.
@@ -176,13 +205,14 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserUpdate changes the user's data in the DB.
+// UserSave changes the user's data in the DB.
 // It never changes the id or sub of the user.
-func (db *DB) UserUpdate(ctx context.Context, u *User) error {
+func (db *DB) UserSave(ctx context.Context, u *User) error {
 	// Update the user.
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
-		"tier": u.Tier,
+		"tier":      u.Tier,
+		"stripe_id": u.StripeId,
 	}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
