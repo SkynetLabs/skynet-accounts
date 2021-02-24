@@ -22,6 +22,9 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsHandler))
 	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsHandler))
 	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
+
+	api.staticRouter.POST("/stripe/checkout/success", api.validate(api.stripeCheckoutHandler))
+	api.staticRouter.POST("/stripe/webhook", api.stripeWebhookHandler)
 }
 
 // validate ensures that the user making the request has logged in.

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -116,15 +118,6 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, ps http
 		return
 	}
 	// Read and validate the parameters. Set them on the user struct.
-	tierStr := req.Form.Get("tier")
-	if tierStr != "" {
-		tier, err := strconv.Atoi(tierStr)
-		if err != nil || !validTier(tier) {
-			api.WriteError(w, errors.New("invalid tier value"), http.StatusBadRequest)
-			return
-		}
-		u.Tier = tier
-	}
 	stripeId := req.Form.Get("stripeCustomerId")
 	if stripeId != "" {
 		// Check if a user already has this customer id.
@@ -363,6 +356,43 @@ func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Reque
 	api.WriteSuccess(w)
 }
 
+// stripeCheckoutHandler ...
+func (api *API) stripeCheckoutHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	sub, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	sid := ps.ByName("session_id")
+	if sid == "" {
+		api.WriteError(w, errors.New("missing parameter 'session_id'"), http.StatusBadRequest)
+		return
+	}
+
+	// TODO Implement
+	fmt.Println(sid, u)
+
+	api.WriteSuccess(w)
+}
+
+// stripeWebhookHandler ...
+func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	bodyBytes, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.staticLogger.Debugf("WH >>> ps: %v", ps)
+	api.staticLogger.Debugf("WH >>> body: %v", string(bodyBytes))
+	api.WriteSuccess(w)
+}
+
 // fetchOffset extracts the offset from the params and validates its value.
 func fetchOffset(form url.Values) (int, error) {
 	offset, _ := strconv.Atoi(form.Get("offset"))
@@ -382,9 +412,4 @@ func fetchPageSize(form url.Values) (int, error) {
 		pageSize = database.DefaultPageSize
 	}
 	return pageSize, nil
-}
-
-// validTier is a sanity check helper that ensures the given tier value is valid.
-func validTier(t int) bool {
-	return t > 0 && t <= 4
 }

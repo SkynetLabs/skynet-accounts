@@ -211,7 +211,6 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 	// Update the user.
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
-		"tier":      u.Tier,
 		"stripe_id": u.StripeId,
 	}}
 	opts := options.Update().SetUpsert(true)
