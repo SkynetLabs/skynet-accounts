@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/skynet"
 
 	"gitlab.com/NebulousLabs/fastrand"
 )
@@ -27,8 +28,8 @@ func TestUserStats(t *testing.T) {
 		_ = db.UserDelete(nil, user)
 	}(u)
 
-	testUploadSizeSmall := int64(1 + fastrand.Intn(4*database.MiB-1))
-	testUploadSizeBig := int64(4*database.MiB + 1 + fastrand.Intn(4*database.MiB))
+	testUploadSizeSmall := int64(1 + fastrand.Intn(4*skynet.MiB-1))
+	testUploadSizeBig := int64(4*skynet.MiB + 1 + fastrand.Intn(4*skynet.MiB))
 	expectedUploadBandwidth := int64(0)
 	expectedDownloadBandwidth := int64(0)
 
@@ -37,7 +38,7 @@ func TestUserStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedUploadBandwidth = database.BandwidthUploadCost(testUploadSizeSmall)
+	expectedUploadBandwidth = skynet.BandwidthUploadCost(testUploadSizeSmall)
 	// Check the stats.
 	stats, err := db.UserStats(ctx, *u)
 	if err != nil {
@@ -48,8 +49,8 @@ func TestUserStats(t *testing.T) {
 	}
 	if stats.BandwidthUploads != expectedUploadBandwidth {
 		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedUploadBandwidth, expectedUploadBandwidth/database.MiB,
-			stats.BandwidthUploads, stats.BandwidthUploads/database.MiB)
+			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB,
+			stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
 	}
 
 	// Create a big upload.
@@ -57,7 +58,7 @@ func TestUserStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedUploadBandwidth += database.BandwidthUploadCost(testUploadSizeBig)
+	expectedUploadBandwidth += skynet.BandwidthUploadCost(testUploadSizeBig)
 	// Check the stats.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
@@ -68,17 +69,17 @@ func TestUserStats(t *testing.T) {
 	}
 	if stats.BandwidthUploads != expectedUploadBandwidth {
 		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedUploadBandwidth, expectedUploadBandwidth/database.MiB,
-			stats.BandwidthUploads, stats.BandwidthUploads/database.MiB)
+			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB,
+			stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
 	}
 
 	// Register a small download.
-	smallDownload := int64(1 + fastrand.Intn(4*database.MiB))
-	_, err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
+	smallDownload := int64(1 + fastrand.Intn(4*skynet.MiB))
+	err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
-	expectedDownloadBandwidth += database.BandwidthDownloadCost(smallDownload)
+	expectedDownloadBandwidth += skynet.BandwidthDownloadCost(smallDownload)
 	// Check the stats.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
@@ -89,16 +90,16 @@ func TestUserStats(t *testing.T) {
 	}
 	if stats.BandwidthDownloads != expectedDownloadBandwidth {
 		t.Fatalf("Expected download bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedDownloadBandwidth, expectedDownloadBandwidth/database.MiB,
-			stats.BandwidthDownloads, stats.BandwidthDownloads/database.MiB)
+			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MiB,
+			stats.BandwidthDownloads, stats.BandwidthDownloads/skynet.MiB)
 	}
 	// Register a big download.
-	bigDownload := int64(100*database.MiB + fastrand.Intn(4*database.MiB))
-	_, err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
+	bigDownload := int64(100*skynet.MiB + fastrand.Intn(4*skynet.MiB))
+	err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
-	expectedDownloadBandwidth += database.BandwidthDownloadCost(bigDownload)
+	expectedDownloadBandwidth += skynet.BandwidthDownloadCost(bigDownload)
 	// Check bandwidth.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
@@ -109,8 +110,8 @@ func TestUserStats(t *testing.T) {
 	}
 	if stats.BandwidthDownloads != expectedDownloadBandwidth {
 		t.Fatalf("Expected download bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedDownloadBandwidth, expectedDownloadBandwidth/database.MiB,
-			stats.BandwidthDownloads, stats.BandwidthDownloads/database.MiB)
+			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MiB,
+			stats.BandwidthDownloads, stats.BandwidthDownloads/skynet.MiB)
 	}
 
 	// Register a registry read.
@@ -118,7 +119,7 @@ func TestUserStats(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to register a registry read.", err)
 	}
-	expectedRegReadBandwidth := int64(database.PriceBandwidthRegistryRead)
+	expectedRegReadBandwidth := int64(skynet.PriceBandwidthRegistryRead)
 	// Check bandwidth.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
@@ -129,15 +130,15 @@ func TestUserStats(t *testing.T) {
 	}
 	if stats.BandwidthRegReads != expectedRegReadBandwidth {
 		t.Fatalf("Expected registry read bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedRegReadBandwidth, expectedRegReadBandwidth/database.MiB,
-			stats.BandwidthRegReads, stats.BandwidthRegReads/database.MiB)
+			expectedRegReadBandwidth, expectedRegReadBandwidth/skynet.MiB,
+			stats.BandwidthRegReads, stats.BandwidthRegReads/skynet.MiB)
 	}
 	// Register a registry read.
 	_, err = db.RegistryReadCreate(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to register a registry read.", err)
 	}
-	expectedRegReadBandwidth += int64(database.PriceBandwidthRegistryRead)
+	expectedRegReadBandwidth += int64(skynet.PriceBandwidthRegistryRead)
 	// Check bandwidth.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
@@ -148,8 +149,8 @@ func TestUserStats(t *testing.T) {
 	}
 	if stats.BandwidthRegReads != expectedRegReadBandwidth {
 		t.Fatalf("Expected registry read bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedRegReadBandwidth, expectedRegReadBandwidth/database.MiB,
-			stats.BandwidthRegReads, stats.BandwidthRegReads/database.MiB)
+			expectedRegReadBandwidth, expectedRegReadBandwidth/skynet.MiB,
+			stats.BandwidthRegReads, stats.BandwidthRegReads/skynet.MiB)
 	}
 
 	// Register a registry write.
@@ -157,7 +158,7 @@ func TestUserStats(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to register a registry write.", err)
 	}
-	expectedRegWriteBandwidth := int64(database.PriceBandwidthRegistryWrite)
+	expectedRegWriteBandwidth := int64(skynet.PriceBandwidthRegistryWrite)
 	// Check bandwidth.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
@@ -168,15 +169,15 @@ func TestUserStats(t *testing.T) {
 	}
 	if stats.BandwidthRegWrites != expectedRegWriteBandwidth {
 		t.Fatalf("Expected registry write bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedRegWriteBandwidth, expectedRegWriteBandwidth/database.MiB,
-			stats.BandwidthRegWrites, stats.BandwidthRegWrites/database.MiB)
+			expectedRegWriteBandwidth, expectedRegWriteBandwidth/skynet.MiB,
+			stats.BandwidthRegWrites, stats.BandwidthRegWrites/skynet.MiB)
 	}
 	// Register a registry write.
 	_, err = db.RegistryWriteCreate(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to register a registry write.", err)
 	}
-	expectedRegWriteBandwidth += int64(database.PriceBandwidthRegistryWrite)
+	expectedRegWriteBandwidth += int64(skynet.PriceBandwidthRegistryWrite)
 	// Check bandwidth.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
@@ -187,7 +188,7 @@ func TestUserStats(t *testing.T) {
 	}
 	if stats.BandwidthRegWrites != expectedRegWriteBandwidth {
 		t.Fatalf("Expected registry write bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedRegWriteBandwidth, expectedRegWriteBandwidth/database.MiB,
-			stats.BandwidthRegWrites, stats.BandwidthRegWrites/database.MiB)
+			expectedRegWriteBandwidth, expectedRegWriteBandwidth/skynet.MiB,
+			stats.BandwidthRegWrites, stats.BandwidthRegWrites/skynet.MiB)
 	}
 }

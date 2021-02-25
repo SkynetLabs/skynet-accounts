@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
+	"github.com/NebulousLabs/skynet-accounts/skynet"
 
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -25,39 +26,6 @@ const (
 	TierPremium20
 	// TierPremium80 80
 	TierPremium80
-
-	// KiB kilobyte
-	KiB = 1024
-	// MiB megabyte
-	MiB = 1024 * KiB
-
-	// SizeBaseSector is the size of a base sector.
-	SizeBaseSector = 4 * MiB
-	// SizeChunk is the size of a chunk.
-	SizeChunk = 40 * MiB
-
-	// PriceBandwidthRegistryWrite the bandwidth cost of a single registry write
-	PriceBandwidthRegistryWrite = 5 * MiB
-	// PriceBandwidthRegistryRead the bandwidth cost of a single registry read
-	PriceBandwidthRegistryRead = MiB
-
-	// PriceBandwidthUploadBase is the baseline bandwidth price for each upload.
-	// This is the cost of uploading the base sector.
-	PriceBandwidthUploadBase = 40 * MiB
-	// PriceBandwidthUploadIncrement is the bandwidth price per 40MB uploaded
-	// data, beyond the base sector (beyond the first 4MB). Rounded up.
-	PriceBandwidthUploadIncrement = 120 * MiB
-	// PriceBandwidthDownloadBase is the baseline bandwidth price for each Download.
-	PriceBandwidthDownloadBase = 200 * KiB
-	// PriceBandwidthDownloadIncrement is the bandwidth price per 64B. Rounded up.
-	PriceBandwidthDownloadIncrement = 64
-
-	// PriceStorageUploadBase is the baseline storage price for each upload.
-	// This is the cost of uploading the base sector.
-	PriceStorageUploadBase = 4 * MiB
-	// PriceStorageUploadIncrement is the storage price for each 40MB beyond
-	// the base sector (beyond the first 4MB). Rounded up.
-	PriceStorageUploadIncrement = 40 * MiB
 )
 
 type (
@@ -350,8 +318,8 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 		}
 		count++
 		totalSize += result.Size
-		storageUsed += StorageUsed(result.Size)
-		totalBandwidth += BandwidthUploadCost(result.Size)
+		storageUsed += skynet.StorageUsed(result.Size)
+		totalBandwidth += skynet.BandwidthUploadCost(result.Size)
 	}
 	return count, totalSize, storageUsed, totalBandwidth, nil
 }
@@ -361,7 +329,7 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", id},
-		{"timestamp", bson.D{{"$gt", monthStart}}},
+		{"created_at", bson.D{{"$gt", monthStart}}},
 	}}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
@@ -416,7 +384,7 @@ func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, mont
 		}
 		count++
 		totalSize += result.Size
-		totalBandwidth += BandwidthDownloadCost(result.Size)
+		totalBandwidth += skynet.BandwidthDownloadCost(result.Size)
 	}
 	return count, totalSize, totalBandwidth, nil
 }
@@ -432,7 +400,7 @@ func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.Objec
 	if err != nil {
 		return 0, 0, errors.AddContext(err, "failed to fetch registry write bandwidth")
 	}
-	return writes, writes * PriceBandwidthRegistryWrite, nil
+	return writes, writes * skynet.PriceBandwidthRegistryWrite, nil
 }
 
 // userRegistryReadsStats reports the number of registry reads by the user and
@@ -446,7 +414,7 @@ func (db *DB) userRegistryReadStats(ctx context.Context, userId primitive.Object
 	if err != nil {
 		return 0, 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
 	}
-	return reads, reads * PriceBandwidthRegistryRead, nil
+	return reads, reads * skynet.PriceBandwidthRegistryRead, nil
 }
 
 // monthStart returns the start of the user's subscription month.
@@ -463,40 +431,4 @@ func monthStart(subscribedUntil time.Time) time.Time {
 	daysDelta := subscribedUntil.Day() - now.Day()
 	d := now.AddDate(0, -1, daysDelta)
 	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
-}
-
-// numChunks returns the number of 40MB chunks a file of this size uses, beyond
-// the 4MB in the base sector.
-func numChunks(size int64) int64 {
-	if size <= SizeBaseSector {
-		return 0
-	}
-	chunksBeyondBase := (size - SizeBaseSector) / SizeChunk
-	if (size-SizeBaseSector)%SizeChunk > 0 {
-		chunksBeyondBase++
-	}
-	return chunksBeyondBase
-}
-
-// StorageUsed calculates how much storage an upload with a given size actually
-// uses.
-func StorageUsed(uploadSize int64) int64 {
-	return PriceStorageUploadBase + numChunks(uploadSize)*PriceStorageUploadIncrement
-}
-
-// BandwidthUploadCost calculates the bandwidth cost of an upload with the given
-// size. The base sector is uploaded with 10x redundancy. Each chunk is uploaded
-// with 3x redundancy.
-func BandwidthUploadCost(size int64) int64 {
-	return PriceBandwidthUploadBase + numChunks(size)*PriceBandwidthUploadIncrement
-}
-
-// BandwidthDownloadCost calculates the bandwidth cost of a download with the
-// given size.
-func BandwidthDownloadCost(size int64) int64 {
-	chunks := size / 64
-	if size%64 > 0 {
-		chunks++
-	}
-	return PriceBandwidthDownloadBase + chunks*PriceBandwidthDownloadIncrement
 }

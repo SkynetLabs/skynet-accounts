@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/NebulousLabs/skynet-accounts/skynet"
+
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -121,7 +123,7 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 		return nil, 0, err
 	}
 	for ix := range uploads {
-		uploads[ix].Size = StorageUsed(uploads[ix].Size)
+		uploads[ix].Size = skynet.StorageUsed(uploads[ix].Size)
 	}
 	return uploads, int(cnt), nil
 }
