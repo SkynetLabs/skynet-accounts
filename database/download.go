@@ -70,7 +70,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 	// Check if there exists a download of this skylink by this user, updated
 	// within the DownloadUpdateWindow and keep updating that, if so.
 	down, err := db.DownloadRecent(ctx, skylink.ID)
-	if err == nil && down.UpdatedAt.Add(DownloadUpdateWindow).After(time.Now().UTC()) {
+	if err == nil {
 		// We found a recent download of this skylink. Let's update it.
 		return db.DownloadIncrement(ctx, down, bytes)
 	}
@@ -135,7 +135,11 @@ func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSi
 
 // DownloadRecent returns the most recent download of the given skylink.
 func (db *DB) DownloadRecent(ctx context.Context, skylinkId primitive.ObjectID) (*Download, error) {
-	filter := bson.D{{"skylink_id", skylinkId}}
+	updatedAtThreshold := time.Now().UTC().Add(-1 * DownloadUpdateWindow)
+	filter := bson.D{
+		{"skylink_id", skylinkId},
+		{"updated_at", bson.D{{"$gt", updatedAtThreshold}}},
+	}
 	opts := options.FindOneOptions{
 		Sort: bson.D{{"updated_at", -1}},
 	}
@@ -154,9 +158,10 @@ func (db *DB) DownloadRecent(ctx context.Context, skylinkId primitive.ObjectID) 
 // DownloadIncrement increments the size of the download by additionalBytes.
 func (db *DB) DownloadIncrement(ctx context.Context, d *Download, additionalBytes int64) error {
 	filter := bson.M{"_id": d.ID}
-	update := bson.M{"$inc": bson.M{
-		"bytes": additionalBytes,
-	}}
+	update := bson.M{
+		"$inc": bson.M{"bytes": additionalBytes},
+		"$set": bson.M{"updated_at": time.Now().UTC()},
+	}
 	_, err := db.staticDownloads.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return errors.AddContext(err, "failed to update download record")
