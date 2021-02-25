@@ -40,17 +40,17 @@ type (
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
-		StorageUsed        int64 `bson:"-" json:"storageUsed"`
-		NumRegReads        int64 `bson:"-" json:"numRegReads"`
-		NumRegWrites       int64 `bson:"-" json:"numRegWrites"`
-		NumUploads         int   `bson:"-" json:"numUploads"`
-		NumDownloads       int   `bson:"-" json:"numDownloads"`
-		TotalUploadsSize   int64 `bson:"-" json:"totalUploadsSize"`
-		TotalDownloadsSize int64 `bson:"-" json:"totalDownloadsSize"`
-		BandwidthUploads   int64 `bson:"-" json:"bwUploads"`
-		BandwidthDownloads int64 `bson:"-" json:"bwDownloads"`
-		BandwidthRegReads  int64 `bson:"-" json:"bwRegReads"`
-		BandwidthRegWrites int64 `bson:"-" json:"bwRegWrites"`
+		StorageUsed        int64 `json:"storageUsed"`
+		NumRegReads        int64 `json:"numRegReads"`
+		NumRegWrites       int64 `json:"numRegWrites"`
+		NumUploads         int   `json:"numUploads"`
+		NumDownloads       int   `json:"numDownloads"`
+		TotalUploadsSize   int64 `json:"totalUploadsSize"`
+		TotalDownloadsSize int64 `json:"totalDownloadsSize"`
+		BandwidthUploads   int64 `json:"bwUploads"`
+		BandwidthDownloads int64 `json:"bwDownloads"`
+		BandwidthRegReads  int64 `json:"bwRegReads"`
+		BandwidthRegWrites int64 `json:"bwRegWrites"`
 	}
 )
 
