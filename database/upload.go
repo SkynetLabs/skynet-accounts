@@ -2,8 +2,9 @@ package database
 
 import (
 	"context"
-	"fmt"
 	"time"
+
+	"github.com/NebulousLabs/skynet-accounts/skynet"
 
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -67,14 +68,6 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 		return nil, err
 	}
 	up.ID = ior.InsertedID.(primitive.ObjectID)
-	if skylink.Size > 0 {
-		err = db.UserUpdateUsedStorage(ctx, user.ID, skylink.Size)
-		if err != nil {
-			// Do not fail on error, just log a message.
-			msg := fmt.Sprintf("Failed to update user's used storage for user %s and skylink %v.", user.ID.Hex(), skylink)
-			db.staticLogger.Debugln(msg, err)
-		}
-	}
 	return &up, nil
 }
 
@@ -110,7 +103,7 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 	if err := validateOffsetPageSize(offset, pageSize); err != nil {
 		return nil, 0, err
 	}
-	cnt, err := count(ctx, db.staticUploads, matchStage)
+	cnt, err := db.count(ctx, db.staticUploads, matchStage)
 	if err != nil || cnt == 0 {
 		return []UploadResponseDTO{}, 0, err
 	}
@@ -118,21 +111,26 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 	if err != nil {
 		return nil, 0, err
 	}
-	defer func() { _ = c.Close(ctx) }()
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
+
 	uploads := make([]UploadResponseDTO, pageSize)
 	err = c.All(ctx, &uploads)
 	if err != nil {
 		return nil, 0, err
 	}
 	for ix := range uploads {
-		uploads[ix].Size = StorageUsed(uploads[ix].Size)
+		uploads[ix].Size = skynet.StorageUsed(uploads[ix].Size)
 	}
 	return uploads, int(cnt), nil
 }
 
 // validateOffsetPageSize returns an error if offset and/or page size are invalid.
 func validateOffsetPageSize(offset, pageSize int) error {
-	errs := []error{}
+	var errs []error
 	if offset < 0 {
 		errs = append(errs, errors.New("the offset must be non-negative"))
 	}

@@ -2,12 +2,11 @@ package database
 
 import (
 	"context"
-	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
+	"github.com/NebulousLabs/skynet-accounts/skynet"
 
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -27,39 +26,6 @@ const (
 	TierPremium20
 	// TierPremium80 80
 	TierPremium80
-
-	// KiB kilobyte
-	KiB = 1024
-	// MiB megabyte
-	MiB = 1024 * KiB
-
-	// SizeBaseSector is the size of a base sector.
-	SizeBaseSector = 4 * MiB
-	// SizeChunk is the size of a chunk.
-	SizeChunk = 40 * MiB
-
-	// PriceBandwidthRegistryWrite the bandwidth cost of a single registry write
-	PriceBandwidthRegistryWrite = 5 * MiB
-	// PriceBandwidthRegistryRead the bandwidth cost of a single registry read
-	PriceBandwidthRegistryRead = MiB
-
-	// PriceBandwidthUploadBase is the baseline bandwidth price for each upload.
-	// This is the cost of uploading the base sector.
-	PriceBandwidthUploadBase = 40 * MiB
-	// PriceBandwidthUploadIncrement is the bandwidth price per 40MB uploaded
-	// data, beyond the base sector (beyond the first 4MB). Rounded up.
-	PriceBandwidthUploadIncrement = 120 * MiB
-	// PriceBandwidthDownloadBase is the baseline bandwidth price for each Download.
-	PriceBandwidthDownloadBase = 200 * KiB
-	// PriceBandwidthDownloadIncrement is the bandwidth price per 64B. Rounded up.
-	PriceBandwidthDownloadIncrement = 64
-
-	// PriceStorageUploadBase is the baseline storage price for each upload.
-	// This is the cost of uploading the base sector.
-	PriceStorageUploadBase = 4 * MiB
-	// PriceStorageUploadIncrement is the storage price for each 40MB beyond
-	// the base sector (beyond the first 4MB). Rounded up.
-	PriceStorageUploadIncrement = 40 * MiB
 )
 
 type (
@@ -70,14 +36,21 @@ type (
 		ID              primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Sub             string             `bson:"sub" json:"sub"`
 		Tier            int                `bson:"tier" json:"tier"`
-		StorageUsed     int64              `bson:"storage_used" json:"storageUsed"`
 		SubscribedUntil time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
 	}
-	// UserDetails builds on top of User and provides additional information,
-	// typically more expensive to fetch than a single DB query.
-	UserDetails struct {
-		User
-		BandwidthUsed int64 `bson:"-" json:"bandwidthUsed"`
+	// UserStats contains statistical information about the user.
+	UserStats struct {
+		StorageUsed        int64 `json:"storageUsed"`
+		NumRegReads        int64 `json:"numRegReads"`
+		NumRegWrites       int64 `json:"numRegWrites"`
+		NumUploads         int   `json:"numUploads"`
+		NumDownloads       int   `json:"numDownloads"`
+		TotalUploadsSize   int64 `json:"totalUploadsSize"`
+		TotalDownloadsSize int64 `json:"totalDownloadsSize"`
+		BandwidthUploads   int64 `json:"bwUploads"`
+		BandwidthDownloads int64 `json:"bwDownloads"`
+		BandwidthRegReads  int64 `json:"bwRegReads"`
+		BandwidthRegWrites int64 `json:"bwRegWrites"`
 	}
 )
 
@@ -101,7 +74,11 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
-	defer func() { _ = c.Close(ctx) }()
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
 	// Get the first result.
 	if ok := c.Next(ctx); !ok {
 		return nil, ErrUserNotFound
@@ -146,23 +123,9 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 	return u, nil
 }
 
-// UserDetails returns the full user profile information.
-func (db *DB) UserDetails(ctx context.Context, user *User) (*UserDetails, error) {
-	// Refresh the user from the DB.
-	u, err := db.UserByID(ctx, user.ID)
-	if err != nil {
-		return nil, err
-	}
-	// Fetch the details.
-	bandwidthUsed, err := db.userBandwidth(ctx, *user)
-	if err != nil {
-		db.staticLogger.Debugf("Failed to fetch bandwidth used for user (%v): %v", user.Sub, err)
-		return nil, err
-	}
-	return &UserDetails{
-		User:          *u,
-		BandwidthUsed: bandwidthUsed,
-	}, err
+// UserStats returns statistical information about the user.
+func (db *DB) UserStats(ctx context.Context, user User) (*UserStats, error) {
+	return db.userStats(ctx, user)
 }
 
 // UserDelete deletes a user by their ID.
@@ -197,20 +160,6 @@ func (db *DB) UserUpdate(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserUpdateUsedStorage changes the user's used storage respective to the size
-// of the upload.
-func (db *DB) UserUpdateUsedStorage(ctx context.Context, id primitive.ObjectID, uploadSize int64) error {
-	if uploadSize <= 0 {
-		return errors.New("invalid upload size, it needs to be positive, got: " + strconv.Itoa(int(uploadSize)))
-	}
-	filter := bson.M{"_id": id}
-	update := bson.M{"$inc": bson.M{
-		"storage_used": StorageUsed(uploadSize),
-	}}
-	_, err := db.staticUsers.UpdateOne(ctx, filter, update)
-	return err
-}
-
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
@@ -219,7 +168,11 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to find user")
 	}
-	defer func() { _ = c.Close(ctx) }()
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
 
 	var users []*User
 	for c.Next(ctx) {
@@ -235,9 +188,9 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	return users, nil
 }
 
-// userBandwidth reports the total bandwidth used by the user.
-func (db *DB) userBandwidth(ctx context.Context, user User) (int64, error) {
-	var bandwidthAtomic int64
+// userStats reports statistical information about the user.
+func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
+	stats := UserStats{}
 	var errs []error
 	var errsMux sync.Mutex
 	regErr := func(msg string, e error) {
@@ -246,64 +199,71 @@ func (db *DB) userBandwidth(ctx context.Context, user User) (int64, error) {
 		errs = append(errs, e)
 		errsMux.Unlock()
 	}
-	monthStart := monthStart(user.SubscribedUntil)
+	startOfMonth := monthStart(user.SubscribedUntil)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		bw, err := db.userUploadBandwidth(ctx, user.ID, monthStart)
+		n, size, storage, bw, err := db.userUploadStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's upload bandwidth used:", err)
 			return
 		}
+		stats.NumUploads = n
+		stats.TotalUploadsSize = size
+		stats.StorageUsed = storage
+		stats.BandwidthUploads = bw
 		db.staticLogger.Tracef("User %s upload bandwidth: %v", user.ID.Hex(), bw)
-		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		bw, err := db.userDownloadBandwidth(ctx, user.ID, monthStart)
+		n, size, bw, err := db.userDownloadStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's download bandwidth used:", err)
 			return
 		}
+		stats.NumDownloads = n
+		stats.TotalDownloadsSize = size
+		stats.BandwidthDownloads = bw
 		db.staticLogger.Tracef("User %s download bandwidth: %v", user.ID.Hex(), bw)
-		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		bw, err := db.userRegistryWriteBandwidth(ctx, user.ID, monthStart)
+		n, bw, err := db.userRegistryWriteStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's registry write bandwidth used:", err)
 			return
 		}
+		stats.NumRegWrites = n
+		stats.BandwidthRegWrites = bw
 		db.staticLogger.Tracef("User %s registry write bandwidth: %v", user.ID.Hex(), bw)
-		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		bw, err := db.userRegistryReadBandwidth(ctx, user.ID, monthStart)
+		n, bw, err := db.userRegistryReadStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's registry read bandwidth used:", err)
 			return
 		}
+		stats.NumRegReads = n
+		stats.BandwidthRegReads = bw
 		db.staticLogger.Tracef("User %s registry read bandwidth: %v", user.ID.Hex(), bw)
-		atomic.AddInt64(&bandwidthAtomic, bw)
 	}()
 
 	wg.Wait()
 	if len(errs) > 0 {
-		return 0, errors.Compose(errs...)
+		return nil, errors.Compose(errs...)
 	}
-	return bandwidthAtomic, nil
+	return &stats, nil
 }
 
-// userUploadBandwidth reports the upload bandwidth used by the user. It uses
-// the total size of the uploaded skyfiles as basis.
-func (db *DB) userUploadBandwidth(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (int64, error) {
+// userUploadStats reports on the user's uploads - count, total size and total
+// bandwidth used. It uses the total size of the uploaded skyfiles as basis.
+func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, storageUsed int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", id},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
@@ -339,30 +299,37 @@ func (db *DB) userUploadBandwidth(ctx context.Context, id primitive.ObjectID, mo
 	pipeline := mongo.Pipeline{matchStage, lookupStage, replaceStage, projectStage}
 	c, err := db.staticUploads.Aggregate(ctx, pipeline)
 	if err != nil {
-		return 0, err
+		return
 	}
-	defer func() { _ = c.Close(ctx) }()
-	var bandwidth int64
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
+
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
 		Size int64 `bson:"size"`
 	}{}
 	for c.Next(ctx) {
 		if err = c.Decode(&result); err != nil {
-			return 0, errors.AddContext(err, "failed to decode DB data")
+			err = errors.AddContext(err, "failed to decode DB data")
+			return
 		}
-		bandwidth += BandwidthUploadCost(result.Size)
+		count++
+		totalSize += result.Size
+		storageUsed += skynet.StorageUsed(result.Size)
+		totalBandwidth += skynet.BandwidthUploadCost(result.Size)
 	}
-	return bandwidth, nil
+	return count, totalSize, storageUsed, totalBandwidth, nil
 }
 
-// userDownloadBandwidth reports the download bandwidth used by the user. It
-// uses the cumulative downloaded amount, noted with each download record. Those
-// numbers account for the actual bandwidth used, as reported by nginx.
-func (db *DB) userDownloadBandwidth(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (int64, error) {
+// userDownloadStats reports on the user's downloads - count, total size and
+// total bandwidth used. It uses the actual bandwidth used, as reported by nginx.
+func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", id},
-		{"timestamp", bson.D{{"$gt", monthStart}}},
+		{"created_at", bson.D{{"$gt", monthStart}}},
 	}}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
@@ -397,49 +364,57 @@ func (db *DB) userDownloadBandwidth(ctx context.Context, id primitive.ObjectID, 
 	pipeline := mongo.Pipeline{matchStage, lookupStage, replaceStage, projectStage}
 	c, err := db.staticDownloads.Aggregate(ctx, pipeline)
 	if err != nil {
-		return 0, errors.AddContext(err, "DB query failed")
+		err = errors.AddContext(err, "DB query failed")
+		return
 	}
-	defer func() { _ = c.Close(ctx) }()
-	var bandwidth int64
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
+
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
 		Size int64 `bson:"size"`
 	}{}
 	for c.Next(ctx) {
 		if err = c.Decode(&result); err != nil {
-			return 0, errors.AddContext(err, "failed to decode DB data")
+			err = errors.AddContext(err, "failed to decode DB data")
+			return
 		}
-		bandwidth += BandwidthDownloadCost(result.Size)
+		count++
+		totalSize += result.Size
+		totalBandwidth += skynet.BandwidthDownloadCost(result.Size)
 	}
-	return bandwidth, nil
+	return count, totalSize, totalBandwidth, nil
 }
 
-// userRegistryWriteBandwidth reports the bandwidth used by the user's registry
-// writes.
-func (db *DB) userRegistryWriteBandwidth(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, error) {
+// userRegistryWriteStats reports the number of registry writes by the user and
+// the bandwidth used.
+func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", userId},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
-	writes, err := count(ctx, db.staticRegistryWrites, matchStage)
+	writes, err := db.count(ctx, db.staticRegistryWrites, matchStage)
 	if err != nil {
-		return 0, errors.AddContext(err, "failed to fetch registry write bandwidth")
+		return 0, 0, errors.AddContext(err, "failed to fetch registry write bandwidth")
 	}
-	return writes * PriceBandwidthRegistryWrite, nil
+	return writes, writes * skynet.PriceBandwidthRegistryWrite, nil
 }
 
-// userRegistryReadBandwidth reports the bandwidth used by the user's registry
-// reads.
-func (db *DB) userRegistryReadBandwidth(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, error) {
+// userRegistryReadsStats reports the number of registry reads by the user and
+// the bandwidth used.
+func (db *DB) userRegistryReadStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", userId},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
-	reads, err := count(ctx, db.staticRegistryReads, matchStage)
+	reads, err := db.count(ctx, db.staticRegistryReads, matchStage)
 	if err != nil {
-		return 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
+		return 0, 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
 	}
-	return reads * PriceBandwidthRegistryRead, nil
+	return reads, reads * skynet.PriceBandwidthRegistryRead, nil
 }
 
 // monthStart returns the start of the user's subscription month.
@@ -456,40 +431,4 @@ func monthStart(subscribedUntil time.Time) time.Time {
 	daysDelta := subscribedUntil.Day() - now.Day()
 	d := now.AddDate(0, -1, daysDelta)
 	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
-}
-
-// numChunks returns the number of 40MB chunks a file of this size uses, beyond
-// the 4MB in the base sector.
-func numChunks(size int64) int64 {
-	if size <= SizeBaseSector {
-		return 0
-	}
-	chunksBeyondBase := (size - SizeBaseSector) / SizeChunk
-	if (size-SizeBaseSector)%SizeChunk > 0 {
-		chunksBeyondBase++
-	}
-	return chunksBeyondBase
-}
-
-// StorageUsed calculates how much storage an upload with a given size actually
-// uses.
-func StorageUsed(uploadSize int64) int64 {
-	return PriceStorageUploadBase + numChunks(uploadSize)*PriceStorageUploadIncrement
-}
-
-// BandwidthUploadCost calculates the bandwidth cost of an upload with the given
-// size. The base sector is uploaded with 10x redundancy. Each chunk is uploaded
-// with 3x redundancy.
-func BandwidthUploadCost(size int64) int64 {
-	return PriceBandwidthUploadBase + numChunks(size)*PriceBandwidthUploadIncrement
-}
-
-// BandwidthDownloadCost calculates the bandwidth cost of a download with the
-// given size.
-func BandwidthDownloadCost(size int64) int64 {
-	chunks := size / 64
-	if size%64 > 0 {
-		chunks++
-	}
-	return PriceBandwidthDownloadBase + chunks*PriceBandwidthDownloadIncrement
 }

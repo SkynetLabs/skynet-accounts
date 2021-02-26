@@ -72,7 +72,26 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	ud, err := api.staticDB.UserDetails(req.Context(), u)
+	api.WriteJSON(w, u)
+}
+
+// userStatsHandler returns statistics about an existing user.
+func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := tokenFromContext(req)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	ud, err := api.staticDB.UserStats(req.Context(), *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -235,7 +254,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
+	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
