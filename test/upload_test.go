@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/skynet"
 
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
@@ -55,10 +56,10 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("Expected to have exactly %d upload(s), got %d.", 1, n)
 	}
-	storageUsed := database.StorageUsed(testUploadSize)
+	storageUsed := skynet.StorageUsed(testUploadSize)
 	if ups[0].Size != storageUsed {
 		t.Fatalf("Expected the reported size of an upload with file size of %d (%d MiB) to be its used storage of %d (%d MiB), got %d (%d MiB).",
-			testUploadSize, testUploadSize/database.MiB, storageUsed, storageUsed/database.MiB, ups[0].Size, ups[0].Size/database.MiB)
+			testUploadSize, testUploadSize/skynet.MiB, storageUsed, storageUsed/skynet.MiB, ups[0].Size, ups[0].Size/skynet.MiB)
 	}
 	// Refresh the user's record and make sure we report storage used accurately.
 	stats, err := db.UserStats(ctx, *u)
@@ -67,7 +68,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	}
 	if stats.StorageUsed != storageUsed {
 		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).",
-			storageUsed, storageUsed/database.MiB, stats.StorageUsed, stats.StorageUsed/database.MiB)
+			storageUsed, storageUsed/skynet.MiB, stats.StorageUsed, stats.StorageUsed/skynet.MiB)
 	}
 }
 
