@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -129,28 +128,37 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
-	// Update user struct.
-	if payload.StripeID != "" {
-		// Check if a user already has this customer id.
-		eu, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
-		if err != nil && err != database.ErrUserNotFound {
-			api.WriteError(w, err, http.StatusInternalServerError)
-			return
-		}
-		if err == nil && eu.ID.Hex() != u.ID.Hex() {
-			err = errors.New("this stripe customer id belongs to another user")
-			api.WriteError(w, err, http.StatusBadRequest)
-			return
-		}
-		u.StripeId = payload.StripeID
+	if payload.StripeID == "" {
+		err = errors.AddContext(err, "empty stripe id")
+		api.WriteError(w, err, http.StatusBadRequest)
+	}
+	// Check if a user already has this customer id.
+	eu, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
+	if err != nil && err != database.ErrUserNotFound {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if err == nil && eu.ID.Hex() != u.ID.Hex() {
+		err = errors.New("this stripe customer id belongs to another user")
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err == nil && eu.ID.Hex() == u.ID.Hex() {
+		// This ID is already assigned to this user. Nothing to do.
+		api.WriteJSON(w, u)
+		return
 	}
 	// Save the changed user to the DB.
-	err = api.staticDB.UserSave(req.Context(), u)
+	err = api.staticDB.UserSetStripeId(req.Context(), u, payload.StripeID)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	// We set this for the purpose of returning the updated value without
+	// reading from the DB.
+	u.StripeId = payload.StripeID
 	api.WriteJSON(w, u)
 }
 
@@ -365,46 +373,6 @@ func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Reque
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteSuccess(w)
-}
-
-// stripeCheckoutHandler ...
-func (api *API) stripeCheckoutHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	api.staticLogger.Tracef("Processing request: %+v", req)
-	sub, _, _, err := tokenFromContext(req)
-	if err != nil {
-		api.WriteError(w, err, http.StatusUnauthorized)
-		return
-	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	sid := ps.ByName("session_id")
-	if sid == "" {
-		api.WriteError(w, errors.New("missing parameter 'session_id'"), http.StatusBadRequest)
-		return
-	}
-
-	// TODO Implement
-	fmt.Println(sid, u)
-
-	api.WriteSuccess(w)
-}
-
-// stripeWebhookHandler ...
-func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	api.staticLogger.Tracef("Processing request: %+v", req)
-	bodyBytes, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	defer func() { _ = req.Body.Close() }()
-	api.staticLogger.Debugf("WH >>> ps: %v", ps)
-	api.staticLogger.Debugf("WH >>> body: %v", string(bodyBytes))
 	api.WriteSuccess(w)
 }
 

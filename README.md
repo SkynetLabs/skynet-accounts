@@ -20,6 +20,8 @@ SKYNET_ACCOUNTS_PORT=3000
 COOKIE_DOMAIN="siasky.net"
 COOKIE_HASH_KEY="any thirty-two byte string is ok"
 COOKIE_ENC_KEY="any thirty-two byte string is ok"
+STRIPE_API_KEY="put-your-key-here"
+STRIPE_WEBHOOK_SECRET="put-your-secret-here"
 ```
 
 There are some optional ones, as well:

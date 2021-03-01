@@ -40,6 +40,15 @@ var (
 	// envPortal holds the name of the environment variable for the portal to
 	// use to fetch skylinks.
 	envPortal = "PORTAL_URL"
+	// envKratosAddr hold the name of the environment variable for Kratos's
+	// address. Defaults to "kratos:4433".
+	envKratosAddr = "KRATOS_ADDR"
+	// envKratosAddr hold the name of the environment variable for Oathkeeper's
+	// address. Defaults to "oathkeeper:4456".
+	envOathkeeperAddr = "OATHKEEPER_ADDR"
+	// envStripeApiKey hold the name of the environment variable for Stripe's
+	// API key. It's only required when integrating with Stripe.
+	envStripeApiKey = "STRIPE_API_KEY"
 )
 
 // loadDBCredentials creates a new DB connection based on credentials found in
@@ -78,11 +87,14 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
 	}
-	if kaddr := os.Getenv("KRATOS_ADDR"); kaddr != "" {
+	if kaddr := os.Getenv(envKratosAddr); kaddr != "" {
 		api.KratosAddr = kaddr
 	}
-	if oaddr := os.Getenv("OATHKEEPER_ADDR"); oaddr != "" {
+	if oaddr := os.Getenv(envOathkeeperAddr); oaddr != "" {
 		api.OathkeeperAddr = oaddr
+	}
+	if sk := os.Getenv(envStripeApiKey); sk != "" {
+		api.StripeAPIKey = sk
 	}
 
 	ctx := context.Background()

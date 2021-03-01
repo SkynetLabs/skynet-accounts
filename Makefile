@@ -108,4 +108,7 @@ test-int: test-long start-mongo
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
 	make stop-mongo
 
+watch:
+	CompileDaemon -directory ./
+
 .PHONY: all fmt install release clean check test test-int test-long stop-mongo

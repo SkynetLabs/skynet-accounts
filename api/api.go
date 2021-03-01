@@ -13,6 +13,12 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
+var (
+	// StripeAPIKey is our API key for communicating with Stripe. It's read
+	// from the `.env` file on service start.
+	StripeAPIKey = ""
+)
+
 // API is ...
 type API struct {
 	staticDB     *database.DB

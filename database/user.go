@@ -173,13 +173,22 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserSave changes the user's data in the DB.
-// It never changes the id or sub of the user.
+// UserSave saves the user to the DB.
 func (db *DB) UserSave(ctx context.Context, u *User) error {
-	// Update the user.
+	filter := bson.M{"_id": u.ID}
+	opts := options.Update().SetUpsert(true)
+	_, err := db.staticUsers.UpdateOne(ctx, filter, u, opts)
+	if err != nil {
+		return errors.AddContext(err, "failed to update")
+	}
+	return nil
+}
+
+// UserSetStripeId changes the user's stripe id in the DB.
+func (db *DB) UserSetStripeId(ctx context.Context, u *User, stripeId string) error {
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
-		"stripe_id": u.StripeId,
+		"stripe_id": stripeId,
 	}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
