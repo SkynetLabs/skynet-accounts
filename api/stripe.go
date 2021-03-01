@@ -124,15 +124,18 @@ func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, i
 // processSub reads the information about the user's subscription and adjusts
 // the user's record accordingly.
 func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
+	api.staticLogger.Traceln("Processing subscription:", s.ID)
 	u, err := api.staticDB.UserByStripeID(ctx, s.Customer.ID)
 	if err != nil {
 		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
 	}
+	api.staticLogger.Traceln("Subscribed user:", u.ID)
 	oldTier := u.Tier
 	oldSubbedUntil := u.SubscribedUntil
 	if s.Status != stripe.SubscriptionStatusActive {
 		// The user's subscription is not active, demote them to "free".
 		u.Tier = database.TierFree
+		api.staticLogger.Traceln("Subscription details: unsubscribed")
 	} else {
 		// Check the subscription plan and set it to the user.
 		tier, exists := stripePlans[s.Plan.Product.ID]
@@ -141,8 +144,9 @@ func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
 		}
 		u.Tier = tier
 		u.SubscribedUntil = time.Unix(s.CurrentPeriodEnd, 0).UTC()
+		api.staticLogger.Tracef("Subscription details: subscribed to tier %d until %s", tier, u.SubscribedUntil.UTC().String())
 	}
-	// Avoid the tript to the DB if nothing has changed.
+	// Avoid the trip to the DB if nothing has changed.
 	if u.Tier != oldTier || u.SubscribedUntil != oldSubbedUntil {
 		return api.staticDB.UserSave(ctx, u)
 	}
