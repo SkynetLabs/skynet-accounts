@@ -14,6 +14,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
+	"github.com/stripe/stripe-go/v71"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -95,7 +96,7 @@ func main() {
 		jwt.OathkeeperAddr = oaddr
 	}
 	if sk := os.Getenv(envStripeApiKey); sk != "" {
-		api.StripeAPIKey = sk
+		stripe.Key = sk
 	}
 
 	ctx := context.Background()

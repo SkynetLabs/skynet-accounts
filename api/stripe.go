@@ -19,10 +19,6 @@ import (
 )
 
 var (
-	// StripeAPIKey is our API key for communicating with Stripe. It's read
-	// from the `.env` file on service start.
-	StripeAPIKey = ""
-
 	// stripePlans maps Stripe user plans to specific tiers.
 	// TODO This should be in the DB.
 	stripePlans = map[string]int{
@@ -30,6 +26,14 @@ var (
 		"prod_J06Q7nJH3HJcYN": database.TierPremium5,
 		"prod_J06Qu7zg1unO8R": database.TierPremium20,
 		"prod_J06QbGjCvmZQGZ": database.TierPremium80,
+	}
+	// stripePlansPrices maps Stripe user plan prices to specific tiers.
+	// TODO This should be in the DB.
+	stripePlansPrices = map[string]int{
+		"price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
+		"price_1IO6DLIzjULiPWN6ix1KyCtf": database.TierPremium5,
+		"price_1IO6DgIzjULiPWN6NiaSLEKa": database.TierPremium20,
+		"price_1IO6DvIzjULiPWN6wHgK35J4": database.TierPremium80,
 	}
 )
 
@@ -43,7 +47,6 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 		return
 	}
 	api.staticLogger.Debugf("Received event: %+v", event)
-	api.staticLogger.Traceln("WH raw event data >>> ", string(event.Data.Raw)) // TODO DEBUG
 
 	/*
 		TODO
@@ -58,6 +61,7 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 	// https://stripe.com/docs/billing/subscriptions/overview#build-your-own-handling-for-recurring-charge-failures
 	// https://stripe.com/docs/api/subscriptions/object
 	if strings.Contains(event.Type, "customer.subscription") {
+		//api.staticLogger.Traceln("WH raw event data >>> ", string(event.Data.Raw)) // TODO DEBUG
 		var s stripe.Subscription
 		err = json.Unmarshal(event.Data.Raw, &s)
 		if err != nil {
@@ -75,6 +79,7 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 	// Here we handle the entire class of stripeSchedule events.
 	// See https://stripe.com/docs/api/subscription_schedules/object
 	if strings.Contains(event.Type, "subscription_schedule") {
+		//api.staticLogger.Traceln("WH raw event data >>> ", string(event.Data.Raw)) // TODO DEBUG
 		var hasSub struct {
 			Sub string `json:"subscription"`
 		}
@@ -130,28 +135,37 @@ func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, i
 // processSub reads the information about the user's subscription and adjusts
 // the user's record accordingly.
 func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
-	api.staticLogger.Traceln("Processing subscription:", s.ID)
+	api.staticLogger.Traceln(" >> Processing subscription:", s.ID)
 	u, err := api.staticDB.UserByStripeID(ctx, s.Customer.ID)
 	if err != nil {
 		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
 	}
-	api.staticLogger.Traceln("Subscribed user:", u.ID)
+	api.staticLogger.Tracef(" >> Subscribed user id %s, tier %d, until %s.\n", u.ID, u.Tier, u.SubscribedUntil.String())
 	oldTier := u.Tier
 	oldSubbedUntil := u.SubscribedUntil
-	if s.Status != stripe.SubscriptionStatusActive {
-		// The user's subscription is not active, demote them to "free".
-		u.Tier = database.TierFree
-		api.staticLogger.Traceln("Subscription details: unsubscribed")
-	} else {
-		// Check the subscription plan and set it to the user.
-		tier, exists := stripePlans[s.Plan.Product.ID]
-		if !exists {
-			tier = database.TierFree
+
+	api.staticLogger.Tracef(" >>> customer %+v\n", s.Customer)
+	// Get all active subscriptions for this customer.
+	it := sub.List(&stripe.SubscriptionListParams{
+		Customer: s.Customer.ID,
+		Status:   string(stripe.SubscriptionStatusActive),
+	})
+	// Pick the highest active plan and set the user's tier based on that.
+	tier := database.TierFree
+	var expTime time.Time
+	for _, sub := range it.SubscriptionList().Data {
+		api.staticLogger.Tracef(" >>> sub: %+v\n%s\n", sub, sub.Object)
+		api.staticLogger.Tracef(" >>> sub plan: %+v\n", sub.Plan)
+		if tier < stripePlansPrices[sub.Plan.ID] {
+			tier = stripePlansPrices[sub.Plan.ID]
+			expTime = time.Unix(sub.CurrentPeriodEnd, 0).UTC()
 		}
-		u.Tier = tier
-		u.SubscribedUntil = time.Unix(s.CurrentPeriodEnd, 0).UTC()
-		api.staticLogger.Tracef("Subscription details: subscribed to tier %d until %s", tier, u.SubscribedUntil.UTC().String())
 	}
+	u.Tier = tier
+	if u.Tier > database.TierFree {
+		u.SubscribedUntil = expTime
+	}
+	api.staticLogger.Tracef(" >> User set to tier %d until %s.\n", u.Tier, u.SubscribedUntil.String())
 	// Avoid the trip to the DB if nothing has changed.
 	if u.Tier != oldTier || u.SubscribedUntil != oldSubbedUntil {
 		return api.staticDB.UserSave(ctx, u)
@@ -184,6 +198,7 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 	}
 	_, err := customer.Update(u.StripeId, cp)
 	if err != nil {
+		api.staticLogger.Tracef(" >>>> Failed to update user %s, customer id %s to plan %s. Error: %+v\n", u.ID.Hex(), u.StripeId, plan, err)
 		return errors.AddContext(err, "failed to update customer on Stripe")
 	}
 	err = api.staticDB.UserSetTier(ctx, u, tier)
