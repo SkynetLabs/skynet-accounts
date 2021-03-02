@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -75,7 +76,47 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	// Check if the user's details have changed and update them if necessary.
+	fName, lName, email, err := jwt.UserDetailsFromJWT(req.Context())
+	if err != nil {
+		api.staticLogger.Debugln("Failed to get user details from JWT:", err)
+	}
+	if err == nil && (fName != u.FirstName || lName != u.LastName || email != u.Email) {
+		u.FirstName = fName
+		u.LastName = lName
+		u.Email = email
+		err = api.staticDB.UserSave(req.Context(), u)
+		if err != nil {
+			api.staticLogger.Debugln("Failed to update user in DB:", err)
+		}
+	}
+	// Check if the user has a Stripe ID and create one for them if not.
+	if u.StripeId == "" {
+		err = api.userCreateStripe(req.Context(), u)
+		if err != nil {
+			// Log but carry on.
+			api.staticLogger.Info(err)
+		}
+	}
 	api.WriteJSON(w, u)
+}
+
+// userCreateStripe creates a new Stripe customer for this user, sets it in the
+// DB and modifies the provided User struct.
+func (api *API) userCreateStripe(ctx context.Context, u *database.User) error {
+	if u.StripeId != "" {
+		return nil
+	}
+	c, err := api.createStripeCustomer(ctx, u)
+	if err != nil {
+		return errors.AddContext(err, "failed to create stripe customer")
+	}
+	err = api.staticDB.UserSetStripeId(ctx, u, c.ID)
+	if err != nil {
+		return errors.AddContext(err, "failed to update user's stripe id in db")
+	}
+	u.StripeId = c.ID
+	return nil
 }
 
 // userStatsHandler returns statistics about an existing user.
@@ -149,6 +190,12 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 	if err == nil && eu.ID.Hex() == u.ID.Hex() {
 		// This ID is already assigned to this user. Nothing to do.
 		api.WriteJSON(w, u)
+		return
+	}
+	// Check if this user already has a Stripe customer ID.
+	if u.StripeId != "" {
+		err = errors.New("This user already has a Stripe customer id.")
+		api.WriteError(w, err, http.StatusUnprocessableEntity)
 		return
 	}
 	// Save the changed user to the DB.

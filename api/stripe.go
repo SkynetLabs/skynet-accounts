@@ -159,12 +159,12 @@ func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
 	return nil
 }
 
-// createCustomer creates a new Stripe customer for the given user returns the
-// Stripe ID. The customer always starts with the free tier.
+// createStripeCustomer creates a new Stripe customer for the given user returns
+// the Stripe ID. The customer always starts with the free tier.
 // TODO Check if we need a valid payment method in order to set them on a paid tier.
-func (api *API) createCustomer(_ context.Context, u *database.User) (*stripe.Customer, error) {
+func (api *API) createStripeCustomer(_ context.Context, u *database.User) (*stripe.Customer, error) {
 	name := fmt.Sprintf("%s %s", u.FirstName, u.LastName)
-	freePlan := planForTier(database.TierFree)
+	freePlan := planForTier(u.Tier)
 	cp := &stripe.CustomerParams{
 		Description: &u.Sub,
 		Email:       &u.Email,
