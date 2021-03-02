@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
@@ -23,13 +24,13 @@ func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	token, err := ValidateToken(api.staticLogger, tokenStr)
+	token, err := jwt.ValidateToken(api.staticLogger, tokenStr)
 	if err != nil {
 		api.staticLogger.Traceln("Error validating token:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	exp, err := tokenExpiration(token)
+	exp, err := jwt.TokenExpiration(token)
 	if err != nil {
 		api.staticLogger.Traceln("Error checking token expiration:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -46,7 +47,7 @@ func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprou
 
 // logoutHandler ends a user session by removing a cookie
 func (api *API) logoutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	_, _, _, err := tokenFromContext(req)
+	_, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from context:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -64,7 +65,7 @@ func (api *API) logoutHandler(w http.ResponseWriter, req *http.Request, _ httpro
 // userHandler returns information about an existing user and create it if it
 // doesn't exist.
 func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -79,7 +80,7 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 
 // userStatsHandler returns statistics about an existing user.
 func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -103,7 +104,7 @@ func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ htt
 
 // userPutHandler allows changing some user information.
 func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -164,7 +165,7 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 
 // userUploadsHandler returns all uploads made by the current user.
 func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -197,7 +198,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 
 // userDownloadsHandler returns all downloads made by the current user.
 func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -230,7 +231,7 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 
 // trackUploadHandler registers a new upload in the system.
 func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -274,7 +275,7 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 
 // trackDownloadHandler registers a new download in the system.
 func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -338,7 +339,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 
 // trackRegistryReadHandler registers a new registry read in the system.
 func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -358,7 +359,7 @@ func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Reques
 
 // trackRegistryWriteHandler registers a new registry write in the system.
 func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return

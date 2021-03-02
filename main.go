@@ -9,6 +9,7 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/api"
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/joho/godotenv"
@@ -88,10 +89,10 @@ func main() {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
 	}
 	if kaddr := os.Getenv(envKratosAddr); kaddr != "" {
-		api.KratosAddr = kaddr
+		jwt.KratosAddr = kaddr
 	}
 	if oaddr := os.Getenv(envOathkeeperAddr); oaddr != "" {
-		api.OathkeeperAddr = oaddr
+		jwt.OathkeeperAddr = oaddr
 	}
 	if sk := os.Getenv(envStripeApiKey); sk != "" {
 		api.StripeAPIKey = sk

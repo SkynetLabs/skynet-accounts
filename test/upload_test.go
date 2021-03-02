@@ -36,12 +36,12 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	testUploadSize := int64(1 + fastrand.Intn(1e10))
 	// Add a test user.
 	sub := string(fastrand.Bytes(userSubLen))
-	u, err := db.UserCreate(nil, sub, database.TierPremium5)
+	u, err := db.UserCreate(ctx, sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(nil, user)
+		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Create a skylink record for which to register an upload
 	_, err = createTestUpload(ctx, db, u, testUploadSize)

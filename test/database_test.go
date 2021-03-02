@@ -29,12 +29,12 @@ func TestDatabase_UserBySub(t *testing.T) {
 	}
 
 	// Add a user to find.
-	u, err := db.UserCreate(nil, sub, database.TierPremium5)
+	u, err := db.UserCreate(ctx, sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(nil, user)
+		_ = db.UserDelete(ctx, user)
 	}(u)
 
 	// Test finding an existent user. This should pass.
@@ -66,7 +66,7 @@ func TestDatabase_UserByID(t *testing.T) {
 
 	// Add a user to find.
 	sub := "695725d4-a345-4e68-919a-7395cb68484c"
-	u, err := db.UserCreate(nil, sub, database.TierFree)
+	u, err := db.UserCreate(ctx, sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestDatabase_UserUpdate(t *testing.T) {
 	}
 
 	sub := "695725d4-a345-4e68-919a-7395cb68484c"
-	u, err := db.UserCreate(nil, sub, database.TierFree)
+	u, err := db.UserCreate(ctx, sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 
 	sub := "695725d4-a345-4e68-919a-7395cb68484c"
 	// Add a user to delete.
-	u, err := db.UserCreate(nil, sub, database.TierFree)
+	u, err := db.UserCreate(ctx, sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}

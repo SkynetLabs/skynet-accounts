@@ -1,10 +1,13 @@
 package api
 
 import (
-	"context"
 	"net/http"
+	"strings"
+
+	"github.com/NebulousLabs/skynet-accounts/jwt"
 
 	"github.com/julienschmidt/httprouter"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
@@ -37,14 +40,39 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
-		token, err := ValidateToken(api.staticLogger, tokenStr)
+		token, err := jwt.ValidateToken(api.staticLogger, tokenStr)
 		if err != nil {
 			api.staticLogger.Traceln("Error validating token:", err)
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
 		// Embed the verified token in the context of the request.
-		ctx := context.WithValue(req.Context(), ctxValue("token"), token)
+		ctx := jwt.ContextWithToken(req.Context(), token)
 		h(w, req.WithContext(ctx), ps)
 	}
+}
+
+// tokenFromRequest extracts the JWT token from the request and returns it.
+// It first checks the request headers and then the cookies.
+func tokenFromRequest(r *http.Request) (string, error) {
+	// Check the headers for a token.
+	authHeader := r.Header.Get("Authorization")
+	parts := strings.Split(authHeader, "Bearer")
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[1]), nil
+	}
+	// Check the cookie for a token.
+	cookie, err := r.Cookie(CookieName)
+	if errors.Contains(err, http.ErrNoCookie) {
+		return "", errors.New("no cookie found")
+	}
+	if err != nil {
+		return "", errors.AddContext(err, "cookie exists but it's not valid")
+	}
+	var value string
+	err = secureCookie.Decode(CookieName, cookie.Value, &value)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
 }

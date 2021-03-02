@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -10,17 +11,22 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 
-	"github.com/stripe/stripe-go/v71/sub"
-
 	"github.com/julienschmidt/httprouter"
 	"github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v71/customer"
+	"github.com/stripe/stripe-go/v71/sub"
 	"gitlab.com/NebulousLabs/errors"
 )
 
 var (
+	// StripeAPIKey is our API key for communicating with Stripe. It's read
+	// from the `.env` file on service start.
+	StripeAPIKey = ""
+
 	// stripePlans maps Stripe user plans to specific tiers.
 	// TODO This should be in the DB.
 	stripePlans = map[string]int{
+		"prod_J2FBsxvEl4VoUK": database.TierFree,
 		"prod_J06Q7nJH3HJcYN": database.TierPremium5,
 		"prod_J06Qu7zg1unO8R": database.TierPremium20,
 		"prod_J06QbGjCvmZQGZ": database.TierPremium80,
@@ -29,7 +35,7 @@ var (
 
 // stripeWebhookHandler handles various events issued by Stripe.
 // See https://stripe.com/docs/api/events/types
-func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	api.staticLogger.Tracef("Processing request: %+v", req)
 	event, code, err := readStripeEvent(w, req)
 	if err != nil {
@@ -151,4 +157,59 @@ func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
 		return api.staticDB.UserSave(ctx, u)
 	}
 	return nil
+}
+
+// createCustomer creates a new Stripe customer for the given user returns the
+// Stripe ID. The customer always starts with the free tier.
+// TODO Check if we need a valid payment method in order to set them on a paid tier.
+func (api *API) createCustomer(_ context.Context, u *database.User) (*stripe.Customer, error) {
+	name := fmt.Sprintf("%s %s", u.FirstName, u.LastName)
+	freePlan := planForTier(database.TierFree)
+	cp := &stripe.CustomerParams{
+		Description: &u.Sub,
+		Email:       &u.Email,
+		Name:        &name,
+		Plan:        &freePlan,
+	}
+	return customer.New(cp)
+}
+
+// assignTier sets the user's account to the given tier, both on Stripe's side
+// and in the DB.
+func (api *API) assignTier(ctx context.Context, tier int, u *database.User) error {
+	plan := planForTier(tier)
+	oldTier := u.Tier
+	cp := &stripe.CustomerParams{
+		Plan: &plan,
+	}
+	_, err := customer.Update(u.StripeId, cp)
+	if err != nil {
+		return errors.AddContext(err, "failed to update customer on Stripe")
+	}
+	err = api.staticDB.UserSetTier(ctx, u, tier)
+	if err != nil {
+		err = errors.AddContext(err, "failed to update user in DB")
+		// Try to revert the change on Stripe's side.
+		plan = planForTier(oldTier)
+		cp = &stripe.CustomerParams{
+			Plan: &plan,
+		}
+		_, err2 := customer.Update(u.StripeId, cp)
+		if err2 != nil {
+			err2 = errors.AddContext(err2, "failed to revert the change on Stripe")
+		}
+		return errors.Compose(err, err2)
+	}
+	return nil
+}
+
+// planForTier is a small helper that returns the proper Stripe plan id for the
+// given Skynet tier.
+func planForTier(t int) string {
+	for plan, tier := range stripePlans {
+		if tier == t {
+			return plan
+		}
+	}
+	return ""
 }
