@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -90,33 +89,7 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 			api.staticLogger.Debugln("Failed to update user in DB:", err)
 		}
 	}
-	// Check if the user has a Stripe ID and create one for them if not.
-	if u.StripeId == "" {
-		err = api.userCreateStripe(req.Context(), u)
-		if err != nil {
-			// Log but carry on.
-			api.staticLogger.Info(err)
-		}
-	}
 	api.WriteJSON(w, u)
-}
-
-// userCreateStripe creates a new Stripe customer for this user, sets it in the
-// DB and modifies the provided User struct.
-func (api *API) userCreateStripe(ctx context.Context, u *database.User) error {
-	if u.StripeId != "" {
-		return nil
-	}
-	c, err := api.createStripeCustomer(ctx, u)
-	if err != nil {
-		return errors.AddContext(err, "failed to create stripe customer")
-	}
-	err = api.staticDB.UserSetStripeId(ctx, u, c.ID)
-	if err != nil {
-		return errors.AddContext(err, "failed to update user's stripe id in db")
-	}
-	u.StripeId = c.ID
-	return nil
 }
 
 // userStatsHandler returns statistics about an existing user.

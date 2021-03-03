@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -160,21 +159,6 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		return api.staticDB.UserSave(ctx, u)
 	}
 	return nil
-}
-
-// createStripeCustomer creates a new Stripe customer for the given user returns
-// the Stripe ID. The customer always starts with the free tier.
-// TODO Check if we need a valid payment method in order to set them on a paid tier.
-func (api *API) createStripeCustomer(_ context.Context, u *database.User) (*stripe.Customer, error) {
-	name := fmt.Sprintf("%s %s", u.FirstName, u.LastName)
-	freePlan := planForTier(u.Tier)
-	cp := &stripe.CustomerParams{
-		Description: &u.Sub,
-		Email:       &u.Email,
-		Name:        &name,
-		Plan:        &freePlan,
-	}
-	return customer.New(cp)
 }
 
 // assignTier sets the user's account to the given tier, both on Stripe's side
