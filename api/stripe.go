@@ -129,10 +129,6 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
 	}
 	api.staticLogger.Tracef(" >> Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
-	oldTier := u.Tier
-	oldSubbedUntil := u.SubscribedUntil
-
-	api.staticLogger.Tracef(" >>> customer %+v", s.Customer)
 	// Get all active subscriptions for this customer.
 	it := sub.List(&stripe.SubscriptionListParams{
 		Customer: s.Customer.ID,
@@ -140,25 +136,19 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	})
 	// Pick the highest active plan and set the user's tier based on that.
 	tier := database.TierFree
-	var expTime time.Time
-	var numSubs int
 	for _, subsc := range it.SubscriptionList().Data {
 		api.staticLogger.Tracef(" >>> sub: %+v\n%s", subsc, subsc.Object)
 		api.staticLogger.Tracef(" >>> sub plan: %+v", subsc.Plan)
 		if tier < stripePlansPrices[subsc.Plan.ID] {
-			tier = stripePlansPrices[subsc.Plan.ID]
-			expTime = time.Unix(subsc.CurrentPeriodEnd, 0).UTC()
+			u.Tier = stripePlansPrices[subsc.Plan.ID]
+			u.SubscribedUntil = time.Unix(subsc.CurrentPeriodEnd, 0).UTC()
+			u.SubscriptionStatus = string(subsc.Status)
+			u.SubscriptionCancelAt = time.Unix(subsc.CancelAt, 0)
+			u.SubscriptionCancelAtPeriodEnd = subsc.CancelAtPeriodEnd
 		}
-		numSubs++
 	}
-	u.Tier = tier
-	u.SubscribedUntil = expTime
 	api.staticLogger.Tracef(" >> User set to tier %d until %s.", u.Tier, u.SubscribedUntil.String())
-	// Avoid the trip to the DB if nothing has changed.
-	if u.Tier != oldTier || u.SubscribedUntil != oldSubbedUntil {
-		return api.staticDB.UserSave(ctx, u)
-	}
-	return nil
+	return api.staticDB.UserSave(ctx, u)
 }
 
 // assignTier sets the user's account to the given tier, both on Stripe's side
