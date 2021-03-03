@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/NebulousLabs/skynet-accounts/api"
 	"github.com/NebulousLabs/skynet-accounts/build"
@@ -97,6 +98,7 @@ func main() {
 	}
 	if sk := os.Getenv(envStripeApiKey); sk != "" {
 		stripe.Key = sk
+		api.StripeTestMode = strings.HasPrefix(stripe.Key, "sk_live_")
 	}
 
 	ctx := context.Background()

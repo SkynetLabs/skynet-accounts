@@ -25,6 +25,7 @@ STRIPE_WEBHOOK_SECRET="put-your-secret-here"
 ```
 
 There are some optional ones, as well:
+
 ```.env
 SKYNET_ACCOUNTS_LOG_LEVEL=trace
 KRATOS_ADDR=localhost:4433
