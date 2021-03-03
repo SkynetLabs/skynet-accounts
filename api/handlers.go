@@ -116,12 +116,6 @@ func (api *API) userCreateStripe(ctx context.Context, u *database.User) error {
 		return errors.AddContext(err, "failed to update user's stripe id in db")
 	}
 	u.StripeId = c.ID
-	tier, exp, err := api.createStripeFreeSub(ctx, u)
-	if err != nil {
-		return errors.AddContext(err, "failed to create a free sub")
-	}
-	u.Tier = tier
-	u.SubscribedUntil = exp
 	return nil
 }
 
