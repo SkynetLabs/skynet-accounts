@@ -167,24 +167,10 @@ func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
 	// able to manage them via the Dashboard. So, if they don't have one we will
 	// create a free sub for them and make it active for an year.
 	if numSubs == 0 {
-		f := false
-		params := &stripe.SubscriptionParams{
-			Customer:          stripe.String(u.StripeId),
-			CancelAtPeriodEnd: &f,
-			Items: []*stripe.SubscriptionItemsParams{
-				{
-					Price: stripe.String(priceForTier(database.TierFree)),
-				},
-			},
-		}
-		s, err := sub.New(params)
+		tier, expTime, err = api.createStripeFreeSub(ctx, u)
 		if err != nil {
-			api.staticLogger.Warnf("Failed to create a subscription for user %+v, error %+v", u, err)
 			return err
 		}
-		api.staticLogger.Traceln(" >>> free subscription auto-created!")
-		tier = stripePlans[s.Plan.ID]
-		expTime = time.Unix(s.CurrentPeriodEnd, 0).UTC()
 	}
 	u.Tier = tier
 	u.SubscribedUntil = expTime
@@ -209,6 +195,29 @@ func (api *API) createStripeCustomer(_ context.Context, u *database.User) (*stri
 		Plan:        &freePlan,
 	}
 	return customer.New(cp)
+}
+
+// createStripeFreeSub creates a new free subscription for the user.
+func (api *API) createStripeFreeSub(_ context.Context, u *database.User) (int, time.Time, error) {
+	f := false
+	params := &stripe.SubscriptionParams{
+		Customer:          stripe.String(u.StripeId),
+		CancelAtPeriodEnd: &f,
+		Items: []*stripe.SubscriptionItemsParams{
+			{
+				Price: stripe.String(priceForTier(database.TierFree)),
+			},
+		},
+	}
+	s, err := sub.New(params)
+	if err != nil {
+		api.staticLogger.Warnf("Failed to create a free subscription for user %+v, error %+v", u, err)
+		return database.TierFree, time.Time{}, err
+	}
+	api.staticLogger.Traceln(" >>> free subscription auto-created!")
+	tier := stripePlans[s.Plan.ID]
+	expTime := time.Unix(s.CurrentPeriodEnd, 0).UTC()
+	return tier, expTime, nil
 }
 
 // assignTier sets the user's account to the given tier, both on Stripe's side

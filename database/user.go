@@ -141,13 +141,6 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 	if len(users) > 0 {
 		return nil, ErrUserAlreadyExists
 	}
-
-	/*
-		TODO On user creation we need to:
-			- register a new customer on Stripe
-			- add a subscription to the free plan
-	*/
-
 	fName, lName, email, err := jwt.UserDetailsFromJWT(ctx)
 	if err != nil {
 		// Log the error but don't do anything differently.
