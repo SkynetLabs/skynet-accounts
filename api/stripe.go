@@ -48,27 +48,17 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 	}
 	api.staticLogger.Debugf("Received event: %+v", event)
 
-	/*
-		TODO
-			Events that carry the information we want:
-			- invoice.payment_succeeded
-			- invoice.paid
-			- payment_intent.succeeded
-			- invoice.updated:	This event is often sent when a payment succeeds or fails. If payment is successful the paid attribute is set to true and the status is paid. If payment fails, paid is set to false and the status remains open. Payment failures also trigger a invoice.payment_failed event.
-	*/
-
 	// Here we handle the entire class of subscription events.
 	// https://stripe.com/docs/billing/subscriptions/overview#build-your-own-handling-for-recurring-charge-failures
 	// https://stripe.com/docs/api/subscriptions/object
 	if strings.Contains(event.Type, "customer.subscription") {
-		//api.staticLogger.Traceln("WH raw event data >>> ", string(event.Data.Raw)) // TODO DEBUG
 		var s stripe.Subscription
 		err = json.Unmarshal(event.Data.Raw, &s)
 		if err != nil {
 			api.staticLogger.Warningln("Failed to parse event. Error: ", err, "\nEvent: ", string(event.Data.Raw))
 			return
 		}
-		err = api.processSub(req.Context(), &s)
+		err = api.processStripeSub(req.Context(), &s)
 		if err != nil {
 			api.staticLogger.Debugln("Failed to process sub:", err)
 		}
@@ -76,10 +66,9 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 		return
 	}
 
-	// Here we handle the entire class of stripeSchedule events.
+	// Here we handle the entire class of subscription_schedule events.
 	// See https://stripe.com/docs/api/subscription_schedules/object
 	if strings.Contains(event.Type, "subscription_schedule") {
-		//api.staticLogger.Traceln("WH raw event data >>> ", string(event.Data.Raw)) // TODO DEBUG
 		var hasSub struct {
 			Sub string `json:"subscription"`
 		}
@@ -98,7 +87,7 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 			api.staticLogger.Debugln("Failed to fetch sub:", err)
 			return
 		}
-		err = api.processSub(req.Context(), s)
+		err = api.processStripeSub(req.Context(), s)
 		if err != nil {
 			api.staticLogger.Debugln("Failed to process sub:", err)
 		}
@@ -132,19 +121,19 @@ func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, i
 	return &event, http.StatusOK, nil
 }
 
-// processSub reads the information about the user's subscription and adjusts
-// the user's record accordingly.
-func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
+// processStripeSub reads the information about the user's subscription and
+// adjusts the user's record accordingly.
+func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) error {
 	api.staticLogger.Traceln(" >> Processing subscription:", s.ID)
 	u, err := api.staticDB.UserByStripeID(ctx, s.Customer.ID)
 	if err != nil {
 		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
 	}
-	api.staticLogger.Tracef(" >> Subscribed user id %s, tier %d, until %s.\n", u.ID, u.Tier, u.SubscribedUntil.String())
+	api.staticLogger.Tracef(" >> Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
 	oldTier := u.Tier
 	oldSubbedUntil := u.SubscribedUntil
 
-	api.staticLogger.Tracef(" >>> customer %+v\n", s.Customer)
+	api.staticLogger.Tracef(" >>> customer %+v", s.Customer)
 	// Get all active subscriptions for this customer.
 	it := sub.List(&stripe.SubscriptionListParams{
 		Customer: s.Customer.ID,
@@ -155,8 +144,8 @@ func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
 	var expTime time.Time
 	var numSubs int
 	for _, subsc := range it.SubscriptionList().Data {
-		api.staticLogger.Tracef(" >>> sub: %+v\n%s\n", subsc, subsc.Object)
-		api.staticLogger.Tracef(" >>> sub plan: %+v\n", subsc.Plan)
+		api.staticLogger.Tracef(" >>> sub: %+v\n%s", subsc, subsc.Object)
+		api.staticLogger.Tracef(" >>> sub plan: %+v", subsc.Plan)
 		if tier < stripePlansPrices[subsc.Plan.ID] {
 			tier = stripePlansPrices[subsc.Plan.ID]
 			expTime = time.Unix(subsc.CurrentPeriodEnd, 0).UTC()
@@ -174,7 +163,7 @@ func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
 	}
 	u.Tier = tier
 	u.SubscribedUntil = expTime
-	api.staticLogger.Tracef(" >> User set to tier %d until %s.\n", u.Tier, u.SubscribedUntil.String())
+	api.staticLogger.Tracef(" >> User set to tier %d until %s.", u.Tier, u.SubscribedUntil.String())
 	// Avoid the trip to the DB if nothing has changed.
 	if u.Tier != oldTier || u.SubscribedUntil != oldSubbedUntil {
 		return api.staticDB.UserSave(ctx, u)
@@ -230,7 +219,7 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 	}
 	_, err := customer.Update(u.StripeId, cp)
 	if err != nil {
-		api.staticLogger.Tracef(" >>>> Failed to update user %s, customer id %s to plan %s. Error: %+v\n", u.ID.Hex(), u.StripeId, plan, err)
+		api.staticLogger.Tracef(" >>>> Failed to update user %s, customer id %s to plan %s. Error: %+v", u.ID.Hex(), u.StripeId, plan, err)
 		return errors.AddContext(err, "failed to update customer on Stripe")
 	}
 	err = api.staticDB.UserSetTier(ctx, u, tier)
