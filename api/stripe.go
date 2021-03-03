@@ -187,12 +187,11 @@ func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, i
 // processStripeSub reads the information about the user's subscription and
 // adjusts the user's record accordingly.
 func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) error {
-	api.staticLogger.Traceln(" >> Processing subscription:", s.ID)
+	api.staticLogger.Traceln("Processing subscription:", s.ID)
 	u, err := api.staticDB.UserByStripeID(ctx, s.Customer.ID)
 	if err != nil {
 		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
 	}
-	api.staticLogger.Tracef(" >> Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
 	// Get all active subscriptions for this customer.
 	it := sub.List(&stripe.SubscriptionListParams{
 		Customer: s.Customer.ID,
@@ -201,8 +200,6 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	// Pick the highest active plan and set the user's tier based on that.
 	tier := database.TierFree
 	for _, subsc := range it.SubscriptionList().Data {
-		api.staticLogger.Tracef(" >>> sub: %+v\n%s", subsc, subsc.Object)
-		api.staticLogger.Tracef(" >>> sub plan: %+v", subsc.Plan)
 		t := stripePrices()[subsc.Plan.ID]
 		if t > tier {
 			u.Tier = t
@@ -212,7 +209,7 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 			u.SubscriptionCancelAtPeriodEnd = subsc.CancelAtPeriodEnd
 		}
 	}
-	api.staticLogger.Tracef(" >> User set to tier %d until %s.", u.Tier, u.SubscribedUntil.String())
+	api.staticLogger.Tracef("Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
 	return api.staticDB.UserSave(ctx, u)
 }
 
@@ -226,7 +223,6 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 	}
 	_, err := customer.Update(u.StripeId, cp)
 	if err != nil {
-		api.staticLogger.Tracef(" >>>> Failed to update user %s, customer id %s to plan %s. Error: %+v", u.ID.Hex(), u.StripeId, plan, err)
 		return errors.AddContext(err, "failed to update customer on Stripe")
 	}
 	err = api.staticDB.UserSetTier(ctx, u, tier)
