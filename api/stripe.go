@@ -153,18 +153,41 @@ func (api *API) processSub(ctx context.Context, s *stripe.Subscription) error {
 	// Pick the highest active plan and set the user's tier based on that.
 	tier := database.TierFree
 	var expTime time.Time
-	for _, sub := range it.SubscriptionList().Data {
-		api.staticLogger.Tracef(" >>> sub: %+v\n%s\n", sub, sub.Object)
-		api.staticLogger.Tracef(" >>> sub plan: %+v\n", sub.Plan)
-		if tier < stripePlansPrices[sub.Plan.ID] {
-			tier = stripePlansPrices[sub.Plan.ID]
-			expTime = time.Unix(sub.CurrentPeriodEnd, 0).UTC()
+	var numSubs int
+	for _, subsc := range it.SubscriptionList().Data {
+		api.staticLogger.Tracef(" >>> sub: %+v\n%s\n", subsc, subsc.Object)
+		api.staticLogger.Tracef(" >>> sub plan: %+v\n", subsc.Plan)
+		if tier < stripePlansPrices[subsc.Plan.ID] {
+			tier = stripePlansPrices[subsc.Plan.ID]
+			expTime = time.Unix(subsc.CurrentPeriodEnd, 0).UTC()
 		}
+		numSubs++
+	}
+	// We need the user to have at least one active subscription in order to be
+	// able to manage them via the Dashboard. So, if they don't have one we will
+	// create a free sub for them and make it active for an year.
+	if numSubs == 0 {
+		f := false
+		params := &stripe.SubscriptionParams{
+			Customer:          stripe.String(u.StripeId),
+			CancelAtPeriodEnd: &f,
+			Items: []*stripe.SubscriptionItemsParams{
+				{
+					Price: stripe.String(priceForTier(database.TierFree)),
+				},
+			},
+		}
+		s, err := sub.New(params)
+		if err != nil {
+			api.staticLogger.Warnf("Failed to create a subscription for user %+v, error %+v", u, err)
+			return err
+		}
+		api.staticLogger.Traceln(" >>> free subscription auto-created!")
+		tier = stripePlans[s.Plan.ID]
+		expTime = time.Unix(s.CurrentPeriodEnd, 0).UTC()
 	}
 	u.Tier = tier
-	if u.Tier > database.TierFree {
-		u.SubscribedUntil = expTime
-	}
+	u.SubscribedUntil = expTime
 	api.staticLogger.Tracef(" >> User set to tier %d until %s.\n", u.Tier, u.SubscribedUntil.String())
 	// Avoid the trip to the DB if nothing has changed.
 	if u.Tier != oldTier || u.SubscribedUntil != oldSubbedUntil {
@@ -222,6 +245,17 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 // given Skynet tier.
 func planForTier(t int) string {
 	for plan, tier := range stripePlans {
+		if tier == t {
+			return plan
+		}
+	}
+	return ""
+}
+
+// priceForTier is a small helper that returns the proper Stripe price id for
+// the given Skynet tier.
+func priceForTier(t int) string {
+	for plan, tier := range stripePlansPrices {
 		if tier == t {
 			return plan
 		}
