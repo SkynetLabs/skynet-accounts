@@ -145,22 +145,22 @@ func UserDetailsFromJWT(ctx context.Context) (firstName, lastName, email string,
 		err = errors.New("the token does not contain the sessions we expect")
 		return
 	}
-	session := claims["session"].(jwt.MapClaims)
+	session := claims["session"].(map[string]interface{})
 	if reflect.ValueOf(session["identity"]).Kind() != reflect.Map {
 		err = errors.New("the token does not contain the identity we expect")
 		return
 	}
-	id := session["identity"].(jwt.MapClaims)
+	id := session["identity"].(map[string]interface{})
 	if reflect.ValueOf(id["traits"]).Kind() != reflect.Map {
 		err = errors.New("the token does not contain the traits we expect")
 		return
 	}
-	tr := id["traits"].(jwt.MapClaims)
+	tr := id["traits"].(map[string]interface{})
 	if reflect.ValueOf(tr["name"]).Kind() != reflect.Map {
 		err = errors.New("the token does not contain the names we expect")
 		return
 	}
-	name := tr["name"].(jwt.MapClaims)
+	name := tr["name"].(map[string]interface{})
 	if reflect.ValueOf(tr["email"]).Kind() != reflect.String {
 		err = errors.New("the token does not contain the email we expect")
 		return
