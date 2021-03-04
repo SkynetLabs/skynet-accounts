@@ -194,9 +194,12 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
 	}
 
-	tier := stripePlans()[s.Plan.ID]
+	// It seems weird that the Plan.ID is actually a price id but this is what
+	// we get from Stripe.
+	tier := stripePrices()[s.Plan.ID]
 	if tier <= database.TierMinReserved || tier >= database.TierMaxReserved {
-		err = errors.New(fmt.Sprintf("Invalid tier! Got tier %d for subscription plan %s. Full subscription object: %s", tier, s.Plan.ID, s.Object))
+		sJson, _ := json.Marshal(s)
+		err = errors.New(fmt.Sprintf("Invalid tier! Got tier %d for subscription plan %s. Full subscription object: %s", tier, s.Plan.ID, sJson))
 		return err
 	}
 	u.Tier = tier
