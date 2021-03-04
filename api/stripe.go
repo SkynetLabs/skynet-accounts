@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -195,20 +194,31 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	if err != nil {
 		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
 	}
-
-	// It seems weird that the Plan.ID is actually a price id but this is what
-	// we get from Stripe.
-	tier := stripePrices()[s.Plan.ID]
-	if tier <= database.TierMinReserved || tier >= database.TierMaxReserved {
-		sJson, _ := json.Marshal(s)
-		err = errors.New(fmt.Sprintf("Invalid tier! Got tier %d for subscription plan %s. Full subscription object: %s", tier, s.Plan.ID, sJson))
-		return err
+	// Get all active subscriptions for this customer. There should be only one
+	// (or none) but we'd better check.
+	it := sub.List(&stripe.SubscriptionListParams{
+		Customer: s.Customer.ID,
+		Status:   string(stripe.SubscriptionStatusActive),
+	})
+	// Set the default values.
+	u.Tier = database.TierFree
+	u.SubscribedUntil = time.Time{}
+	u.SubscriptionStatus = ""
+	u.SubscriptionCancelAt = time.Time{}
+	u.SubscriptionCancelAtPeriodEnd = false
+	//Pick the highest active plan and set the user's tier based on that.
+	for _, subsc := range it.SubscriptionList().Data {
+		// It seems weird that the Plan.ID is actually a price id but this is
+		// what we get from Stripe.
+		t := stripePrices()[subsc.Plan.ID]
+		if t > u.Tier {
+			u.Tier = t
+			u.SubscribedUntil = time.Unix(subsc.CurrentPeriodEnd, 0).UTC()
+			u.SubscriptionStatus = string(subsc.Status)
+			u.SubscriptionCancelAt = time.Unix(subsc.CancelAt, 0)
+			u.SubscriptionCancelAtPeriodEnd = subsc.CancelAtPeriodEnd
+		}
 	}
-	u.Tier = tier
-	u.SubscribedUntil = time.Unix(s.CurrentPeriodEnd, 0).UTC()
-	u.SubscriptionStatus = string(s.Status)
-	u.SubscriptionCancelAt = time.Unix(s.CancelAt, 0)
-	u.SubscriptionCancelAtPeriodEnd = s.CancelAtPeriodEnd
 	api.staticLogger.Tracef("Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
 	return api.staticDB.UserSave(ctx, u)
 }
