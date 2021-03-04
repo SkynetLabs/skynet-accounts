@@ -200,7 +200,7 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	// Pick the highest active plan and set the user's tier based on that.
 	tier := database.TierFree
 	for _, subsc := range it.SubscriptionList().Data {
-		t := stripePrices()[subsc.Plan.ID]
+		t := stripePlans()[subsc.Plan.ID]
 		if t > tier {
 			u.Tier = t
 			u.SubscribedUntil = time.Unix(subsc.CurrentPeriodEnd, 0).UTC()
