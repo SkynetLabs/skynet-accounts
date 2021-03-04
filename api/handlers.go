@@ -126,7 +126,11 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -153,6 +157,12 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
+	// Check if this user already has this ID assigned to them.
+	if payload.StripeID == u.StripeId {
+		// Nothing to do.
+		api.WriteJSON(w, u)
+		return
+	}
 	// Check if a user already has this customer id.
 	eu, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
 	if err != nil && err != database.ErrUserNotFound {
@@ -164,18 +174,13 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	if err == nil && eu.ID.Hex() == u.ID.Hex() {
-		// This ID is already assigned to this user. Nothing to do.
-		api.WriteJSON(w, u)
-		return
-	}
 	// Check if this user already has a Stripe customer ID.
 	if u.StripeId != "" {
 		err = errors.New("This user already has a Stripe customer id.")
 		api.WriteError(w, err, http.StatusUnprocessableEntity)
 		return
 	}
-	// Save the changed user to the DB.
+	// Save the changed Stripe ID to the DB.
 	err = api.staticDB.UserSetStripeId(req.Context(), u, payload.StripeID)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
