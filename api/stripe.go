@@ -25,6 +25,11 @@ var (
 	// plan and price ids.
 	StripeTestMode = false
 
+	// True is a helper for when we need to pass a *bool to Stripe.
+	True = true
+	// False is a helper for when we need to pass a *bool to Stripe.
+	False = false
+
 	// TODO These should be in the DB.
 
 	// stripePlansTest maps Stripe plans to specific tiers.
@@ -139,8 +144,7 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 func (api *API) stripePricesHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	api.staticLogger.Tracef("Processing request: %+v", req)
 	var sPrices []stripePrice
-	t := true
-	params := &stripe.PriceListParams{Active: &t}
+	params := &stripe.PriceListParams{Active: &True}
 	params.Filters.AddFilter("limit", "", "100")
 	i := price.List(params)
 	for i.Next() {
@@ -199,17 +203,41 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	u.SubscriptionStatus = ""
 	u.SubscriptionCancelAt = time.Time{}
 	u.SubscriptionCancelAtPeriodEnd = false
-	//Pick the highest active plan and set the user's tier based on that.
-	for _, subsc := range it.SubscriptionList().Data {
-		// It seems weird that the Plan.ID is actually a price id but this is
-		// what we get from Stripe.
-		t := stripePrices()[subsc.Plan.ID]
-		if t > u.Tier {
-			u.Tier = t
+	var latestCreated time.Time
+	var latestSub string
+	// Pick the latest active plan and set the user's tier based on that.
+	subs := it.SubscriptionList().Data
+	for _, subsc := range subs {
+		created := time.Unix(subsc.Created, 0).UTC()
+		if created.After(latestCreated) {
+			latestCreated = created
+			latestSub = subsc.ID
+			// It seems weird that the Plan.ID is actually a price id but this
+			// is what we get from Stripe.
+			u.Tier = stripePrices()[subsc.Plan.ID]
 			u.SubscribedUntil = time.Unix(subsc.CurrentPeriodEnd, 0).UTC()
 			u.SubscriptionStatus = string(subsc.Status)
 			u.SubscriptionCancelAt = time.Unix(subsc.CancelAt, 0)
 			u.SubscriptionCancelAtPeriodEnd = subsc.CancelAtPeriodEnd
+		}
+	}
+	// Cancel all subs aside from the latest one.
+	p := stripe.SubscriptionCancelParams{
+		Params: stripe.Params{
+			StripeAccount: &s.Customer.ID,
+		},
+		InvoiceNow: &True,
+		Prorate:    &True,
+	}
+	for _, subsc := range subs {
+		if subsc == nil || subsc.ID == latestSub {
+			continue
+		}
+		subsc, err = sub.Cancel(subsc.ID, &p)
+		if err != nil {
+			api.staticLogger.Warnf("Failed to cancel sub with id %s for user %s with Stripe customer id %s. Error: %s", subsc.ID, u.ID.Hex(), s.Customer.ID, err.Error())
+		} else {
+			api.staticLogger.Tracef("Successfullu cancelled sub with id %s for user %s with Stripe customer id %s.", subsc.ID, u.ID.Hex(), s.Customer.ID)
 		}
 	}
 	api.staticLogger.Tracef("Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())

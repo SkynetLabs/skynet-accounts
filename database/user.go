@@ -32,6 +32,13 @@ const (
 	TierMaxReserved
 )
 
+var (
+	// True is a helper for when we need to pass a *bool to MongoDB.
+	True = true
+	// False is a helper for when we need to pass a *bool to MongoDB.
+	False = false
+)
+
 type (
 	// User represents a Skynet user.
 	User struct {
@@ -189,9 +196,8 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 // UserSave saves the user to the DB.
 func (db *DB) UserSave(ctx context.Context, u *User) error {
 	filter := bson.M{"_id": u.ID}
-	t := true
 	opts := &options.ReplaceOptions{
-		Upsert: &t,
+		Upsert: &True,
 	}
 	_, err := db.staticUsers.ReplaceOne(ctx, filter, u, opts)
 	if err != nil {
