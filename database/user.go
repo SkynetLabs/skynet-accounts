@@ -67,7 +67,6 @@ type (
 // UserBySub returns the user with the given sub. If `create` is `true` it will
 // create the user if it doesn't exist. The sub is the Kratos id of that user.
 func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
-	// TODO rework this guy to take user details struct (from token) and if those differ from DB, update the DB
 	users, err := db.managedUsersByField(ctx, "sub", sub)
 	if create && errors.Contains(err, ErrUserNotFound) {
 		return db.UserCreate(ctx, sub, TierFree)
@@ -170,11 +169,6 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 	return u, nil
 }
 
-// UserStats returns statistical information about the user.
-func (db *DB) UserStats(ctx context.Context, user User) (*UserStats, error) {
-	return db.userStats(ctx, user)
-}
-
 // UserDelete deletes a user by their ID.
 func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if u.ID.IsZero() {
@@ -235,6 +229,11 @@ func (db *DB) UserSetTier(ctx context.Context, u *User, t int) error {
 	}
 	u.Tier = t
 	return nil
+}
+
+// UserStats returns statistical information about the user.
+func (db *DB) UserStats(ctx context.Context, user User) (*UserStats, error) {
+	return db.userStats(ctx, user)
 }
 
 // managedUsersByField finds all users that have a given field value.

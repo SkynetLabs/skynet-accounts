@@ -76,6 +76,9 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 		return
 	}
 	// Check if the user's details have changed and update them if necessary.
+	// We only do it here, instead of baking this into UserBySub because we only
+	// care about this information being correct when we're going to present it
+	// to the user, e.g. on the Dashboard.
 	fName, lName, email, err := jwt.UserDetailsFromJWT(req.Context())
 	if err != nil {
 		api.staticLogger.Debugln("Failed to get user details from JWT:", err)
