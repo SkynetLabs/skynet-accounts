@@ -98,7 +98,7 @@ func main() {
 	}
 	if sk := os.Getenv(envStripeApiKey); sk != "" {
 		stripe.Key = sk
-		api.StripeTestMode = strings.HasPrefix(stripe.Key, "sk_live_")
+		api.StripeTestMode = !strings.HasPrefix(stripe.Key, "sk_live_")
 	}
 
 	ctx := context.Background()
