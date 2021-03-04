@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -123,7 +124,7 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	}
 	// Ensure there are no more results.
 	if ok := c.Next(ctx); ok {
-		build.Critical("more than one user found for stripe customer id", id)
+		build.Critical(fmt.Sprintf("more than one user found for stripe customer id '%s'", id))
 	}
 	var u User
 	err = c.Decode(&u)

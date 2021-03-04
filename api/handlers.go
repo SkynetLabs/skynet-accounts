@@ -151,6 +151,7 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 	if payload.StripeID == "" {
 		err = errors.AddContext(err, "empty stripe id")
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	// Check if a user already has this customer id.
 	eu, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
@@ -200,15 +201,18 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 	}
 	if err = req.ParseForm(); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
+		return
 	}
 	response := database.UploadsResponseDTO{
 		Items:    ups,
@@ -233,15 +237,18 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 	}
 	if err = req.ParseForm(); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	downs, total, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, pageSize)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
+		return
 	}
 	response := database.DownloadsResponseDTO{
 		Items:    downs,
