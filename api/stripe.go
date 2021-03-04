@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/stripe/stripe-go/v71/webhook"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 
@@ -170,18 +173,17 @@ func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, i
 		err = errors.AddContext(err, "error reading request body")
 		return nil, http.StatusServiceUnavailable, err
 	}
-	//// Read the event and verify its signature.
-	//event, err := webhook.ConstructEvent(payload, req.Header.Get("Stripe-Signature"), os.Getenv("STRIPE_WEBHOOK_SECRET"))
-	//if err != nil {
-	//	return nil, http.StatusBadRequest, err
-	//}
-
-	// Read the event without any verification. Used for testing and development.
-	event := stripe.Event{}
-	if err = json.Unmarshal(payload, &event); err != nil {
-		err = errors.AddContext(err, "error parsing request body")
+	// Read the event and verify its signature.
+	event, err := webhook.ConstructEvent(payload, req.Header.Get("Stripe-Signature"), os.Getenv("STRIPE_WEBHOOK_SECRET"))
+	if err != nil {
 		return nil, http.StatusBadRequest, err
 	}
+	//// Read the event without any verification. Used for testing and development.
+	//event := stripe.Event{}
+	//if err = json.Unmarshal(payload, &event); err != nil {
+	//	err = errors.AddContext(err, "error parsing request body")
+	//	return nil, http.StatusBadRequest, err
+	//}
 	return &event, http.StatusOK, nil
 }
 
