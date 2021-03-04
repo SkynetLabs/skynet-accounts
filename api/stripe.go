@@ -190,16 +190,16 @@ func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, i
 // adjusts the user's record accordingly.
 func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) error {
 	api.staticLogger.Traceln("Processing subscription:", s.ID)
-	u, err := api.staticDB.UserByStripeID(ctx, s.Customer.ID)
-	if err != nil {
-		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
-	}
 	// Get all active subscriptions for this customer. There should be only one
 	// (or none) but we'd better check.
 	it := sub.List(&stripe.SubscriptionListParams{
 		Customer: s.Customer.ID,
 		Status:   string(stripe.SubscriptionStatusActive),
 	})
+	u, err := api.staticDB.UserByStripeID(ctx, s.Customer.ID)
+	if err != nil {
+		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
+	}
 	// Set the default values.
 	u.Tier = database.TierFree
 	u.SubscribedUntil = time.Time{}
