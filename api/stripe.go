@@ -145,7 +145,8 @@ func (api *API) stripePricesHandler(w http.ResponseWriter, req *http.Request, _ 
 	api.staticLogger.Tracef("Processing request: %+v", req)
 	var sPrices []stripePrice
 	params := &stripe.PriceListParams{Active: &True}
-	params.Filters.AddFilter("limit", "", "100")
+	params.AddExpand("data.product")
+	params.Filters.AddFilter("limit", "", "1000")
 	i := price.List(params)
 	for i.Next() {
 		p := i.Price()
