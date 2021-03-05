@@ -34,7 +34,7 @@ type DownloadResponseDTO struct {
 	Skylink   string    `bson:"skylink" json:"skylink"`
 	Name      string    `bson:"name" json:"name"`
 	Size      uint64    `bson:"size" json:"size"`
-	Timestamp time.Time `bson:"timestamp" json:"downloadedOn"`
+	Timestamp time.Time `bson:"created_at" json:"downloadedOn"`
 }
 
 // DownloadsResponseDTO defines the final format of our response to the caller.
