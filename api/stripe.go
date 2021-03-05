@@ -35,18 +35,18 @@ var (
 	// stripePlansTest maps Stripe plans to specific tiers.
 	// DO NOT USE THESE DIRECTLY! Use stripePlans() instead.
 	stripePlansTest = map[string]int{
-		"prod_J2FBsxvEl4VoUK": database.TierFree,
-		"prod_J06Q7nJH3HJcYN": database.TierPremium5,
-		"prod_J06Qu7zg1unO8R": database.TierPremium20,
-		"prod_J06QbGjCvmZQGZ": database.TierPremium80,
+		//"prod_J2FBsxvEl4VoUK": database.TierFree,
+		"prod_J3m6xMfDiz2LGE": database.TierPremium5,
+		"prod_J3m6ioQg90kZj5": database.TierPremium20,
+		"prod_J3m6IuVyh3XOc5": database.TierPremium80,
 	}
 	// stripePricesTest maps Stripe plan prices to specific tiers.
 	// DO NOT USE THESE DIRECTLY! Use stripePrices() instead.
 	stripePricesTest = map[string]int{
-		"price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
-		"price_1IO6DLIzjULiPWN6ix1KyCtf": database.TierPremium5,
-		"price_1IO6DgIzjULiPWN6NiaSLEKa": database.TierPremium20,
-		"price_1IO6DvIzjULiPWN6wHgK35J4": database.TierPremium80,
+		//"price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
+		"price_1IReXpIzjULiPWN66PvsxHL4": database.TierPremium5,
+		"price_1IReY5IzjULiPWN6AxPytHEG": database.TierPremium20,
+		"price_1IReYFIzjULiPWN6DqN2DwjN": database.TierPremium80,
 	}
 	// stripePlansProd maps Stripe plans to specific tiers.
 	// DO NOT USE THESE DIRECTLY! Use stripePlans() instead.
