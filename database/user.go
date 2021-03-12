@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	// TierMinReserved reserved
-	TierMinReserved = iota
+	// TierAnonymous reserved
+	TierAnonymous = iota
 	// TierFree free
 	TierFree
 	// TierPremium5 5
@@ -30,6 +30,9 @@ const (
 	TierPremium80
 	// TierMaxReserved is a guard value that helps us validate tier values.
 	TierMaxReserved
+
+	// bpsToBytesPerSecond is a multiplier to get from 1 bps to X bytes per sec.
+	bpsToBytesPerSecond = 1024 * 1024 / 8
 )
 
 var (
@@ -37,6 +40,34 @@ var (
 	True = true
 	// False is a helper for when we need to pass a *bool to MongoDB.
 	False = false
+	// SpeedLimits defines the speed limits for each tier.
+	SpeedLimits = map[int]TierLimits{
+		TierAnonymous: {
+			Upload:   5 * bpsToBytesPerSecond,
+			Download: 20 * bpsToBytesPerSecond,
+			Registry: 250,
+		},
+		TierFree: {
+			Upload:   10 * bpsToBytesPerSecond,
+			Download: 40 * bpsToBytesPerSecond,
+			Registry: 125,
+		},
+		TierPremium5: {
+			Upload:   20 * bpsToBytesPerSecond,
+			Download: 80 * bpsToBytesPerSecond,
+			Registry: 60,
+		},
+		TierPremium20: {
+			Upload:   40 * bpsToBytesPerSecond,
+			Download: 160 * bpsToBytesPerSecond,
+			Registry: 30,
+		},
+		TierPremium80: {
+			Upload:   80 * bpsToBytesPerSecond,
+			Download: 320 * bpsToBytesPerSecond,
+			Registry: 15,
+		},
+	}
 )
 
 type (
@@ -69,6 +100,13 @@ type (
 		BandwidthDownloads int64 `json:"bwDownloads"`
 		BandwidthRegReads  int64 `json:"bwRegReads"`
 		BandwidthRegWrites int64 `json:"bwRegWrites"`
+	}
+	// TierLimits defines the speed limits imposed on the user based on their
+	// tier.
+	TierLimits struct {
+		Upload   int `json:"upload"`   // bytes per second
+		Download int `json:"download"` // bytes per second
+		Registry int `json:"registry"` // ms delay
 	}
 )
 
@@ -222,7 +260,7 @@ func (db *DB) UserSetStripeId(ctx context.Context, u *User, stripeId string) err
 
 // UserSetTier sets the user's tier to the given value.
 func (db *DB) UserSetTier(ctx context.Context, u *User, t int) error {
-	if t <= TierMinReserved || t >= TierMaxReserved {
+	if t <= TierAnonymous || t >= TierMaxReserved {
 		return errors.New("invalid tier value")
 	}
 	filter := bson.M{"_id": u.ID}

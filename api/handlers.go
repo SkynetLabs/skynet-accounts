@@ -95,6 +95,16 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 	api.WriteJSON(w, u)
 }
 
+// userLimitsHandler returns the speed limits which apply for this user.
+func (api *API) userLimitsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	u := api.userFromRequest(req)
+	if u == nil {
+		api.WriteJSON(w, database.SpeedLimits[database.TierAnonymous])
+		return
+	}
+	api.WriteJSON(w, database.SpeedLimits[u.Tier])
+}
+
 // userStatsHandler returns statistics about an existing user.
 func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
