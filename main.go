@@ -46,8 +46,8 @@ var (
 	// envKratosAddr hold the name of the environment variable for Kratos's
 	// address. Defaults to "kratos:4433".
 	envKratosAddr = "KRATOS_ADDR"
-	// envKratosAddr hold the name of the environment variable for Oathkeeper's
-	// address. Defaults to "oathkeeper:4456".
+	// envOathkeeperAddr hold the name of the environment variable for
+	// Oathkeeper's address. Defaults to "oathkeeper:4456".
 	envOathkeeperAddr = "OATHKEEPER_ADDR"
 	// envStripeApiKey hold the name of the environment variable for Stripe's
 	// API key. It's only required when integrating with Stripe.

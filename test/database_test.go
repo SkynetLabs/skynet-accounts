@@ -84,8 +84,8 @@ func TestDatabase_UserByID(t *testing.T) {
 	}
 }
 
-// TestDatabase_UserUpdate ensures UserSave works as expected.
-func TestDatabase_UserUpdate(t *testing.T) {
+// TestDatabase_UserSave ensures UserSave works as expected.
+func TestDatabase_UserSave(t *testing.T) {
 	ctx := context.Background()
 	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
