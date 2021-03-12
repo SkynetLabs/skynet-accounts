@@ -349,6 +349,7 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, storageUsed int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", id},
+		{"unpinned", false},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	lookupStage := bson.D{

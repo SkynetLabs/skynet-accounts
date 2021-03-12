@@ -412,6 +412,43 @@ func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Reque
 	api.WriteSuccess(w)
 }
 
+// skylinkDeleteHandler unpins a skylink uploaded by the user.
+func (api *API) skylinkDeleteHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	sl := ps.ByName("skylink")
+	if !database.ValidSkylinkHash(sl) {
+		api.WriteError(w, errors.New("invalid skylink"), http.StatusBadRequest)
+	}
+	skylink, err := api.staticDB.Skylink(req.Context(), sl)
+	if errors.Contains(err, database.ErrInvalidSkylink) {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	_, err = api.staticDB.UnpinUploads(req.Context(), *skylink, *u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	//_, remaining, err := api.staticDB.UploadsBySkylink(req.Context(), *skylink, 0, 1)
+	//if remaining == 0 {
+	//// TODO call siad to unpin this
+	//}
+	api.WriteSuccess(w)
+}
+
 // fetchOffset extracts the offset from the params and validates its value.
 func fetchOffset(form url.Values) (int, error) {
 	offset, _ := strconv.Atoi(form.Get("offset"))

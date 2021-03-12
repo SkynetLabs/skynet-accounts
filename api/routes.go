@@ -26,6 +26,8 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsHandler))
 	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
 
+	api.staticRouter.DELETE("/skylink/:skylink", api.validate(api.skylinkDeleteHandler))
+
 	api.staticRouter.POST("/stripe/webhook", api.stripeWebhookHandler)
 	api.staticRouter.GET("/stripe/prices", api.stripePricesHandler)
 }

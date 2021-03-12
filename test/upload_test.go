@@ -44,7 +44,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Create a skylink record for which to register an upload
-	_, err = createTestUpload(ctx, db, u, testUploadSize)
+	sl, err := createTestUpload(ctx, db, u, testUploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,6 +69,31 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	if stats.StorageUsed != storageUsed {
 		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).",
 			storageUsed, storageUsed/skynet.MiB, stats.StorageUsed, stats.StorageUsed/skynet.MiB)
+	}
+	// Delete the last upload. Expect zero uploads and zero storage used after.
+	unpinned, err := db.UnpinUploads(ctx, *sl, *u)
+	if err != nil {
+		t.Fatal("Failed to unpin.", err)
+	}
+	if unpinned != 1 {
+		t.Fatalf("Expected to unpin 1 file, unpinned %d.", unpinned)
+	}
+	// Fetch the user's uploads.
+	ups, n, err = db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
+	if err != nil {
+		t.Fatal("Failed to fetch uploads by user.", err)
+	}
+	if n != 0 {
+		t.Fatalf("Expected to have exactly %d upload(s), got %d.", 0, n)
+	}
+	// Refresh the user's record and make sure we report storage used accurately.
+	stats, err = db.UserStats(ctx, *u)
+	if err != nil {
+		t.Fatal("Failed to fetch user.", err)
+	}
+	if stats.StorageUsed != 0 {
+		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).",
+			0, 0, stats.StorageUsed, stats.StorageUsed/skynet.MiB)
 	}
 }
 
