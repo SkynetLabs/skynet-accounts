@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -115,7 +116,17 @@ type (
 func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "sub", sub)
 	if create && errors.Contains(err, ErrUserNotFound) {
-		return db.UserCreate(ctx, sub, TierFree)
+		var u *User
+		u, err = db.UserCreate(ctx, sub, TierFree)
+		// If we're successful or hit any error, other than a duplicate key we
+		// want to just return. Hitting a duplicate key error means we ran into
+		// a race condition and we can easily recover from that.
+		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
+			return u, err
+		}
+		// Recover from the race condition by fetching the existing user from
+		// the DB.
+		users, err = db.managedUsersByField(ctx, "sub", sub)
 	}
 	if err != nil {
 		return nil, err
