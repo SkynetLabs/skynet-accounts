@@ -150,6 +150,9 @@ func (api *API) stripePricesHandler(w http.ResponseWriter, req *http.Request, _ 
 	i := price.List(params)
 	for i.Next() {
 		p := i.Price()
+		if !p.Active {
+			continue
+		}
 		sp := stripePrice{
 			ID:          p.ID,
 			Name:        p.Product.Name,
