@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -84,13 +85,13 @@ type (
 // stripeWebhookHandler handles various events issued by Stripe.
 // See https://stripe.com/docs/api/events/types
 func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	api.staticLogger.Tracef("Processing request: %+v", req)
+	api.staticLogger.Tracef("Webhook request: %+v", req)
 	event, code, err := readStripeEvent(w, req)
 	if err != nil {
 		api.WriteError(w, err, code)
 		return
 	}
-	api.staticLogger.Debugf("Received event: %+v", event)
+	api.staticLogger.Debugf("Webhook event: %+v", event)
 
 	// Here we handle the entire class of subscription events.
 	// https://stripe.com/docs/billing/subscriptions/overview#build-your-own-handling-for-recurring-charge-failures
@@ -99,12 +100,15 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 		var s stripe.Subscription
 		err = json.Unmarshal(event.Data.Raw, &s)
 		if err != nil {
-			api.staticLogger.Warningln("Failed to parse event. Error: ", err, "\nEvent: ", string(event.Data.Raw))
+			api.staticLogger.Warningln("Webhook: Failed to parse event. Error: ", err, "\nEvent: ", string(event.Data.Raw))
+			api.WriteError(w, err, http.StatusBadRequest)
 			return
 		}
 		err = api.processStripeSub(req.Context(), &s)
 		if err != nil {
-			api.staticLogger.Debugln("Failed to process sub:", err)
+			api.staticLogger.Debugln("Webhook: Failed to process sub:", err)
+			api.WriteError(w, err, http.StatusInternalServerError)
+			return
 		}
 		api.WriteSuccess(w)
 		return
@@ -118,22 +122,27 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 		}
 		err = json.Unmarshal(event.Data.Raw, &hasSub)
 		if err != nil {
-			api.staticLogger.Warningln("Failed to parse event. Error: ", err, "\nEvent: ", string(event.Data.Raw))
+			api.staticLogger.Warningln("Webhook: Failed to parse event. Error: ", err, "\nEvent: ", string(event.Data.Raw))
+			api.WriteError(w, err, http.StatusBadRequest)
 			return
 		}
 		if hasSub.Sub == "" {
-			api.staticLogger.Debugln("Event doesn't refer to a subscription.")
+			api.staticLogger.Debugln("Webhook: Event doesn't refer to a subscription.")
+			api.WriteSuccess(w)
 			return
 		}
 		// Check the details about this subscription:
 		s, err := sub.Get(hasSub.Sub, nil)
 		if err != nil {
-			api.staticLogger.Debugln("Failed to fetch sub:", err)
+			api.staticLogger.Debugln("Webhook: Failed to fetch sub:", err)
+			api.WriteError(w, err, http.StatusInternalServerError)
 			return
 		}
 		err = api.processStripeSub(req.Context(), s)
 		if err != nil {
-			api.staticLogger.Debugln("Failed to process sub:", err)
+			api.staticLogger.Debugln("Webhook: Failed to process sub:", err)
+			api.WriteError(w, err, http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -150,6 +159,7 @@ func (api *API) stripePricesHandler(w http.ResponseWriter, req *http.Request, _ 
 	i := price.List(params)
 	for i.Next() {
 		p := i.Price()
+		fmt.Printf("price: %+v\n", p)
 		if !p.Active {
 			continue
 		}
