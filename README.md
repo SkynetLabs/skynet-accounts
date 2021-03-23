@@ -34,7 +34,7 @@ OATHKEEPER_ADDR=localhost:4456
 
 ## License
 
-Skynet uses a custom [License](./LICENSE.md). The Skynet License is a source
+Skynet Accounts uses a custom [License](./LICENSE.md). The Skynet License is a source
 code license that allows you to use, modify and distribute the software, but
 you must preserve the payment mechanism in the software.
 
