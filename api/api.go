@@ -21,11 +21,6 @@ type API struct {
 	staticLogger *logrus.Logger
 }
 
-// ctxValue is a helper type which makes it safe to register values in the
-// context. If we don't use a custom unexported type it's easy for others
-// to get our value or accidentally overwrite it.
-type ctxValue string
-
 // New returns a new initialised API.
 func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger) (*API, error) {
 	if db == nil {

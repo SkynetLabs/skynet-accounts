@@ -288,7 +288,7 @@ func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipe
 // difference is that it supports partial downloads via the `bytes` field in the
 // `downloads` collection.
 func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
-	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
+	sortStage := bson.D{{"$sort", bson.D{{"created_at", -1}}}}
 	skipStage := bson.D{{"$skip", offset}}
 	limitStage := bson.D{{"$limit", pageSize}}
 	lookupStage := bson.D{
@@ -316,7 +316,7 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 		{"name", 1},
 		{"user_id", 1},
 		{"skylink_id", 1},
-		{"timestamp", 1},
+		{"created_at", 1},
 		{"size", bson.D{
 			{"$cond", bson.A{
 				bson.D{{"$gt", bson.A{"$bytes", 0}}}, // if

@@ -10,6 +10,48 @@ import (
 	"gitlab.com/NebulousLabs/fastrand"
 )
 
+// TestUserSave ensures that UserSave works as expected.
+func TestUserSave(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Case: save a user that doesn't exist in the DB.
+	u := &database.User{
+		FirstName: "John",
+		LastName:  "Doe",
+		Email:     "john.doe@siasky.net",
+		Sub:       t.Name() + "sub",
+		Tier:      1,
+	}
+	err = db.UserSave(ctx, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u1, err := db.UserBySub(ctx, u.Sub, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u1.ID.Hex() != u.ID.Hex() {
+		t.Fatalf("Expected user id %s, got %s.", u.ID.Hex(), u1.ID.Hex())
+	}
+	// Case: save a user that does exist in the DB.
+	u.FirstName = "New first name"
+	err = db.UserSave(ctx, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u1, err = db.UserBySub(ctx, u.Sub, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u1.FirstName != u.FirstName {
+		t.Fatalf("Expected first name '%s', got '%s'.", u.FirstName, u1.FirstName)
+	}
+}
+
 // TestUserStats ensures we report accurate statistics for users.
 func TestUserStats(t *testing.T) {
 	ctx := context.Background()
@@ -20,12 +62,12 @@ func TestUserStats(t *testing.T) {
 
 	// Add a test user.
 	sub := string(fastrand.Bytes(userSubLen))
-	u, err := db.UserCreate(nil, sub, database.TierPremium5)
+	u, err := db.UserCreate(ctx, sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(nil, user)
+		_ = db.UserDelete(ctx, user)
 	}(u)
 
 	testUploadSizeSmall := int64(1 + fastrand.Intn(4*skynet.MiB-1))

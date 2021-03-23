@@ -1,12 +1,15 @@
 package api
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
@@ -21,13 +24,13 @@ func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	token, err := ValidateToken(api.staticLogger, tokenStr)
+	token, err := jwt.ValidateToken(api.staticLogger, tokenStr)
 	if err != nil {
 		api.staticLogger.Traceln("Error validating token:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	exp, err := tokenExpiration(token)
+	exp, err := jwt.TokenExpiration(token)
 	if err != nil {
 		api.staticLogger.Traceln("Error checking token expiration:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -44,7 +47,7 @@ func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprou
 
 // logoutHandler ends a user session by removing a cookie
 func (api *API) logoutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	_, _, _, err := tokenFromContext(req)
+	_, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from context:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -62,7 +65,7 @@ func (api *API) logoutHandler(w http.ResponseWriter, req *http.Request, _ httpro
 // userHandler returns information about an existing user and create it if it
 // doesn't exist.
 func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -72,12 +75,29 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	// Check if the user's details have changed and update them if necessary.
+	// We only do it here, instead of baking this into UserBySub because we only
+	// care about this information being correct when we're going to present it
+	// to the user, e.g. on the Dashboard.
+	fName, lName, email, err := jwt.UserDetailsFromJWT(req.Context())
+	if err != nil {
+		api.staticLogger.Debugln("Failed to get user details from JWT:", err)
+	}
+	if err == nil && (fName != u.FirstName || lName != u.LastName || email != u.Email) {
+		u.FirstName = fName
+		u.LastName = lName
+		u.Email = email
+		err = api.staticDB.UserSave(req.Context(), u)
+		if err != nil {
+			api.staticLogger.Debugln("Failed to update user in DB:", err)
+		}
+	}
 	api.WriteJSON(w, u)
 }
 
 // userStatsHandler returns statistics about an existing user.
 func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -99,9 +119,82 @@ func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ htt
 	api.WriteJSON(w, ud)
 }
 
+// userPutHandler allows changing some user information.
+func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Read body.
+	bodyBytes, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = errors.AddContext(err, "failed to read request body")
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	defer func() { _ = req.Body.Close() }()
+	payload := struct {
+		StripeID string `json:"stripeCustomerId"`
+	}{}
+	err = json.Unmarshal(bodyBytes, &payload)
+	if err != nil {
+		err = errors.AddContext(err, "failed to parse request body")
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if payload.StripeID == "" {
+		err = errors.AddContext(err, "empty stripe id")
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	// Check if this user already has this ID assigned to them.
+	if payload.StripeID == u.StripeId {
+		// Nothing to do.
+		api.WriteJSON(w, u)
+		return
+	}
+	// Check if a user already has this customer id.
+	eu, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
+	if err != nil && err != database.ErrUserNotFound {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if err == nil && eu.ID.Hex() != u.ID.Hex() {
+		err = errors.New("this stripe customer id belongs to another user")
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	// Check if this user already has a Stripe customer ID.
+	if u.StripeId != "" {
+		err = errors.New("This user already has a Stripe customer id.")
+		api.WriteError(w, err, http.StatusUnprocessableEntity)
+		return
+	}
+	// Save the changed Stripe ID to the DB.
+	err = api.staticDB.UserSetStripeId(req.Context(), u, payload.StripeID)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// We set this for the purpose of returning the updated value without
+	// reading from the DB.
+	u.StripeId = payload.StripeID
+	api.WriteJSON(w, u)
+}
+
 // userUploadsHandler returns all uploads made by the current user.
 func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -113,15 +206,18 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 	}
 	if err = req.ParseForm(); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
+		return
 	}
 	response := database.UploadsResponseDTO{
 		Items:    ups,
@@ -134,7 +230,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 
 // userDownloadsHandler returns all downloads made by the current user.
 func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -146,15 +242,18 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 	}
 	if err = req.ParseForm(); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	downs, total, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, pageSize)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
+		return
 	}
 	response := database.DownloadsResponseDTO{
 		Items:    downs,
@@ -167,7 +266,7 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 
 // trackUploadHandler registers a new upload in the system.
 func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -211,7 +310,7 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 
 // trackDownloadHandler registers a new download in the system.
 func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -275,7 +374,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 
 // trackRegistryReadHandler registers a new registry read in the system.
 func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
@@ -295,7 +394,7 @@ func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Reques
 
 // trackRegistryWriteHandler registers a new registry write in the system.
 func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := tokenFromContext(req)
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
