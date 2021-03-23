@@ -2,6 +2,15 @@ package skynet
 
 import "testing"
 
+const (
+	// baseSectorTotalSize is the total amount of storage used by a base sector,
+	// including its redundancy.
+	baseSectorTotalSize = SizeBaseSector * RedundancyBaseSector
+	// chunkTotalSize is the total amount of storage used by a chunk, including
+	// its redundancy.
+	chunkTotalSize = SizeChunk * RedundancyChunk
+)
+
 // TestNumChunks ensures that numChunks works as expected.
 func TestNumChunks(t *testing.T) {
 	tests := []struct {
@@ -24,18 +33,40 @@ func TestNumChunks(t *testing.T) {
 	}
 }
 
+// TestRawStorageUsed ensures that RawStorageUsed works as expected.
+func TestRawStorageUsed(t *testing.T) {
+	tests := []struct {
+		size   int64
+		result int64
+	}{
+		{size: 0, result: baseSectorTotalSize},
+		{size: 1 * MiB, result: baseSectorTotalSize},
+		{size: 4 * MiB, result: baseSectorTotalSize},
+		{size: 5 * MiB, result: baseSectorTotalSize + chunkTotalSize},
+		{size: 50 * MiB, result: baseSectorTotalSize + 2*chunkTotalSize},
+		{size: 500 * MiB, result: baseSectorTotalSize + 13*chunkTotalSize},
+	}
+	for _, tt := range tests {
+		res := RawStorageUsed(tt.size)
+		if res != tt.result {
+			t.Errorf("Expected a %d MiB file to result into %d MiB used for upload storage, got %d MiB.",
+				tt.size/MiB, tt.result/MiB, res/MiB)
+		}
+	}
+}
+
 // TestStorageUsed ensures that StorageUsed works as expected.
 func TestStorageUsed(t *testing.T) {
 	tests := []struct {
 		size   int64
 		result int64
 	}{
-		{size: 0, result: SizeBaseSector},
-		{size: 1 * MiB, result: SizeBaseSector},
-		{size: 4 * MiB, result: SizeBaseSector},
-		{size: 5 * MiB, result: SizeBaseSector + SizeChunk},
-		{size: 50 * MiB, result: SizeBaseSector + 2*SizeChunk},
-		{size: 500 * MiB, result: SizeBaseSector + 13*SizeChunk},
+		{size: 0, result: baseSectorTotalSize / RedundancyAPIDivisor},
+		{size: 1 * MiB, result: baseSectorTotalSize / RedundancyAPIDivisor},
+		{size: 4 * MiB, result: baseSectorTotalSize / RedundancyAPIDivisor},
+		{size: 5 * MiB, result: (baseSectorTotalSize + chunkTotalSize) / RedundancyAPIDivisor},
+		{size: 50 * MiB, result: (baseSectorTotalSize + 2*chunkTotalSize) / RedundancyAPIDivisor},
+		{size: 500 * MiB, result: (baseSectorTotalSize + 13*chunkTotalSize) / RedundancyAPIDivisor},
 	}
 	for _, tt := range tests {
 		res := StorageUsed(tt.size)
