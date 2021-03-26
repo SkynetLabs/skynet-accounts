@@ -42,6 +42,7 @@ var (
 	// False is a helper for when we need to pass a *bool to MongoDB.
 	False = false
 	// SpeedLimits defines the speed limits for each tier.
+	// Registry delay is in ms.
 	SpeedLimits = map[int]TierLimits{
 		TierAnonymous: {
 			Upload:   5 * bpsToBytesPerSecond,
@@ -56,17 +57,17 @@ var (
 		TierPremium5: {
 			Upload:   20 * bpsToBytesPerSecond,
 			Download: 80 * bpsToBytesPerSecond,
-			Registry: 60,
+			Registry: 0,
 		},
 		TierPremium20: {
 			Upload:   40 * bpsToBytesPerSecond,
 			Download: 160 * bpsToBytesPerSecond,
-			Registry: 30,
+			Registry: 0,
 		},
 		TierPremium80: {
 			Upload:   80 * bpsToBytesPerSecond,
 			Download: 320 * bpsToBytesPerSecond,
-			Registry: 15,
+			Registry: 0,
 		},
 	}
 )
