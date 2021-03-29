@@ -423,7 +423,6 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 	projectStage := bson.D{{"$project", bson.D{
 		{"_id", 0},
 		{"user_id", 0},
-		{"skylink", 0},
 		{"skylink_data", 0},
 		{"name", 0},
 		{"skylink_id", 0},
@@ -443,17 +442,25 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
-		Size int64 `bson:"size"`
+		Skylink string `bson:"skylink"`
+		Size    int64  `bson:"size"`
 	}{}
+	processedSkylinks := make(map[string]bool)
 	for c.Next(ctx) {
 		if err = c.Decode(&result); err != nil {
 			err = errors.AddContext(err, "failed to decode DB data")
 			return
 		}
+		// Count all uploads towards the total count and used bandwidth.
 		count++
+		totalBandwidth += skynet.BandwidthUploadCost(result.Size)
+		// Count only unique uploads towards total size and used storage.
+		if processedSkylinks[result.Skylink] {
+			continue
+		}
+		processedSkylinks[result.Skylink] = true
 		totalSize += result.Size
 		storageUsed += skynet.StorageUsed(result.Size)
-		totalBandwidth += skynet.BandwidthUploadCost(result.Size)
 	}
 	return count, totalSize, storageUsed, totalBandwidth, nil
 }
