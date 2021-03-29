@@ -15,7 +15,7 @@ import (
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
 func (api *API) buildHTTPRoutes() {
-	api.staticRouter.POST("/login", api.loginHandler)
+	api.staticRouter.POST("/login", api.noValidate(api.loginHandler))
 	api.staticRouter.POST("/logout", api.validate(api.logoutHandler))
 
 	api.staticRouter.POST("/track/upload/:skylink", api.validate(api.trackUploadHandler))
@@ -25,21 +25,30 @@ func (api *API) buildHTTPRoutes() {
 
 	api.staticRouter.GET("/user", api.validate(api.userHandler))
 	api.staticRouter.PUT("/user", api.validate(api.userPutHandler))
-	api.staticRouter.GET("/user/limits", api.userLimitsHandler)
+	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsHandler))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsHandler))
 	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsHandler))
 	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
 
 	api.staticRouter.DELETE("/skylink/:skylink", api.validate(api.skylinkDeleteHandler))
 
-	api.staticRouter.POST("/stripe/webhook", api.stripeWebhookHandler)
-	api.staticRouter.GET("/stripe/prices", api.stripePricesHandler)
+	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookHandler))
+	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesHandler))
+}
+
+// noValidate is a pass-through method used for decorating the request and
+// logging relevant data.
+func (api *API) noValidate(h httprouter.Handle) httprouter.Handle {
+	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.logRequest(req)
+		h(w, req, ps)
+	}
 }
 
 // validate ensures that the user making the request has logged in.
 func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		api.staticLogger.Tracef("Processing request: %+v", req)
+		api.logRequest(req)
 		tokenStr, err := tokenFromRequest(req)
 		if err != nil {
 			api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -56,6 +65,14 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 		ctx := jwt.ContextWithToken(req.Context(), token)
 		h(w, req.WithContext(ctx), ps)
 	}
+}
+
+// logRequest logs information about the current request.
+func (api *API) logRequest(r *http.Request) {
+	hasAuth := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer")
+	c, err := r.Cookie(CookieName)
+	hasCookie := err == nil && c != nil
+	api.staticLogger.Tracef("Processing request: %v %v, Auth: %v, Skynet Cookie: %v, Referrer: %v, Host: %v, RemoreAddr: %v", r.Method, r.URL, hasAuth, hasCookie, r.Referer(), r.Host, r.RemoteAddr)
 }
 
 // tokenFromRequest extracts the JWT token from the request and returns it.

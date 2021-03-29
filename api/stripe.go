@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -155,8 +154,7 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 }
 
 // stripePricesHandler returns a list of plans and prices.
-func (api *API) stripePricesHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	api.staticLogger.Tracef("Processing request: %+v", req)
+func (api *API) stripePricesHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	var sPrices []stripePrice
 	params := &stripe.PriceListParams{Active: &True}
 	params.AddExpand("data.product")
@@ -164,7 +162,6 @@ func (api *API) stripePricesHandler(w http.ResponseWriter, req *http.Request, _ 
 	i := price.List(params)
 	for i.Next() {
 		p := i.Price()
-		fmt.Printf("price: %+v\n", p)
 		if !p.Active {
 			continue
 		}
