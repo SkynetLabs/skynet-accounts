@@ -9,7 +9,6 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Upload ...
@@ -87,36 +86,6 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pag
 		{"unpinned", false},
 	}}}
 	return db.uploadsBy(ctx, matchStage, offset, pageSize)
-}
-
-// UploadsBySkylinkAndUser fetches all uploads of this skylink by this user.
-func (db *DB) UploadsBySkylinkAndUser(ctx context.Context, skylink Skylink, user User) ([]Upload, error) {
-	if skylink.ID.IsZero() {
-		return nil, errors.New("invalid skylink")
-	}
-	if user.ID.IsZero() {
-		return nil, errors.New("invalid user")
-	}
-	matchStage := bson.D{{"$match", bson.D{
-		{"skylink_id", skylink.ID},
-		{"user_id", user.ID},
-		{"unpinned", false},
-	}}}
-	c, err := db.staticUploads.Aggregate(ctx, mongo.Pipeline{matchStage})
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
-		}
-	}()
-	var uploads []Upload
-	err = c.All(ctx, &uploads)
-	if err != nil {
-		return nil, err
-	}
-	return uploads, nil
 }
 
 // UnpinUploads unpins all uploads of this skylink by this user. Returns the
