@@ -48,15 +48,17 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	storageUsed := skynet.StorageUsed(testUploadSize)
+	uploadBandwidth := skynet.BandwidthUploadCost(testUploadSize)
+	uploadsCount := 1
 	// Fetch the user's uploads.
 	ups, n, err := db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
 	if err != nil {
 		t.Fatal("Failed to fetch uploads by user.", err)
 	}
-	if n != 1 {
-		t.Fatalf("Expected to have exactly %d upload(s), got %d.", 1, n)
+	if n != uploadsCount {
+		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, n)
 	}
-	storageUsed := skynet.StorageUsed(testUploadSize)
 	if ups[0].Size != storageUsed {
 		t.Fatalf("Expected the reported size of an upload with file size of %d (%d MiB) to be its used storage of %d (%d MiB), got %d (%d MiB).",
 			testUploadSize, testUploadSize/skynet.MiB, storageUsed, storageUsed/skynet.MiB, ups[0].Size, ups[0].Size/skynet.MiB)
@@ -70,14 +72,46 @@ func TestUpload_UploadsByUser(t *testing.T) {
 		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).",
 			storageUsed, storageUsed/skynet.MiB, stats.StorageUsed, stats.StorageUsed/skynet.MiB)
 	}
+	if stats.BandwidthUploads != uploadBandwidth {
+		t.Fatalf("Expected upload bandwidth used of %d (%d MiB), got %d (%d MiB).",
+			uploadBandwidth, uploadBandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+	}
+	if stats.NumUploads != uploadsCount {
+		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
+	}
+	// Create a second upload for the same skylink. The user's used storage
+	// should stay the same but the upload bandwidth should increase.
+	_, err = createUpload(ctx, db, u, sl)
+	if err != nil {
+		t.Fatal("Failed to re-upload.", err)
+	}
+	uploadBandwidth += skynet.BandwidthUploadCost(testUploadSize)
+	uploadsCount++
+	// Refresh the user's record and make sure we report storage used accurately.
+	stats, err = db.UserStats(ctx, *u)
+	if err != nil {
+		t.Fatal("Failed to fetch user.", err)
+	}
+	if stats.StorageUsed != storageUsed {
+		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).",
+			storageUsed, storageUsed/skynet.MiB, stats.StorageUsed, stats.StorageUsed/skynet.MiB)
+	}
+	if stats.BandwidthUploads != uploadBandwidth {
+		t.Fatalf("Expected upload bandwidth used of %d (%d MiB), got %d (%d MiB).",
+			uploadBandwidth, uploadBandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+	}
+	if stats.NumUploads != uploadsCount {
+		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
+	}
 	// Delete the last upload. Expect zero uploads and zero storage used after.
 	unpinned, err := db.UnpinUploads(ctx, *sl, *u)
 	if err != nil {
 		t.Fatal("Failed to unpin.", err)
 	}
-	if unpinned != 1 {
-		t.Fatalf("Expected to unpin 1 file, unpinned %d.", unpinned)
+	if unpinned != 2 {
+		t.Fatalf("Expected to unpin 2 files, unpinned %d.", unpinned)
 	}
+	uploadsCount -= 2
 	// Fetch the user's uploads.
 	ups, n, err = db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
 	if err != nil {
@@ -95,15 +129,30 @@ func TestUpload_UploadsByUser(t *testing.T) {
 		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).",
 			0, 0, stats.StorageUsed, stats.StorageUsed/skynet.MiB)
 	}
-}
-
-// randomSkylink generates a random skylink
-func randomSkylink() string {
-	sb := strings.Builder{}
-	for i := 0; i < skylinkLen; i++ {
-		_ = sb.WriteByte(skylinkCharset[fastrand.Intn(len(skylinkCharset))])
+	// Upload the same file again.
+	_, err = createUpload(ctx, db, u, sl)
+	if err != nil {
+		t.Fatal("Failed to re-upload after unpinning.", err)
 	}
-	return sb.String()
+	storageUsed = skynet.StorageUsed(testUploadSize) // we're starting from zero
+	uploadBandwidth += skynet.BandwidthUploadCost(testUploadSize)
+	uploadsCount++
+	// Refresh the user's record and make sure we report storage used accurately.
+	stats, err = db.UserStats(ctx, *u)
+	if err != nil {
+		t.Fatal("Failed to fetch user.", err)
+	}
+	if stats.StorageUsed != storageUsed {
+		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).",
+			storageUsed, storageUsed/skynet.MiB, stats.StorageUsed, stats.StorageUsed/skynet.MiB)
+	}
+	if stats.BandwidthUploads != uploadBandwidth {
+		t.Fatalf("Expected upload bandwidth used of %d (%d MiB), got %d (%d MiB).",
+			uploadBandwidth, uploadBandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+	}
+	if stats.NumUploads != uploadsCount {
+		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
+	}
 }
 
 // createTestUpload creates a new skyfile and uploads it under the given user's
@@ -128,10 +177,14 @@ func createTestUpload(ctx context.Context, db *database.DB, user *database.User,
 		return nil, errors.AddContext(err, fmt.Sprintf("expected skylink size to be %d, got %d.", size, skylink.Size))
 	}
 	// Register an upload.
+	return createUpload(ctx, db, user, skylink)
+}
+
+// createUpload registers an upload of the given skylink by the given user.
+func createUpload(ctx context.Context, db *database.DB, user *database.User, skylink *database.Skylink) (*database.Skylink, error) {
 	up, err := db.UploadCreate(ctx, *user, *skylink)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to register an upload")
-
 	}
 	if up.UserID != user.ID {
 		return nil, errors.AddContext(err, "expected upload's userId to match the uploader's id")
@@ -140,4 +193,13 @@ func createTestUpload(ctx context.Context, db *database.DB, user *database.User,
 		return nil, errors.AddContext(err, "expected upload's skylinkId to match the given skylink's id")
 	}
 	return skylink, nil
+}
+
+// randomSkylink generates a random skylink
+func randomSkylink() string {
+	sb := strings.Builder{}
+	for i := 0; i < skylinkLen; i++ {
+		_ = sb.WriteByte(skylinkCharset[fastrand.Intn(len(skylinkCharset))])
+	}
+	return sb.String()
 }

@@ -32,8 +32,9 @@ const (
 	// TierMaxReserved is a guard value that helps us validate tier values.
 	TierMaxReserved
 
-	// bpsToBytesPerSecond is a multiplier to get from 1 bps to X bytes per sec.
-	bpsToBytesPerSecond = 1024 * 1024 / 8
+	// mbpsToBytesPerSecond is a multiplier to get from megabits per second to
+	// bytes per second.
+	mbpsToBytesPerSecond = 1024 * 1024 / 8
 )
 
 var (
@@ -45,28 +46,28 @@ var (
 	// Registry delay is in ms.
 	SpeedLimits = map[int]TierLimits{
 		TierAnonymous: {
-			Upload:   5 * bpsToBytesPerSecond,
-			Download: 20 * bpsToBytesPerSecond,
+			Upload:   5 * mbpsToBytesPerSecond,
+			Download: 20 * mbpsToBytesPerSecond,
 			Registry: 250,
 		},
 		TierFree: {
-			Upload:   10 * bpsToBytesPerSecond,
-			Download: 40 * bpsToBytesPerSecond,
+			Upload:   10 * mbpsToBytesPerSecond,
+			Download: 40 * mbpsToBytesPerSecond,
 			Registry: 125,
 		},
 		TierPremium5: {
-			Upload:   20 * bpsToBytesPerSecond,
-			Download: 80 * bpsToBytesPerSecond,
+			Upload:   20 * mbpsToBytesPerSecond,
+			Download: 80 * mbpsToBytesPerSecond,
 			Registry: 0,
 		},
 		TierPremium20: {
-			Upload:   40 * bpsToBytesPerSecond,
-			Download: 160 * bpsToBytesPerSecond,
+			Upload:   40 * mbpsToBytesPerSecond,
+			Download: 160 * mbpsToBytesPerSecond,
 			Registry: 0,
 		},
 		TierPremium80: {
-			Upload:   80 * bpsToBytesPerSecond,
-			Download: 320 * bpsToBytesPerSecond,
+			Upload:   80 * mbpsToBytesPerSecond,
+			Download: 320 * mbpsToBytesPerSecond,
 			Registry: 0,
 		},
 	}
@@ -399,7 +400,6 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, storageUsed int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", id},
-		{"unpinned", false},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	lookupStage := bson.D{
@@ -442,8 +442,9 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
-		Skylink string `bson:"skylink"`
-		Size    int64  `bson:"size"`
+		Size     int64  `bson:"size"`
+		Skylink  string `bson:"skylink"`
+		Unpinned bool   `bson:"unpinned"`
 	}{}
 	processedSkylinks := make(map[string]bool)
 	for c.Next(ctx) {
@@ -451,9 +452,13 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 			err = errors.AddContext(err, "failed to decode DB data")
 			return
 		}
-		// Count all uploads towards the total count and used bandwidth.
-		count++
+		// All bandwidth is counted, regardless of unpinned status.
 		totalBandwidth += skynet.BandwidthUploadCost(result.Size)
+		// Count only uploads that are still pinned towards total count.
+		if result.Unpinned {
+			continue
+		}
+		count++
 		// Count only unique uploads towards total size and used storage.
 		if processedSkylinks[result.Skylink] {
 			continue
