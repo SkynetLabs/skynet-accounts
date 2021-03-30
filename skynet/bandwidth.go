@@ -80,9 +80,7 @@ func RawStorageUsed(uploadSize int64) int64 {
 // uses. This method returns user-facing values. For the raw storage value
 // use RawStorageUsed().
 func StorageUsed(uploadSize int64) int64 {
-	baseSectorStorage := int64(PriceStorageUploadBase * RedundancyBaseSector)
-	chunkStorage := numChunks(uploadSize) * PriceStorageUploadIncrement * RedundancyChunk
-	return (baseSectorStorage + chunkStorage) / RedundancyAPIDivisor
+	return RawStorageUsed(uploadSize) / RedundancyAPIDivisor
 }
 
 // numChunks returns the number of 40MB chunks a file of this size uses, beyond
