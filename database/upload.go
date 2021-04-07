@@ -23,11 +23,12 @@ type Upload struct {
 // UploadResponseDTO is the representation of an upload we send as response to
 // the caller.
 type UploadResponseDTO struct {
-	ID        string    `bson:"_id" json:"id"`
-	Skylink   string    `bson:"skylink" json:"skylink"`
-	Name      string    `bson:"name" json:"name"`
-	Size      int64     `bson:"size" json:"size"`
-	Timestamp time.Time `bson:"timestamp" json:"uploadedOn"`
+	ID         string    `bson:"_id" json:"id"`
+	Skylink    string    `bson:"skylink" json:"skylink"`
+	Name       string    `bson:"name" json:"name"`
+	Size       int64     `bson:"size" json:"size"`
+	RawStorage int64     `bson:"raw_storage" json:"rawStorage"`
+	Timestamp  time.Time `bson:"timestamp" json:"uploadedOn"`
 }
 
 // UploadsResponseDTO defines the final format of our response to the caller.
@@ -152,7 +153,7 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 		return nil, 0, err
 	}
 	for ix := range uploads {
-		uploads[ix].Size = skynet.StorageUsed(uploads[ix].Size)
+		uploads[ix].RawStorage = skynet.RawStorageUsed(uploads[ix].Size)
 	}
 	return uploads, int(cnt), nil
 }

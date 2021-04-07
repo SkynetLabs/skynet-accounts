@@ -92,7 +92,7 @@ type (
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
-		StorageUsed        int64 `json:"storageUsed"`
+		RawStorageUsed     int64 `json:"storageUsed"`
 		NumRegReads        int64 `json:"numRegReads"`
 		NumRegWrites       int64 `json:"numRegWrites"`
 		NumUploads         int   `json:"numUploads"`
@@ -339,14 +339,14 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, size, storage, bw, err := db.userUploadStats(ctx, user.ID, startOfMonth)
+		n, size, rawStorage, bw, err := db.userUploadStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's upload bandwidth used:", err)
 			return
 		}
 		stats.NumUploads = n
 		stats.TotalUploadsSize = size
-		stats.StorageUsed = storage
+		stats.RawStorageUsed = rawStorage
 		stats.BandwidthUploads = bw
 		db.staticLogger.Tracef("User %s upload bandwidth: %v", user.ID.Hex(), bw)
 	}()
@@ -397,7 +397,7 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 
 // userUploadStats reports on the user's uploads - count, total size and total
 // bandwidth used. It uses the total size of the uploaded skyfiles as basis.
-func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, storageUsed int64, totalBandwidth int64, err error) {
+func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, rawStorageUsed int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", id},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
@@ -465,9 +465,9 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 		}
 		processedSkylinks[result.Skylink] = true
 		totalSize += result.Size
-		storageUsed += skynet.StorageUsed(result.Size)
+		rawStorageUsed += skynet.RawStorageUsed(result.Size)
 	}
-	return count, totalSize, storageUsed, totalBandwidth, nil
+	return count, totalSize, rawStorageUsed, totalBandwidth, nil
 }
 
 // userDownloadStats reports on the user's downloads - count, total size and
