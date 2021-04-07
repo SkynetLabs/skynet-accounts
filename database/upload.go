@@ -88,9 +88,9 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pag
 	return db.uploadsBy(ctx, matchStage, offset, pageSize)
 }
 
-// UnpinUploads unpins all uploads of this skylink by this user. Returns the
-// number of unpinned uploads.
-func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int64, error) {
+// UnpinUpload unpins one of the uploads of this skylink by this user. Returns
+// the number of unpinned uploads.
+func (db *DB) UnpinUpload(ctx context.Context, skylink Skylink, user User) (int64, error) {
 	if skylink.ID.IsZero() {
 		return 0, errors.New("invalid skylink")
 	}
@@ -100,9 +100,10 @@ func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int
 	filter := bson.D{
 		{"skylink_id", skylink.ID},
 		{"user_id", user.ID},
+		{"unpinned", false},
 	}
 	update := bson.M{"$set": bson.M{"unpinned": true}}
-	ur, err := db.staticUploads.UpdateMany(ctx, filter, update)
+	ur, err := db.staticUploads.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return 0, err
 	}

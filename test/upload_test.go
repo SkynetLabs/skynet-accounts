@@ -43,7 +43,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
-	// Create a skylink record for which to register an upload
+	// Create a skylink record and register an upload for it.
 	sl, err := createTestUpload(ctx, db, u, testUploadSize)
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +85,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
+	storageUsed += 0 // storage stays the same
 	uploadBandwidth += skynet.BandwidthUploadCost(testUploadSize)
 	uploadsCount++
 	// Refresh the user's record and make sure we report storage used accurately.
@@ -103,38 +104,42 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	if stats.NumUploads != uploadsCount {
 		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
 	}
-	// Delete the last upload. Expect zero uploads and zero storage used after.
-	unpinned, err := db.UnpinUploads(ctx, *sl, *u)
+	// Delete the last upload. Expect the number of uploads to go down by 1 but
+	// expect the storage used to stay the same because duplicate uploads don't
+	// increase the user's used storage.
+	unpinned, err := db.UnpinUpload(ctx, *sl, *u)
 	if err != nil {
 		t.Fatal("Failed to unpin.", err)
 	}
-	if unpinned != 2 {
-		t.Fatalf("Expected to unpin 2 files, unpinned %d.", unpinned)
+	if unpinned != 1 {
+		t.Fatalf("Expected to unpin 1 files, unpinned %d.", unpinned)
 	}
-	uploadsCount -= 2
+	storageUsed -= 0     // storage stays the same
+	uploadBandwidth -= 0 // upload bandwidth is already used, so it also stay the same
+	uploadsCount -= 1
 	// Fetch the user's uploads.
 	ups, n, err = db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
 	if err != nil {
 		t.Fatal("Failed to fetch uploads by user.", err)
 	}
-	if n != 0 {
-		t.Fatalf("Expected to have exactly %d upload(s), got %d.", 0, n)
+	if n != 1 {
+		t.Fatalf("Expected to have exactly %d upload(s), got %d.", 1, n)
 	}
 	// Refresh the user's record and make sure we report storage used accurately.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user.", err)
 	}
-	if stats.StorageUsed != 0 {
+	if stats.StorageUsed != storageUsed {
 		t.Fatalf("Expected storage used of %d (%d MiB), got %d (%d MiB).",
-			0, 0, stats.StorageUsed, stats.StorageUsed/skynet.MiB)
+			storageUsed, storageUsed, stats.StorageUsed, stats.StorageUsed/skynet.MiB)
 	}
-	// Upload the same file again.
+	// Upload the same file again. Uploads go up, storage stays the same.
 	_, err = createUpload(ctx, db, u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload after unpinning.", err)
 	}
-	storageUsed = skynet.StorageUsed(testUploadSize) // we're starting from zero
+	storageUsed += 0 // storage stays the same
 	uploadBandwidth += skynet.BandwidthUploadCost(testUploadSize)
 	uploadsCount++
 	// Refresh the user's record and make sure we report storage used accurately.

@@ -451,7 +451,7 @@ func (api *API) skylinkDeleteHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.UnpinUploads(req.Context(), *skylink, *u)
+	_, err = api.staticDB.UnpinUpload(req.Context(), *skylink, *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
