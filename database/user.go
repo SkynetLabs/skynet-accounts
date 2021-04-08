@@ -599,6 +599,12 @@ func monthStart(subscribedUntil time.Time) time.Time {
 	// the month. If they were never subscribed we use Jan 1st 1970 for
 	// SubscribedUntil.
 	daysDelta := subscribedUntil.Day() - now.Day()
-	d := now.AddDate(0, -1, daysDelta)
+	monthsDelta := 0
+	if daysDelta > 0 {
+		// The end of sub day is after the current date, so the start of month
+		// is in the previous month.
+		monthsDelta = -1
+	}
+	d := now.AddDate(0, monthsDelta, daysDelta)
 	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
 }
