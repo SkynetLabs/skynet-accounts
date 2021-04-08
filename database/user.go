@@ -54,34 +54,41 @@ var (
 		TierAnonymous: {
 			UploadBandwidth:   5 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 20 * mbpsToBytesPerSecond,
+			MaxUploadSize:     1 * skynet.GiB,
+			MaxNumberUploads:  0,
 			RegistryDelay:     250,
+			Storage:           0,
 		},
 		TierFree: {
 			UploadBandwidth:   10 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
-			RegistryDelay:     125,
+			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  0.1 * filesAllowedPerTB,
+			RegistryDelay:     125,
 			Storage:           100 * skynet.GiB,
 		},
 		TierPremium5: {
 			UploadBandwidth:   20 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 80 * mbpsToBytesPerSecond,
-			RegistryDelay:     0,
+			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  1 * filesAllowedPerTB,
+			RegistryDelay:     0,
 			Storage:           1 * skynet.TiB,
 		},
 		TierPremium20: {
 			UploadBandwidth:   40 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 160 * mbpsToBytesPerSecond,
-			RegistryDelay:     0,
+			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  4 * filesAllowedPerTB,
+			RegistryDelay:     0,
 			Storage:           4 * skynet.TiB,
 		},
 		TierPremium80: {
 			UploadBandwidth:   80 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 320 * mbpsToBytesPerSecond,
-			RegistryDelay:     0,
+			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  20 * filesAllowedPerTB,
+			RegistryDelay:     0,
 			Storage:           20 * skynet.TiB,
 		},
 	}
@@ -106,7 +113,7 @@ type (
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
-		RawStorageUsed     int64 `json:"storageUsed"`
+		RawStorageUsed     int64 `json:"rawStorageUsed"`
 		NumRegReads        int64 `json:"numRegReads"`
 		NumRegWrites       int64 `json:"numRegWrites"`
 		NumUploads         int   `json:"numUploads"`
@@ -121,11 +128,12 @@ type (
 	// TierLimits defines the speed limits imposed on the user based on their
 	// tier.
 	TierLimits struct {
-		UploadBandwidth   int   `json:"upload"`   // bytes per second
-		DownloadBandwidth int   `json:"download"` // bytes per second
+		UploadBandwidth   int   `json:"upload"`        // bytes per second
+		DownloadBandwidth int   `json:"download"`      // bytes per second
+		MaxUploadSize     int64 `json:"maxUploadSize"` // the max size of a single upload in bytes
+		MaxNumberUploads  int   `json:"-"`
 		RegistryDelay     int   `json:"registry"` // ms delay
-		MaxNumberUploads  int   `json:"maxNumberUploads"`
-		Storage           int64 `json:"storage"`
+		Storage           int64 `json:"-"`
 	}
 )
 
