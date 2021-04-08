@@ -110,6 +110,7 @@ type (
 		SubscriptionCancelAt          time.Time          `bson:"subscription_cancel_at" json:"subscriptionCancelAt"`
 		SubscriptionCancelAtPeriodEnd bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
 		StripeId                      string             `bson:"stripe_id" json:"stripeCustomerId"`
+		QuotaExceeded                 bool               `bson:"quota_exceeded" json:"quotaExceeded"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {

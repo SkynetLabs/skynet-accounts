@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -98,19 +99,9 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 // userLimitsHandler returns the speed limits which apply for this user.
 func (api *API) userLimitsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	u := api.userFromRequest(req)
-	if u == nil {
+	if u == nil || u.QuotaExceeded {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 		return
-	}
-	// Check the user's data usage and if it exceeds the limits of their tier,
-	// return TierAnonymous speed limits.
-	us, err := api.staticDB.UserStats(req.Context(), *u)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	if us.TotalUploadsSize > database.UserLimits[u.Tier].Storage || us.NumUploads > database.UserLimits[u.Tier].MaxNumberUploads {
-		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 	}
 	api.WriteJSON(w, database.UserLimits[u.Tier])
 }
@@ -351,6 +342,11 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 		}()
 	}
 	api.WriteSuccess(w)
+	// Now that we've returned results to the caller, we can take care of some
+	// administrative details, such as user's quotas check.
+	// Nota that this call is not affected by the request's context, so we use
+	// a separate one.
+	api.checkUserQuotas(context.Background(), u)
 }
 
 // trackDownloadHandler registers a new download in the system.
@@ -492,6 +488,24 @@ func (api *API) skylinkDeleteHandler(w http.ResponseWriter, req *http.Request, p
 		return
 	}
 	api.WriteSuccess(w)
+}
+
+// checkUserQuotas compares the resources consumed by the user to their quotas
+// and sets the QuotaExceeded flag on their account if they exceed any.
+func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
+	us, err := api.staticDB.UserStats(ctx, *u)
+	if err != nil {
+		api.staticLogger.Infof("Failed to fetch user's stats. UID: %s, err: %s", u.ID.Hex(), err.Error())
+		return
+	}
+	q := database.UserLimits[u.Tier]
+	if us.NumUploads > q.MaxNumberUploads || us.TotalUploadsSize > q.Storage {
+		u.QuotaExceeded = true
+		err = api.staticDB.UserSave(ctx, u)
+		if err != nil {
+			api.staticLogger.Infof("Failed to save user. User: %+v, err: %s", u, err.Error())
+		}
+	}
 }
 
 // fetchOffset extracts the offset from the params and validates its value.
