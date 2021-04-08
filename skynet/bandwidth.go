@@ -5,6 +5,10 @@ const (
 	KiB = 1024
 	// MiB megabyte
 	MiB = 1024 * KiB
+	// GiB gigabyte
+	GiB = 1024 * MiB
+	// TiB terabyte
+	TiB = 1024 * GiB
 
 	// SizeBaseSector is the size of a base sector.
 	SizeBaseSector = 4 * MiB

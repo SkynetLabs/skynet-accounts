@@ -35,6 +35,12 @@ const (
 	// mbpsToBytesPerSecond is a multiplier to get from megabits per second to
 	// bytes per second.
 	mbpsToBytesPerSecond = 1024 * 1024 / 8
+
+	// filesAllowedPerTB defines a limit of number of uploaded files we impose
+	// on users. While we define it per TB, we impose it based on their entire
+	// quota, so an Extreme user will be able to upload up to 400_000 files
+	// before being hit with a speed limit.
+	filesAllowedPerTB = 20_000
 )
 
 var (
@@ -43,32 +49,40 @@ var (
 	// False is a helper for when we need to pass a *bool to MongoDB.
 	False = false
 	// SpeedLimits defines the speed limits for each tier.
-	// Registry delay is in ms.
+	// RegistryDelay delay is in ms.
 	SpeedLimits = map[int]TierLimits{
 		TierAnonymous: {
-			Upload:   5 * mbpsToBytesPerSecond,
-			Download: 20 * mbpsToBytesPerSecond,
-			Registry: 250,
+			UploadBandwidth:   5 * mbpsToBytesPerSecond,
+			DownloadBandwidth: 20 * mbpsToBytesPerSecond,
+			RegistryDelay:     250,
 		},
 		TierFree: {
-			Upload:   10 * mbpsToBytesPerSecond,
-			Download: 40 * mbpsToBytesPerSecond,
-			Registry: 125,
+			UploadBandwidth:   10 * mbpsToBytesPerSecond,
+			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
+			RegistryDelay:     125,
+			MaxNumberUploads:  0.1 * filesAllowedPerTB,
+			Storage:           100 * skynet.GiB,
 		},
 		TierPremium5: {
-			Upload:   20 * mbpsToBytesPerSecond,
-			Download: 80 * mbpsToBytesPerSecond,
-			Registry: 0,
+			UploadBandwidth:   20 * mbpsToBytesPerSecond,
+			DownloadBandwidth: 80 * mbpsToBytesPerSecond,
+			RegistryDelay:     0,
+			MaxNumberUploads:  1 * filesAllowedPerTB,
+			Storage:           1 * skynet.TiB,
 		},
 		TierPremium20: {
-			Upload:   40 * mbpsToBytesPerSecond,
-			Download: 160 * mbpsToBytesPerSecond,
-			Registry: 0,
+			UploadBandwidth:   40 * mbpsToBytesPerSecond,
+			DownloadBandwidth: 160 * mbpsToBytesPerSecond,
+			RegistryDelay:     0,
+			MaxNumberUploads:  4 * filesAllowedPerTB,
+			Storage:           4 * skynet.TiB,
 		},
 		TierPremium80: {
-			Upload:   80 * mbpsToBytesPerSecond,
-			Download: 320 * mbpsToBytesPerSecond,
-			Registry: 0,
+			UploadBandwidth:   80 * mbpsToBytesPerSecond,
+			DownloadBandwidth: 320 * mbpsToBytesPerSecond,
+			RegistryDelay:     0,
+			MaxNumberUploads:  20 * filesAllowedPerTB,
+			Storage:           20 * skynet.TiB,
 		},
 	}
 )
@@ -107,9 +121,11 @@ type (
 	// TierLimits defines the speed limits imposed on the user based on their
 	// tier.
 	TierLimits struct {
-		Upload   int `json:"upload"`   // bytes per second
-		Download int `json:"download"` // bytes per second
-		Registry int `json:"registry"` // ms delay
+		UploadBandwidth   int   `json:"upload"`   // bytes per second
+		DownloadBandwidth int   `json:"download"` // bytes per second
+		RegistryDelay     int   `json:"registry"` // ms delay
+		MaxNumberUploads  int   `json:"maxNumberUploads"`
+		Storage           int64 `json:"storage"`
 	}
 )
 
