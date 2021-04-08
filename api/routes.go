@@ -28,6 +28,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsHandler))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsHandler))
 	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsHandler))
+	api.staticRouter.DELETE("/user/uploads/:uploadId", api.validate(api.userUploadDeleteHandler))
 	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
 
 	api.staticRouter.DELETE("/skylink/:skylink", api.validate(api.skylinkDeleteHandler))

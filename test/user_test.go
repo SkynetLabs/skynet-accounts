@@ -76,7 +76,7 @@ func TestUserStats(t *testing.T) {
 	expectedDownloadBandwidth := int64(0)
 
 	// Create a small upload.
-	skylinkSmall, err := createTestUpload(ctx, db, u, testUploadSizeSmall)
+	skylinkSmall, _, err := createTestUpload(ctx, db, u, testUploadSizeSmall)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Create a big upload.
-	skylinkBig, err := createTestUpload(ctx, db, u, testUploadSizeBig)
+	skylinkBig, _, err := createTestUpload(ctx, db, u, testUploadSizeBig)
 	if err != nil {
 		t.Fatal(err)
 	}

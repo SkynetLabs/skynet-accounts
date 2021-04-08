@@ -248,6 +248,31 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 	api.WriteJSON(w, response)
 }
 
+// userUploadDeleteHandler unpins a single upload by this user.
+func (api *API) userUploadDeleteHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	uid := ps.ByName("uploadId")
+	_, err = api.staticDB.UnpinUpload(req.Context(), uid, *u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
 // userDownloadsHandler returns all downloads made by the current user.
 func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
@@ -432,7 +457,7 @@ func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Reque
 	api.WriteSuccess(w)
 }
 
-// skylinkDeleteHandler unpins a skylink uploaded by the user.
+// skylinkDeleteHandler unpins all uploads of a skylink uploaded by the user.
 func (api *API) skylinkDeleteHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
@@ -461,7 +486,7 @@ func (api *API) skylinkDeleteHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.UnpinUpload(req.Context(), *skylink, *u)
+	_, err = api.staticDB.UnpinUploads(req.Context(), *skylink, *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
