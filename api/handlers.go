@@ -99,10 +99,20 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 func (api *API) userLimitsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	u := api.userFromRequest(req)
 	if u == nil {
-		api.WriteJSON(w, database.SpeedLimits[database.TierAnonymous])
+		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 		return
 	}
-	api.WriteJSON(w, database.SpeedLimits[u.Tier])
+	// Check the user's data usage and if it exceeds the limits of their tier,
+	// return TierAnonymous speed limits.
+	us, err := api.staticDB.UserStats(req.Context(), *u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if us.TotalUploadsSize > database.UserLimits[u.Tier].Storage || us.NumUploads > database.UserLimits[u.Tier].MaxNumberUploads {
+		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+	}
+	api.WriteJSON(w, database.UserLimits[u.Tier])
 }
 
 // userStatsHandler returns statistics about an existing user.
@@ -121,12 +131,12 @@ func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	ud, err := api.staticDB.UserStats(req.Context(), *u)
+	us, err := api.staticDB.UserStats(req.Context(), *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteJSON(w, ud)
+	api.WriteJSON(w, us)
 }
 
 // userPutHandler allows changing some user information.

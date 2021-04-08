@@ -40,7 +40,7 @@ const (
 	// on users. While we define it per TB, we impose it based on their entire
 	// quota, so an Extreme user will be able to upload up to 400_000 files
 	// before being hit with a speed limit.
-	filesAllowedPerTB = 20_000
+	filesAllowedPerTB = 25_000
 )
 
 var (
@@ -48,9 +48,9 @@ var (
 	True = true
 	// False is a helper for when we need to pass a *bool to MongoDB.
 	False = false
-	// SpeedLimits defines the speed limits for each tier.
+	// UserLimits defines the speed limits for each tier.
 	// RegistryDelay delay is in ms.
-	SpeedLimits = map[int]TierLimits{
+	UserLimits = map[int]TierLimits{
 		TierAnonymous: {
 			UploadBandwidth:   5 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 20 * mbpsToBytesPerSecond,
