@@ -262,6 +262,11 @@ func (api *API) userUploadDeleteHandler(w http.ResponseWriter, req *http.Request
 		return
 	}
 	api.WriteSuccess(w)
+	// Now that we've returned results to the caller, we can take care of some
+	// administrative details, such as user's quotas check.
+	// Nota that this call is not affected by the request's context, so we use
+	// a separate one.
+	api.checkUserQuotas(context.Background(), u)
 }
 
 // userDownloadsHandler returns all downloads made by the current user.
@@ -488,6 +493,11 @@ func (api *API) skylinkDeleteHandler(w http.ResponseWriter, req *http.Request, p
 		return
 	}
 	api.WriteSuccess(w)
+	// Now that we've returned results to the caller, we can take care of some
+	// administrative details, such as user's quotas check.
+	// Nota that this call is not affected by the request's context, so we use
+	// a separate one.
+	api.checkUserQuotas(context.Background(), u)
 }
 
 // checkUserQuotas compares the resources consumed by the user to their quotas
@@ -499,8 +509,9 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 		return
 	}
 	q := database.UserLimits[u.Tier]
-	if us.NumUploads > q.MaxNumberUploads || us.TotalUploadsSize > q.Storage {
-		u.QuotaExceeded = true
+	quotaExceeded := us.NumUploads > q.MaxNumberUploads || us.TotalUploadsSize > q.Storage
+	if quotaExceeded != u.QuotaExceeded {
+		u.QuotaExceeded = quotaExceeded
 		err = api.staticDB.UserSave(ctx, u)
 		if err != nil {
 			api.staticLogger.Infof("Failed to save user. User: %+v, err: %s", u, err.Error())
