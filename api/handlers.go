@@ -341,8 +341,7 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 		// Queue the skylink to have its meta data fetched and updated in the DB.
 		go func() {
 			api.staticMF.Queue <- metafetcher.Message{
-				UploaderID: u.ID,
-				SkylinkID:  skylink.ID,
+				SkylinkID: skylink.ID,
 			}
 		}()
 	}
