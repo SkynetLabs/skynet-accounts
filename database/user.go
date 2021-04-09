@@ -571,7 +571,7 @@ func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.Objec
 	if err != nil {
 		return 0, 0, errors.AddContext(err, "failed to fetch registry write bandwidth")
 	}
-	return writes, writes * skynet.PriceBandwidthRegistryWrite, nil
+	return writes, writes * skynet.CostBandwidthRegistryWrite, nil
 }
 
 // userRegistryReadsStats reports the number of registry reads by the user and
@@ -585,7 +585,7 @@ func (db *DB) userRegistryReadStats(ctx context.Context, userId primitive.Object
 	if err != nil {
 		return 0, 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
 	}
-	return reads, reads * skynet.PriceBandwidthRegistryRead, nil
+	return reads, reads * skynet.CostBandwidthRegistryRead, nil
 }
 
 // monthStart returns the start of the user's subscription month.
