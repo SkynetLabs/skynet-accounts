@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-//TestMonthStart ensures we calculate the start of the subscription month
+// TestMonthStart ensures we calculate the start of the subscription month
 // correctly.
 func TestMonthStart(t *testing.T) {
 	now := time.Now()

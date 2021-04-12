@@ -264,9 +264,9 @@ func (api *API) userUploadDeleteHandler(w http.ResponseWriter, req *http.Request
 	api.WriteSuccess(w)
 	// Now that we've returned results to the caller, we can take care of some
 	// administrative details, such as user's quotas check.
-	// Nota that this call is not affected by the request's context, so we use
+	// Note that this call is not affected by the request's context, so we use
 	// a separate one.
-	api.checkUserQuotas(context.Background(), u)
+	go api.checkUserQuotas(context.Background(), u)
 }
 
 // userDownloadsHandler returns all downloads made by the current user.
@@ -348,9 +348,9 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 	api.WriteSuccess(w)
 	// Now that we've returned results to the caller, we can take care of some
 	// administrative details, such as user's quotas check.
-	// Nota that this call is not affected by the request's context, so we use
+	// Note that this call is not affected by the request's context, so we use
 	// a separate one.
-	api.checkUserQuotas(context.Background(), u)
+	go api.checkUserQuotas(context.Background(), u)
 }
 
 // trackDownloadHandler registers a new download in the system.
@@ -494,9 +494,9 @@ func (api *API) skylinkDeleteHandler(w http.ResponseWriter, req *http.Request, p
 	api.WriteSuccess(w)
 	// Now that we've returned results to the caller, we can take care of some
 	// administrative details, such as user's quotas check.
-	// Nota that this call is not affected by the request's context, so we use
+	// Note that this call is not affected by the request's context, so we use
 	// a separate one.
-	api.checkUserQuotas(context.Background(), u)
+	go api.checkUserQuotas(context.Background(), u)
 }
 
 // checkUserQuotas compares the resources consumed by the user to their quotas

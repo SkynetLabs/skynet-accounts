@@ -60,29 +60,6 @@ func TestRawStorageUsed(t *testing.T) {
 	}
 }
 
-// TestStorageUsed ensures that StorageUsed works as expected.
-func TestStorageUsed(t *testing.T) {
-	tests := []struct {
-		size   int64
-		result int64
-	}{
-		{size: 0, result: baseSectorTotalSize / RedundancyAPIDivisor},
-		{size: 1 * MiB, result: baseSectorTotalSize / RedundancyAPIDivisor},
-		{size: 4 * MiB, result: baseSectorTotalSize / RedundancyAPIDivisor},
-		{size: 5 * MiB, result: (baseSectorTotalSize + chunkTotalSize) / RedundancyAPIDivisor},
-		{size: 50 * MiB, result: (baseSectorTotalSize + 2*chunkTotalSize) / RedundancyAPIDivisor},
-		// 4MB base sector + 496MB overflow which fit in math.Ceil(496 / 40.0) = 13 chunks.
-		{size: 500 * MiB, result: (baseSectorTotalSize + 13*chunkTotalSize) / RedundancyAPIDivisor},
-	}
-	for _, tt := range tests {
-		res := StorageUsed(tt.size)
-		if res != tt.result {
-			t.Errorf("Expected a %d MiB file to result into %d MiB used for upload storage, got %d MiB.",
-				tt.size/MiB, tt.result/MiB, res/MiB)
-		}
-	}
-}
-
 // TestBandwidthUploadCost ensures BandwidthUploadCost works as expected.
 func TestBandwidthUploadCost(t *testing.T) {
 	tests := []struct {

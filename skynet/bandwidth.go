@@ -19,15 +19,10 @@ const (
 	// using. This is not freely configurable because we need database
 	// consistency.
 	RedundancyBaseSector = 10
-	// RedundancyBaseSector describes the redundancy of regular chunks the
+	// RedundancyChunk describes the redundancy of regular chunks the
 	// portal is using. This is not freely configurable because we need database
 	// consistency.
 	RedundancyChunk = 3
-	// RedundancyAPIDivisor is the value by which we divide the raw used storage
-	// when reporting it to the user. The goal is for the user to see numbers
-	// that make sense to them while allowing us to track the raw numbers in the
-	// database.
-	RedundancyAPIDivisor = 3
 
 	// CostBandwidthRegistryWrite the bandwidth cost of a single registry write
 	CostBandwidthRegistryWrite = 5 * MiB
@@ -78,13 +73,6 @@ func RawStorageUsed(uploadSize int64) int64 {
 	baseSectorStorage := int64(CostStorageUploadBase * RedundancyBaseSector)
 	chunkStorage := numChunks(uploadSize) * CostStorageUploadIncrement * RedundancyChunk
 	return baseSectorStorage + chunkStorage
-}
-
-// StorageUsed calculates how much storage an upload with a given size actually
-// uses. This method returns user-facing values. For the raw storage value
-// use RawStorageUsed().
-func StorageUsed(uploadSize int64) int64 {
-	return RawStorageUsed(uploadSize) / RedundancyAPIDivisor
 }
 
 // numChunks returns the number of 40MB chunks a file of this size uses, beyond

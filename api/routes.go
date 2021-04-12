@@ -73,7 +73,7 @@ func (api *API) logRequest(r *http.Request) {
 	hasAuth := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer")
 	c, err := r.Cookie(CookieName)
 	hasCookie := err == nil && c != nil
-	api.staticLogger.Tracef("Processing request: %v %v, Auth: %v, Skynet Cookie: %v, Referrer: %v, Host: %v, RemoreAddr: %v", r.Method, r.URL, hasAuth, hasCookie, r.Referer(), r.Host, r.RemoteAddr)
+	api.staticLogger.Tracef("Processing request: %v %v, Auth: %v, Skynet Cookie: %v, Referer: %v, Host: %v, RemoreAddr: %v", r.Method, r.URL, hasAuth, hasCookie, r.Referer(), r.Host, r.RemoteAddr)
 }
 
 // tokenFromRequest extracts the JWT token from the request and returns it.
@@ -117,7 +117,7 @@ func (api *API) userFromRequest(r *http.Request) *database.User {
 	}
 	claims := token.Claims.(jwt2.MapClaims)
 	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
-		err = errors.New("the token does not contain the sub we expect")
+		return nil
 	}
 	u, err := api.staticDB.UserBySub(r.Context(), claims["sub"].(string), false)
 	if err != nil {

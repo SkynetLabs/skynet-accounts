@@ -217,7 +217,7 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	subs := it.SubscriptionList().Data
 	var mostRecentSub *stripe.Subscription
 	for _, subsc := range subs {
-		if mostRecentSub == nil || mostRecentSub.Created < subsc.Created {
+		if mostRecentSub == nil || subsc.Created > mostRecentSub.Created {
 			mostRecentSub = subsc
 		}
 	}
