@@ -18,23 +18,23 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/login", api.noValidate(api.loginHandler))
 	api.staticRouter.POST("/logout", api.validate(api.logoutHandler))
 
-	api.staticRouter.POST("/track/upload/:skylink", api.validate(api.trackUploadHandler))
+	api.staticRouter.DELETE("/skylink/:skylink", api.validate(api.skylinkDeleteHandler))
+
+	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesHandler))
+	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookHandler))
+
 	api.staticRouter.POST("/track/download/:skylink", api.validate(api.trackDownloadHandler))
+	api.staticRouter.POST("/track/upload/:skylink", api.validate(api.trackUploadHandler))
 	api.staticRouter.POST("/track/registry/read", api.validate(api.trackRegistryReadHandler))
 	api.staticRouter.POST("/track/registry/write", api.validate(api.trackRegistryWriteHandler))
 
 	api.staticRouter.GET("/user", api.validate(api.userHandler))
 	api.staticRouter.PUT("/user", api.validate(api.userPutHandler))
+	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsHandler))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsHandler))
 	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsHandler))
 	api.staticRouter.DELETE("/user/uploads/:uploadId", api.validate(api.userUploadDeleteHandler))
-	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
-
-	api.staticRouter.DELETE("/skylink/:skylink", api.validate(api.skylinkDeleteHandler))
-
-	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookHandler))
-	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesHandler))
 }
 
 // noValidate is a pass-through method used for decorating the request and
