@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -261,12 +262,12 @@ func (api *API) userUploadDeleteHandler(w http.ResponseWriter, req *http.Request
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteSuccess(w)
 	// Now that we've returned results to the caller, we can take care of some
 	// administrative details, such as user's quotas check.
 	// Note that this call is not affected by the request's context, so we use
 	// a separate one.
-	go api.checkUserQuotas(context.Background(), u)
+	go api.threadedCheckUserQuotas(context.Background(), u)
+	api.WriteSuccess(w)
 }
 
 // userDownloadsHandler returns all downloads made by the current user.
@@ -345,12 +346,12 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 			}
 		}()
 	}
-	api.WriteSuccess(w)
 	// Now that we've returned results to the caller, we can take care of some
 	// administrative details, such as user's quotas check.
 	// Note that this call is not affected by the request's context, so we use
 	// a separate one.
-	go api.checkUserQuotas(context.Background(), u)
+	go api.threadedCheckUserQuotas(context.Background(), u)
+	api.WriteSuccess(w)
 }
 
 // trackDownloadHandler registers a new download in the system.
@@ -414,6 +415,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 			}
 		}()
 	}
+	go api.threadedAutoPin(context.Background(), u, skylink)
 	api.WriteSuccess(w)
 }
 
@@ -491,17 +493,17 @@ func (api *API) skylinkDeleteHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteSuccess(w)
 	// Now that we've returned results to the caller, we can take care of some
 	// administrative details, such as user's quotas check.
 	// Note that this call is not affected by the request's context, so we use
 	// a separate one.
-	go api.checkUserQuotas(context.Background(), u)
+	go api.threadedCheckUserQuotas(context.Background(), u)
+	api.WriteSuccess(w)
 }
 
-// checkUserQuotas compares the resources consumed by the user to their quotas
-// and sets the QuotaExceeded flag on their account if they exceed any.
-func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
+// threadedCheckUserQuotas compares the resources consumed by the user to their
+// quotas and sets the QuotaExceeded flag on their account if they exceed any.
+func (api *API) threadedCheckUserQuotas(ctx context.Context, u *database.User) {
 	us, err := api.staticDB.UserStats(ctx, *u)
 	if err != nil {
 		api.staticLogger.Infof("Failed to fetch user's stats. UID: %s, err: %s", u.ID.Hex(), err.Error())
@@ -516,6 +518,15 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 			api.staticLogger.Infof("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
 	}
+}
+
+// threadedAutoPin probabilistically pins the given skylink.
+func (api *API) threadedAutoPin(ctx context.Context, u *database.User, sl *database.Skylink) {
+	rand.Seed(time.Now().UnixNano())
+	if rand.Intn(database.UserLimits[u.Tier].AutoPinChance) > 0 {
+		return
+	}
+	// TODO ...
 }
 
 // fetchOffset extracts the offset from the params and validates its value.

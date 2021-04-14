@@ -58,6 +58,7 @@ var (
 			MaxNumberUploads:  0,
 			RegistryDelay:     250,
 			Storage:           0,
+			AutoPinChance:     1e10, // TODO These numbers are provisional, don't mind them
 		},
 		TierFree: {
 			UploadBandwidth:   10 * mbpsToBytesPerSecond,
@@ -66,6 +67,7 @@ var (
 			MaxNumberUploads:  0.1 * filesAllowedPerTB,
 			RegistryDelay:     125,
 			Storage:           100 * skynet.GiB,
+			AutoPinChance:     1e8,
 		},
 		TierPremium5: {
 			UploadBandwidth:   20 * mbpsToBytesPerSecond,
@@ -74,6 +76,7 @@ var (
 			MaxNumberUploads:  1 * filesAllowedPerTB,
 			RegistryDelay:     0,
 			Storage:           1 * skynet.TiB,
+			AutoPinChance:     1e7,
 		},
 		TierPremium20: {
 			UploadBandwidth:   40 * mbpsToBytesPerSecond,
@@ -82,6 +85,7 @@ var (
 			MaxNumberUploads:  4 * filesAllowedPerTB,
 			RegistryDelay:     0,
 			Storage:           4 * skynet.TiB,
+			AutoPinChance:     1e6,
 		},
 		TierPremium80: {
 			UploadBandwidth:   80 * mbpsToBytesPerSecond,
@@ -90,6 +94,7 @@ var (
 			MaxNumberUploads:  20 * filesAllowedPerTB,
 			RegistryDelay:     0,
 			Storage:           20 * skynet.TiB,
+			AutoPinChance:     1e5,
 		},
 	}
 )
@@ -135,6 +140,7 @@ type (
 		MaxNumberUploads  int   `json:"-"`
 		RegistryDelay     int   `json:"registry"` // ms delay
 		Storage           int64 `json:"-"`
+		AutoPinChance     int   `json:"-"`
 	}
 )
 
