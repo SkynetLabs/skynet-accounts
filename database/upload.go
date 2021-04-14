@@ -18,6 +18,7 @@ type Upload struct {
 	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
 	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 	Unpinned  bool               `bson:"unpinned" json:"-"`
+	Referrer  string             `bson:"referrer" json:"referrer"`
 }
 
 // UploadResponseDTO is the representation of an upload we send as response to
@@ -29,6 +30,7 @@ type UploadResponseDTO struct {
 	Size       int64     `bson:"size" json:"size"`
 	RawStorage int64     `bson:"raw_storage" json:"rawStorage"`
 	Timestamp  time.Time `bson:"timestamp" json:"uploadedOn"`
+	Referrer   string    `bson:"referrer" json:"referrer"`
 }
 
 // UploadsResponseDTO defines the final format of our response to the caller.
@@ -53,7 +55,7 @@ func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, e
 
 // UploadCreate registers a new upload and counts it towards the user's used
 // storage.
-func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Upload, error) {
+func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink, referrer string) (*Upload, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
@@ -64,6 +66,7 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 		UserID:    user.ID,
 		SkylinkID: skylink.ID,
 		Timestamp: time.Now().UTC(),
+		Referrer:  referrer,
 	}
 	ior, err := db.staticUploads.InsertOne(ctx, up)
 	if err != nil {

@@ -25,6 +25,7 @@ type Download struct {
 	Bytes     int64              `bson:"bytes" json:"bytes"`
 	CreatedAt time.Time          `bson:"created_at" json:"timestamp"`
 	UpdatedAt time.Time          `bson:"updated_at" json:"-"`
+	Referrer  string             `bson:"referrer" json:"referrer"`
 }
 
 // DownloadResponseDTO  is the representation of a download we send as response
@@ -35,6 +36,7 @@ type DownloadResponseDTO struct {
 	Name      string    `bson:"name" json:"name"`
 	Size      uint64    `bson:"size" json:"size"`
 	CreatedAt time.Time `bson:"created_at" json:"downloadedOn"`
+	Referrer  string    `bson:"referrer" json:"referrer"`
 }
 
 // DownloadsResponseDTO defines the final format of our response to the caller.
@@ -59,7 +61,7 @@ func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Downloa
 
 // DownloadCreate registers a new download. Marks partial downloads by supplying
 // the `bytes` param. If `bytes` is 0 we assume a full download.
-func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, bytes int64) error {
+func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, bytes int64, referrer string) error {
 	if user.ID.IsZero() {
 		return errors.New("invalid user")
 	}
@@ -83,6 +85,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 		Bytes:     bytes,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
+		Referrer:  referrer,
 	}
 	_, err = db.staticDownloads.InsertOne(ctx, down)
 	return err

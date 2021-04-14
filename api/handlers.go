@@ -331,7 +331,7 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.UploadCreate(req.Context(), *u, *skylink)
+	_, err = api.staticDB.UploadCreate(req.Context(), *u, *skylink, req.Referer())
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -398,7 +398,7 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
+	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes, req.Referer())
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -429,7 +429,7 @@ func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Reques
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.RegistryReadCreate(req.Context(), *u)
+	_, err = api.staticDB.RegistryReadCreate(req.Context(), *u, req.Referer())
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -449,7 +449,7 @@ func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Reque
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.RegistryWriteCreate(req.Context(), *u)
+	_, err = api.staticDB.RegistryWriteCreate(req.Context(), *u, req.Referer())
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
