@@ -12,8 +12,12 @@ import (
 )
 
 var (
-	extractSkylinkRE      = regexp.MustCompile("^.*([a-zA-Z0-9-_]{46}).*$")
-	validateSkylinkHashRE = regexp.MustCompile("^([a-zA-Z0-9-_]{46})$")
+	// ExtractSkylinkBase64RE matches a base64 skylink.
+	ExtractSkylinkBase64RE = regexp.MustCompile("^.*([a-zA-Z0-9-_]{46}).*$")
+	// ExtractSkylinkBase32RE matches a base32 skylink.
+	ExtractSkylinkBase32RE = regexp.MustCompile("^.*([a-z0-9]{55}).*$")
+	// ValidateSkylinkHashRE ensures that the given string is a base64 skylink.
+	ValidateSkylinkHashRE = regexp.MustCompile("^([a-zA-Z0-9-_]{46})$")
 )
 
 // Skylink represents a skylink object in the DB.
@@ -109,7 +113,7 @@ func (db *DB) SkylinkDownloadsUpdate(ctx context.Context, id primitive.ObjectID,
 // ExtractSkylinkHash extracts the skylink hash from the given skylink that might
 // have protocol, path, etc. within it.
 func ExtractSkylinkHash(skylink string) (string, error) {
-	m := extractSkylinkRE.FindStringSubmatch(skylink)
+	m := ExtractSkylinkBase64RE.FindStringSubmatch(skylink)
 	if len(m) < 2 {
 		return "", errors.New("no valid skylink found in string " + skylink)
 	}
@@ -118,5 +122,5 @@ func ExtractSkylinkHash(skylink string) (string, error) {
 
 // ValidSkylinkHash returns true if the given string is a valid skylink hash.
 func ValidSkylinkHash(skylink string) bool {
-	return validateSkylinkHashRE.Match([]byte(skylink))
+	return ValidateSkylinkHashRE.Match([]byte(skylink))
 }
