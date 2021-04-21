@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/skynet"
@@ -13,24 +14,26 @@ import (
 
 // Upload ...
 type Upload struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
-	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
-	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
-	Unpinned  bool               `bson:"unpinned" json:"-"`
-	Referrer  string             `bson:"referrer" json:"referrer"`
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID       primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
+	SkylinkID    primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
+	Timestamp    time.Time          `bson:"timestamp" json:"timestamp"`
+	Unpinned     bool               `bson:"unpinned" json:"-"`
+	Referrer     string             `bson:"referrer" json:"referrer"`
+	ReferrerType string             `bson:"referrer_type" json:"referrerType"`
 }
 
 // UploadResponseDTO is the representation of an upload we send as response to
 // the caller.
 type UploadResponseDTO struct {
-	ID         string    `bson:"_id" json:"id"`
-	Skylink    string    `bson:"skylink" json:"skylink"`
-	Name       string    `bson:"name" json:"name"`
-	Size       int64     `bson:"size" json:"size"`
-	RawStorage int64     `bson:"raw_storage" json:"rawStorage"`
-	Timestamp  time.Time `bson:"timestamp" json:"uploadedOn"`
-	Referrer   string    `bson:"referrer" json:"referrer"`
+	ID           string    `bson:"_id" json:"id"`
+	Skylink      string    `bson:"skylink" json:"skylink"`
+	Name         string    `bson:"name" json:"name"`
+	Size         int64     `bson:"size" json:"size"`
+	RawStorage   int64     `bson:"raw_storage" json:"rawStorage"`
+	Timestamp    time.Time `bson:"timestamp" json:"uploadedOn"`
+	Referrer     string    `bson:"referrer" json:"referrer"`
+	ReferrerType string    `bson:"referrer_type" json:"referrerType"`
 }
 
 // UploadsResponseDTO defines the final format of our response to the caller.
@@ -62,11 +65,16 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink, refe
 	if skylink.ID.IsZero() {
 		return nil, errors.New("invalid skylink")
 	}
+	ref, err := FromString(referrer)
+	if err != nil && err != ErrorReferrerEmpty {
+		db.staticLogger.Info(fmt.Sprintf("Failed to get referrer. Error: %s", err.Error()))
+	}
 	up := Upload{
-		UserID:    user.ID,
-		SkylinkID: skylink.ID,
-		Timestamp: time.Now().UTC(),
-		Referrer:  referrer,
+		UserID:       user.ID,
+		SkylinkID:    skylink.ID,
+		Timestamp:    time.Now().UTC(),
+		Referrer:     ref.CanonicalName,
+		ReferrerType: ref.Type,
 	}
 	ior, err := db.staticUploads.InsertOne(ctx, up)
 	if err != nil {
@@ -142,7 +150,7 @@ func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int
 
 // UploadsByUser fetches a page of uploads by this user and the total number of
 // such uploads.
-func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int) ([]UploadResponseDTO, int, error) {
+func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int, referrer string) ([]UploadResponseDTO, int, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
 	}
@@ -153,6 +161,15 @@ func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int
 		{"user_id", user.ID},
 		{"unpinned", false},
 	}}}
+	ref, err := FromString(referrer)
+	if err == nil {
+		matchStage = bson.D{{"$match", bson.D{
+			{"user_id", user.ID},
+			{"unpinned", false},
+			{"referrer", ref.CanonicalName},
+			//{"referrer_type", ref.Type}, // TODO Not sure if we this would be useful in any way
+		}}}
+	}
 	return db.uploadsBy(ctx, matchStage, offset, pageSize)
 }
 

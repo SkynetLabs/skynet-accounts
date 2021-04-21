@@ -19,7 +19,7 @@ func TestFromString(t *testing.T) {
 			name:   "empty referrer",
 			input:  "",
 			result: Referrer{},
-			error:  errors.New("empty referrer"),
+			error:  ErrorReferrerEmpty,
 		},
 		{
 			name:   "invalid referrer",
@@ -72,6 +72,12 @@ func TestFromString(t *testing.T) {
 		{
 			name:   "web",
 			input:  "http://example.com",
+			result: Referrer{CanonicalName: "example.com", Type: "web"},
+			error:  nil,
+		},
+		{
+			name:   "web eithout protocol",
+			input:  "example.com",
 			result: Referrer{CanonicalName: "example.com", Type: "web"},
 			error:  nil,
 		},

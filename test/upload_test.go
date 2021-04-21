@@ -54,7 +54,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	uploadBandwidth := skynet.BandwidthUploadCost(testUploadSize)
 	uploadsCount := 1
 	// Fetch the user's uploads.
-	ups, n, err := db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
+	ups, n, err := db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize, "")
 	if err != nil {
 		t.Fatal("Failed to fetch uploads by user.", err)
 	}
@@ -134,7 +134,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	uploadBandwidth -= 0 // upload bandwidth is already used, so it also stay the same
 	uploadsCount -= 1
 	// Fetch the user's uploads.
-	ups, n, err = db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
+	ups, n, err = db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize, "")
 	if err != nil {
 		t.Fatal("Failed to fetch uploads by user.", err)
 	}
@@ -235,7 +235,7 @@ func TestUpload_UnpinUploads(t *testing.T) {
 		t.Fatalf("Expected to unpin 2 files, unpinned %d.", unpinned)
 	}
 	// Fetch the first user's uploads.
-	_, n, err := db.UploadsByUser(ctx, *u1, 0, database.DefaultPageSize)
+	_, n, err := db.UploadsByUser(ctx, *u1, 0, database.DefaultPageSize, "")
 	if err != nil {
 		t.Fatal("Failed to fetch uploads by user1.", err)
 	}
@@ -261,7 +261,7 @@ func TestUpload_UnpinUploads(t *testing.T) {
 			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
 	}
 	// Fetch the second user's uploads.
-	_, n, err = db.UploadsByUser(ctx, *u2, 0, database.DefaultPageSize)
+	_, n, err = db.UploadsByUser(ctx, *u2, 0, database.DefaultPageSize, "")
 	if err != nil {
 		t.Fatal("Failed to fetch uploads by user2.", err)
 	}

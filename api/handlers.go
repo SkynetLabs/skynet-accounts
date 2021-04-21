@@ -225,7 +225,7 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize)
+	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize, req.Form.Get("referrer"))
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -291,7 +291,7 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	downs, total, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, pageSize)
+	downs, total, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, pageSize, req.Form.Get("referrer"))
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

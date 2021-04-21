@@ -25,32 +25,35 @@ const (
 
 var (
 	// ExtractHNSDomainRE matches an HNS domain used in a skynet domain name
-	ExtractHNSDomainRE = regexp.MustCompile("^http[s]?://([a-zA-Z0-9-_]+)\\.hns\\..*$")
+	ExtractHNSDomainRE = regexp.MustCompile("^(http[s]?://)?([a-zA-Z0-9-_]+)\\.hns\\..*$")
 	// ExtractHNSPathRE matches an HNS domain used in a skynet path
 	ExtractHNSPathRE = regexp.MustCompile("^.*/hns/([a-zA-Z0-9-_]+).*$")
 	// ExtractDomainRE matches a standard web domain name
-	ExtractDomainRE = regexp.MustCompile("^http[s]?://([a-zA-Z0-9-_.]+)(/.*)*$")
+	ExtractDomainRE = regexp.MustCompile("^(http[s]?://)?([a-zA-Z0-9-.]+)(/[a-zA-Z0-9-_!?&=.]*)*$")
+
+	// ErrorReferrerEmpty is returned when there is no referrer given
+	ErrorReferrerEmpty = errors.New("empty referrer")
 )
 
 type (
 	// Referrer is a web application which creates or controls some Skynet
 	// traffic.
 	Referrer struct {
-		CanonicalName string
-		Type          string
+		CanonicalName string `bson:"canonical_name" json:"canonicalName"`
+		Type          string `bson:"type" json:"type"`
 	}
 )
 
 // FromString parses a given string and returns a Referrer.
-func FromString(s string) (*Referrer, error) {
+func FromString(s string) (Referrer, error) {
 	if len(s) == 0 {
-		return nil, errors.New("empty referrer")
+		return Referrer{}, ErrorReferrerEmpty
 	}
 	// Detect HNS domain
 	m := ExtractHNSDomainRE.FindStringSubmatch(s)
-	if len(m) == 2 {
-		r := &Referrer{
-			CanonicalName: m[1],
+	if len(m) > 2 {
+		r := Referrer{
+			CanonicalName: m[2],
 			Type:          ReferrerTypeHNS,
 		}
 		return r, nil
@@ -58,7 +61,7 @@ func FromString(s string) (*Referrer, error) {
 	// Detect HNS path
 	m = ExtractHNSPathRE.FindStringSubmatch(s)
 	if len(m) > 1 {
-		r := &Referrer{
+		r := Referrer{
 			CanonicalName: m[1],
 			Type:          ReferrerTypeHNS,
 		}
@@ -67,7 +70,7 @@ func FromString(s string) (*Referrer, error) {
 	// Detect base64 skylink
 	m = ExtractSkylinkBase64RE.FindStringSubmatch(s)
 	if len(m) > 1 {
-		r := &Referrer{
+		r := Referrer{
 			CanonicalName: m[1],
 			Type:          ReferrerTypeSkylink,
 		}
@@ -79,9 +82,9 @@ func FromString(s string) (*Referrer, error) {
 		base32Name := m[1]
 		name, err := base32.HexEncoding.WithPadding(base32.NoPadding).DecodeString(base32Name)
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("failed to parse base32 skylink: %v", err))
+			return Referrer{}, errors.New(fmt.Sprintf("failed to parse base32 skylink: %v", err))
 		}
-		r := &Referrer{
+		r := Referrer{
 			CanonicalName: base64.RawURLEncoding.EncodeToString(name),
 			Type:          ReferrerTypeSkylink,
 		}
@@ -89,12 +92,12 @@ func FromString(s string) (*Referrer, error) {
 	}
 	// Detect web address
 	m = ExtractDomainRE.FindStringSubmatch(s)
-	if len(m) > 1 {
-		r := &Referrer{
-			CanonicalName: m[1],
+	if len(m) > 2 {
+		r := Referrer{
+			CanonicalName: m[2],
 			Type:          ReferrerTypeWeb,
 		}
 		return r, nil
 	}
-	return nil, errors.New("failed to detect referrer type")
+	return Referrer{}, errors.New("failed to detect referrer type")
 }

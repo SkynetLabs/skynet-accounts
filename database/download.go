@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"gitlab.com/NebulousLabs/errors"
@@ -19,24 +20,26 @@ const (
 
 // Download describes a single download of a skylink by a user.
 type Download struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
-	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
-	Bytes     int64              `bson:"bytes" json:"bytes"`
-	CreatedAt time.Time          `bson:"created_at" json:"timestamp"`
-	UpdatedAt time.Time          `bson:"updated_at" json:"-"`
-	Referrer  string             `bson:"referrer" json:"referrer"`
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID       primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
+	SkylinkID    primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
+	Bytes        int64              `bson:"bytes" json:"bytes"`
+	CreatedAt    time.Time          `bson:"created_at" json:"timestamp"`
+	UpdatedAt    time.Time          `bson:"updated_at" json:"-"`
+	Referrer     string             `bson:"referrer" json:"referrer"`
+	ReferrerType string             `bson:"referrer_type" json:"referrerType"`
 }
 
 // DownloadResponseDTO  is the representation of a download we send as response
 // to the caller.
 type DownloadResponseDTO struct {
-	ID        string    `bson:"_id" json:"id"`
-	Skylink   string    `bson:"skylink" json:"skylink"`
-	Name      string    `bson:"name" json:"name"`
-	Size      uint64    `bson:"size" json:"size"`
-	CreatedAt time.Time `bson:"created_at" json:"downloadedOn"`
-	Referrer  string    `bson:"referrer" json:"referrer"`
+	ID           string    `bson:"_id" json:"id"`
+	Skylink      string    `bson:"skylink" json:"skylink"`
+	Name         string    `bson:"name" json:"name"`
+	Size         uint64    `bson:"size" json:"size"`
+	CreatedAt    time.Time `bson:"created_at" json:"downloadedOn"`
+	Referrer     string    `bson:"referrer" json:"referrer"`
+	ReferrerType string    `bson:"referrer_type" json:"referrerType"`
 }
 
 // DownloadsResponseDTO defines the final format of our response to the caller.
@@ -76,16 +79,20 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 		// We found a recent download of this skylink. Let's update it.
 		return db.DownloadIncrement(ctx, down, bytes)
 	}
-
+	ref, err := FromString(referrer)
+	if err != nil && err != ErrorReferrerEmpty {
+		db.staticLogger.Info(fmt.Sprintf("Failed to get referrer. Error: %s", err.Error()))
+	}
 	// We couldn't find a recent download of this skylink, updated within
 	// the DownloadUpdateWindow. We will create a new one.
 	down = &Download{
-		UserID:    user.ID,
-		SkylinkID: skylink.ID,
-		Bytes:     bytes,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-		Referrer:  referrer,
+		UserID:       user.ID,
+		SkylinkID:    skylink.ID,
+		Bytes:        bytes,
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+		Referrer:     ref.CanonicalName,
+		ReferrerType: ref.Type,
 	}
 	_, err = db.staticDownloads.InsertOne(ctx, down)
 	return err
@@ -106,14 +113,24 @@ func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, p
 
 // DownloadsByUser fetches a page of downloads by this user and the total number
 // of such downloads.
-func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
+func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize int, referrer string) ([]DownloadResponseDTO, int, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
 	}
 	if err := validateOffsetPageSize(offset, pageSize); err != nil {
 		return nil, 0, err
 	}
-	matchStage := bson.D{{"$match", bson.D{{"user_id", user.ID}}}}
+	matchStage := bson.D{{"$match", bson.D{
+		{"user_id", user.ID},
+	}}}
+	ref, err := FromString(referrer)
+	if err == nil {
+		matchStage = bson.D{{"$match", bson.D{
+			{"user_id", user.ID},
+			{"referrer", ref.CanonicalName},
+			//{"referrer_type", ref.Type}, // TODO Not sure if we this would be useful in any way
+		}}}
+	}
 	return db.downloadsBy(ctx, matchStage, offset, pageSize)
 }
 
