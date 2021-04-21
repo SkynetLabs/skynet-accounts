@@ -317,7 +317,7 @@ func createTestUpload(ctx context.Context, db *database.DB, user *database.User,
 // createUpload registers an upload of the given skylink by the given user.
 // Returns the skylink, the upload's id and error.
 func createUpload(ctx context.Context, db *database.DB, user *database.User, skylink *database.Skylink) (*database.Skylink, primitive.ObjectID, error) {
-	up, err := db.UploadCreate(ctx, *user, *skylink)
+	up, err := db.UploadCreate(ctx, *user, *skylink, "")
 	if err != nil {
 		return nil, primitive.ObjectID{}, errors.AddContext(err, "failed to register an upload")
 	}

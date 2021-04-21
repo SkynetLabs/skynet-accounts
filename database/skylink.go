@@ -13,9 +13,9 @@ import (
 
 var (
 	// ExtractSkylinkBase64RE matches a base64 skylink.
-	ExtractSkylinkBase64RE = regexp.MustCompile("^.*([a-zA-Z0-9-_]{46}).*$")
+	ExtractSkylinkBase64RE = regexp.MustCompile("^.*([a-zA-Z0-9-_]{46})(/.*)*$")
 	// ExtractSkylinkBase32RE matches a base32 skylink.
-	ExtractSkylinkBase32RE = regexp.MustCompile("^.*([a-z0-9]{55}).*$")
+	ExtractSkylinkBase32RE = regexp.MustCompile("^.*([A-Z0-9]{55})\\..*$")
 	// ValidateSkylinkHashRE ensures that the given string is a base64 skylink.
 	ValidateSkylinkHashRE = regexp.MustCompile("^([a-zA-Z0-9-_]{46})$")
 )

@@ -117,7 +117,7 @@ func TestUserStats(t *testing.T) {
 
 	// Register a small download.
 	smallDownload := int64(1 + fastrand.Intn(4*skynet.MiB))
-	err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
+	err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload, "")
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
@@ -137,7 +137,7 @@ func TestUserStats(t *testing.T) {
 	}
 	// Register a big download.
 	bigDownload := int64(100*skynet.MiB + fastrand.Intn(4*skynet.MiB))
-	err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
+	err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload, "")
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
@@ -157,7 +157,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Register a registry read.
-	_, err = db.RegistryReadCreate(ctx, *u)
+	_, err = db.RegistryReadCreate(ctx, *u, "")
 	if err != nil {
 		t.Fatal("Failed to register a registry read.", err)
 	}
@@ -176,7 +176,7 @@ func TestUserStats(t *testing.T) {
 			stats.BandwidthRegReads, stats.BandwidthRegReads/skynet.MiB)
 	}
 	// Register a registry read.
-	_, err = db.RegistryReadCreate(ctx, *u)
+	_, err = db.RegistryReadCreate(ctx, *u, "")
 	if err != nil {
 		t.Fatal("Failed to register a registry read.", err)
 	}
@@ -196,7 +196,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Register a registry write.
-	_, err = db.RegistryWriteCreate(ctx, *u)
+	_, err = db.RegistryWriteCreate(ctx, *u, "")
 	if err != nil {
 		t.Fatal("Failed to register a registry write.", err)
 	}
@@ -215,7 +215,7 @@ func TestUserStats(t *testing.T) {
 			stats.BandwidthRegWrites, stats.BandwidthRegWrites/skynet.MiB)
 	}
 	// Register a registry write.
-	_, err = db.RegistryWriteCreate(ctx, *u)
+	_, err = db.RegistryWriteCreate(ctx, *u, "")
 	if err != nil {
 		t.Fatal("Failed to register a registry write.", err)
 	}

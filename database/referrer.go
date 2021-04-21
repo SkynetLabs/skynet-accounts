@@ -24,8 +24,12 @@ const (
 )
 
 var (
+	// ExtractHNSDomainRE matches an HNS domain used in a skynet domain name
 	ExtractHNSDomainRE = regexp.MustCompile("^http[s]?://([a-zA-Z0-9-_]+)\\.hns\\..*$")
-	ExtractHNSPathRE   = regexp.MustCompile("^.*/hns/([a-zA-Z0-9-_]*).*$")
+	// ExtractHNSPathRE matches an HNS domain used in a skynet path
+	ExtractHNSPathRE = regexp.MustCompile("^.*/hns/([a-zA-Z0-9-_]+).*$")
+	// ExtractDomainRE matches a standard web domain name
+	ExtractDomainRE = regexp.MustCompile("^http[s]?://([a-zA-Z0-9-_.]+)(/.*)*$")
 )
 
 type (
@@ -53,17 +57,16 @@ func FromString(s string) (*Referrer, error) {
 	}
 	// Detect HNS path
 	m = ExtractHNSPathRE.FindStringSubmatch(s)
-	if len(m) == 2 {
+	if len(m) > 1 {
 		r := &Referrer{
 			CanonicalName: m[1],
 			Type:          ReferrerTypeHNS,
 		}
 		return r, nil
 	}
-
 	// Detect base64 skylink
 	m = ExtractSkylinkBase64RE.FindStringSubmatch(s)
-	if len(m) == 2 {
+	if len(m) > 1 {
 		r := &Referrer{
 			CanonicalName: m[1],
 			Type:          ReferrerTypeSkylink,
@@ -71,21 +74,27 @@ func FromString(s string) (*Referrer, error) {
 		return r, nil
 	}
 	// Detect base32 skylink
-	m = ExtractSkylinkBase32RE.FindStringSubmatch(strings.ToLower(s))
-	if len(m) == 2 {
+	m = ExtractSkylinkBase32RE.FindStringSubmatch(strings.ToUpper(s))
+	if len(m) > 1 {
 		base32Name := m[1]
-		name, err := base32.StdEncoding.DecodeString(base32Name)
+		name, err := base32.HexEncoding.WithPadding(base32.NoPadding).DecodeString(base32Name)
 		if err != nil {
 			return nil, errors.New(fmt.Sprintf("failed to parse base32 skylink: %v", err))
 		}
 		r := &Referrer{
-			CanonicalName: base64.StdEncoding.EncodeToString(name),
+			CanonicalName: base64.RawURLEncoding.EncodeToString(name),
 			Type:          ReferrerTypeSkylink,
 		}
 		return r, nil
 	}
-
-	// TODO Detect web address
-
+	// Detect web address
+	m = ExtractDomainRE.FindStringSubmatch(s)
+	if len(m) > 1 {
+		r := &Referrer{
+			CanonicalName: m[1],
+			Type:          ReferrerTypeWeb,
+		}
+		return r, nil
+	}
 	return nil, errors.New("failed to detect referrer type")
 }
