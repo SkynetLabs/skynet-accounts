@@ -162,8 +162,8 @@ func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, er
 }
 
 // UserByID finds a user by their ID.
-func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error) {
-	filter := bson.D{{"_id", id}}
+func (db *DB) UserByID(ctx context.Context, userID primitive.ObjectID) (*User, error) {
+	filter := bson.D{{"_id", userID}}
 	c, err := db.staticUsers.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
@@ -179,7 +179,7 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	}
 	// Ensure there are no more results.
 	if ok := c.Next(ctx); ok {
-		build.Critical("more than one user found for id", id)
+		build.Critical("more than one user found for userID", userID)
 	}
 	var u User
 	err = c.Decode(&u)
@@ -190,8 +190,8 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 }
 
 // UserByStripeID finds a user by their Stripe customer id.
-func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
-	filter := bson.D{{"stripe_id", id}}
+func (db *DB) UserByStripeID(ctx context.Context, stripeID string) (*User, error) {
+	filter := bson.D{{"stripe_id", stripeID}}
 	c, err := db.staticUsers.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
@@ -207,7 +207,7 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	}
 	// Ensure there are no more results.
 	if ok := c.Next(ctx); ok {
-		build.Critical(fmt.Sprintf("more than one user found for stripe customer id '%s'", id))
+		build.Critical(fmt.Sprintf("more than one user found for stripe customer id '%s'", stripeID))
 	}
 	var u User
 	err = c.Decode(&u)
@@ -254,11 +254,11 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 }
 
 // UserDelete deletes a user by their ID.
-func (db *DB) UserDelete(ctx context.Context, u *User) error {
-	if u.ID.IsZero() {
+func (db *DB) UserDelete(ctx context.Context, user *User) error {
+	if user.ID.IsZero() {
 		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
 	}
-	filter := bson.D{{"_id", u.ID}}
+	filter := bson.D{{"_id", user.ID}}
 	dr, err := db.staticUsers.DeleteOne(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to Delete")
@@ -270,12 +270,12 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 }
 
 // UserSave saves the user to the DB.
-func (db *DB) UserSave(ctx context.Context, u *User) error {
-	filter := bson.M{"_id": u.ID}
+func (db *DB) UserSave(ctx context.Context, user *User) error {
+	filter := bson.M{"_id": user.ID}
 	opts := &options.ReplaceOptions{
 		Upsert: &True,
 	}
-	_, err := db.staticUsers.ReplaceOne(ctx, filter, u, opts)
+	_, err := db.staticUsers.ReplaceOne(ctx, filter, user, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
 	}
@@ -283,10 +283,10 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 }
 
 // UserSetStripeId changes the user's stripe id in the DB.
-func (db *DB) UserSetStripeId(ctx context.Context, u *User, stripeId string) error {
-	filter := bson.M{"_id": u.ID}
+func (db *DB) UserSetStripeId(ctx context.Context, user *User, stripeID string) error {
+	filter := bson.M{"_id": user.ID}
 	update := bson.M{"$set": bson.M{
-		"stripe_id": stripeId,
+		"stripe_id": stripeID,
 	}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
@@ -297,20 +297,20 @@ func (db *DB) UserSetStripeId(ctx context.Context, u *User, stripeId string) err
 }
 
 // UserSetTier sets the user's tier to the given value.
-func (db *DB) UserSetTier(ctx context.Context, u *User, t int) error {
-	if t <= TierAnonymous || t >= TierMaxReserved {
+func (db *DB) UserSetTier(ctx context.Context, user *User, tier int) error {
+	if tier <= TierAnonymous || tier >= TierMaxReserved {
 		return errors.New("invalid tier value")
 	}
-	filter := bson.M{"_id": u.ID}
+	filter := bson.M{"_id": user.ID}
 	update := bson.M{"$set": bson.M{
-		"tier": t,
+		"tier": tier,
 	}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
 	}
-	u.Tier = t
+	user.Tier = tier
 	return nil
 }
 
@@ -422,9 +422,9 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 
 // userUploadStats reports on the user's uploads - count, total size and total
 // bandwidth used. It uses the total size of the uploaded skyfiles as basis.
-func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, rawStorageUsed int64, totalBandwidth int64, err error) {
+func (db *DB) userUploadStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, rawStorageUsed int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", id},
+		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	lookupStage := bson.D{
@@ -497,9 +497,9 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 
 // userDownloadStats reports on the user's downloads - count, total size and
 // total bandwidth used. It uses the actual bandwidth used, as reported by nginx.
-func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, totalBandwidth int64, err error) {
+func (db *DB) userDownloadStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", id},
+		{"user_id", userID},
 		{"created_at", bson.D{{"$gt", monthStart}}},
 	}}}
 	lookupStage := bson.D{
@@ -562,9 +562,9 @@ func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, mont
 
 // userRegistryWriteStats reports the number of registry writes by the user and
 // the bandwidth used.
-func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
+func (db *DB) userRegistryWriteStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", userId},
+		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	writes, err := db.count(ctx, db.staticRegistryWrites, matchStage)
@@ -576,9 +576,9 @@ func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.Objec
 
 // userRegistryReadsStats reports the number of registry reads by the user and
 // the bandwidth used.
-func (db *DB) userRegistryReadStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
+func (db *DB) userRegistryReadStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", userId},
+		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	reads, err := db.count(ctx, db.staticRegistryReads, matchStage)
