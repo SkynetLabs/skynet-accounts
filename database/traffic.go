@@ -13,67 +13,55 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-type Traffic struct {
-	DownloadCount     int   `json:"downloadCount"`
-	DownloadSize      int64 `json:"downloadSize"`
-	DownloadBandwidth int64 `json:"downloadBandwidth"`
-	UploadCount       int   `json:"uploadCount"`
-	UploadSize        int64 `json:"uploadSize"`
-	UploadBandwidth   int64 `json:"uploadBandwidth"`
-	RegistryReads     int   `json:"registryReads"`
-	RegistryWrites    int   `json:"registryWrites"`
+type (
+	Traffic struct {
+		DownloadCount     int   `json:"downloadCount"`
+		DownloadSize      int64 `json:"downloadSize"`
+		DownloadBandwidth int64 `json:"downloadBandwidth"`
+		UploadCount       int   `json:"uploadCount"`
+		UploadSize        int64 `json:"uploadSize"`
+		UploadBandwidth   int64 `json:"uploadBandwidth"`
+		RegistryReads     int   `json:"registryReads"`
+		RegistryWrites    int   `json:"registryWrites"`
+	}
+
+	TrafficDTO struct {
+		Source      string   `json:"source"`
+		SourceType  string   `json:"source_type"`
+		Total       *Traffic `json:"total"`
+		Last24Hours *Traffic `json:"last24hours"`
+	}
+
+	// trafficStats describes a given type of traffic, e.g. upload or download
+	trafficStats struct {
+		CountTotal        int
+		Count24Hours      int
+		BandwidthPeriod   int64
+		Bandwidth24Hours  int64
+		UploadSizePeriod  int64
+		UploadSize24Hours int64
+	}
+)
+
+// UserTrafficByTopReferrers reports on the various kinds of traffic that the
+// user has been charged, broken down the by the referrer that incurred the
+// traffic.
+func (db *DB) UserTrafficByTopReferrers(ctx context.Context, user User, startOfPeriod time.Time, numReferrers int) ([]*TrafficDTO, error) {
+	tr, err := db.userTrafficByReferrer(ctx, user, startOfPeriod)
+	if err != nil {
+		return nil, err
+	}
+	var result []*TrafficDTO
+	for _, v := range tr {
+		result = append(result, v)
+	}
+	// TODO ordering + pagination
+	return result, err
 }
 
-type TrafficDTO struct {
-	Source      string  `json:"source"`
-	SourceType  string  `json:"source_type"`
-	Total       Traffic `json:"total"`
-	Last24Hours Traffic `json:"last24hours"`
-}
-
-// trafficStats describes a given type of traffic, e.g. upload or download
-type trafficStats struct {
-	CountTotal        int
-	Count24Hours      int
-	BandwidthPeriod   int64
-	Bandwidth24Hours  int64
-	UploadSizePeriod  int64
-	UploadSize24Hours int64
-}
-
-//// TrafficByTopReferrers ...
-//func (db *DB) TrafficByTopReferrers(ctx context.Context, user User, offset, pageSize int) ([]TrafficDTO, int, error) {
-//	if user.ID.IsZero() {
-//		return nil, 0, errors.New("invalid user")
-//	}
-//	if err := validateOffsetPageSize(offset, pageSize); err != nil {
-//		return nil, 0, err
-//	}
-//
-//	matchStage := bson.D{{"$match", bson.D{
-//		{"user_id", user.ID},
-//		{"unpinned", false},
-//	}}}
-//
-//	ref, err := FromString(referrer)
-//
-//	if err == nil {
-//		matchStage = bson.D{{"$match", bson.D{
-//			{"user_id", user.ID},
-//			{"unpinned", false},
-//			{"referrer", ref.CanonicalName},
-//			//{"referrer_type", ref.Type}, // TODO Not sure if we this would be useful in any way
-//		}}}
-//	}
-//	return db.uploadsBy(ctx, matchStage, offset, pageSize)
-//}
-
-func (db *DB) UserTraffic(ctx context.Context, user User, startOfPeriod time.Time) (map[Referrer]TrafficDTO, error) {
-	return db.userTraffic(ctx, user, startOfPeriod)
-}
-
-// userStats reports statistical information about the user.
-func (db *DB) userTraffic(ctx context.Context, user User, startOfPeriod time.Time) (map[Referrer]TrafficDTO, error) {
+// userTrafficByReferrer reports on the various kinds of traffic that the user
+// has been charged, broken down the by the referrer that incurred the traffic.
+func (db *DB) userTrafficByReferrer(ctx context.Context, user User, startOfPeriod time.Time) (map[Referrer]*TrafficDTO, error) {
 	var errs []error
 	var errsMux sync.Mutex
 	regErr := func(msg string, e error) {
@@ -82,10 +70,16 @@ func (db *DB) userTraffic(ctx context.Context, user User, startOfPeriod time.Tim
 		errs = append(errs, e)
 		errsMux.Unlock()
 	}
-
-	traffic := make(map[Referrer]TrafficDTO)
+	newTrafficDTO := func(refName, refType string) *TrafficDTO {
+		return &TrafficDTO{
+			Source:      refName,
+			SourceType:  refType,
+			Total:       &Traffic{},
+			Last24Hours: &Traffic{},
+		}
+	}
+	traffic := make(map[Referrer]*TrafficDTO)
 	var trafficMu sync.Mutex
-
 	var wg sync.WaitGroup
 	wg.Add(1)
 	// Uploads
@@ -100,12 +94,7 @@ func (db *DB) userTraffic(ctx context.Context, user User, startOfPeriod time.Tim
 		for r, t := range tm {
 			rt, exists := traffic[r]
 			if !exists {
-				traffic[r] = TrafficDTO{
-					Source:      r.CanonicalName,
-					SourceType:  r.Type,
-					Total:       Traffic{},
-					Last24Hours: Traffic{},
-				}
+				traffic[r] = newTrafficDTO(r.CanonicalName, r.Type)
 				rt = traffic[r]
 			}
 			// We increment the bandwidth instead of setting it because
@@ -132,12 +121,7 @@ func (db *DB) userTraffic(ctx context.Context, user User, startOfPeriod time.Tim
 		for r, t := range tm {
 			rt, exists := traffic[r]
 			if !exists {
-				traffic[r] = TrafficDTO{
-					Source:      r.CanonicalName,
-					SourceType:  r.Type,
-					Total:       Traffic{},
-					Last24Hours: Traffic{},
-				}
+				traffic[r] = newTrafficDTO(r.CanonicalName, r.Type)
 				rt = traffic[r]
 			}
 			// We increment the bandwidth instead of setting it because
@@ -161,12 +145,7 @@ func (db *DB) userTraffic(ctx context.Context, user User, startOfPeriod time.Tim
 		for r, t := range tm {
 			rt, exists := traffic[r]
 			if !exists {
-				traffic[r] = TrafficDTO{
-					Source:      r.CanonicalName,
-					SourceType:  r.Type,
-					Total:       Traffic{},
-					Last24Hours: Traffic{},
-				}
+				traffic[r] = newTrafficDTO(r.CanonicalName, r.Type)
 				rt = traffic[r]
 			}
 			rt.Total.RegistryReads = t.CountTotal
@@ -188,12 +167,7 @@ func (db *DB) userTraffic(ctx context.Context, user User, startOfPeriod time.Tim
 		for r, t := range tm {
 			rt, exists := traffic[r]
 			if !exists {
-				traffic[r] = TrafficDTO{
-					Source:      r.CanonicalName,
-					SourceType:  r.Type,
-					Total:       Traffic{},
-					Last24Hours: Traffic{},
-				}
+				traffic[r] = newTrafficDTO(r.CanonicalName, r.Type)
 				rt = traffic[r]
 			}
 			rt.Total.RegistryWrites = t.CountTotal
@@ -211,7 +185,9 @@ func (db *DB) userTraffic(ctx context.Context, user User, startOfPeriod time.Tim
 	return traffic, nil
 }
 
-func (db *DB) userUploadTraffic(ctx context.Context, userID primitive.ObjectID, periodStart time.Time) (map[Referrer]trafficStats, error) {
+// userUploadTraffic reports on the download traffic that specific
+// referrers have incurred.
+func (db *DB) userUploadTraffic(ctx context.Context, userID primitive.ObjectID, periodStart time.Time) (map[Referrer]*trafficStats, error) {
 	c, err := db.staticUploads.Aggregate(ctx, trafficPipeline(userID, periodStart))
 	if err != nil {
 		return nil, err
@@ -221,19 +197,19 @@ func (db *DB) userUploadTraffic(ctx context.Context, userID primitive.ObjectID, 
 			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
 		}
 	}()
-	// We need this struct, so we can safely decode both int32 and int64.
-	result := struct {
-		Size         int64     `bson:"size"`
-		Skylink      string    `bson:"skylink"`
-		Unpinned     bool      `bson:"unpinned"`
-		Timestamp    time.Time `bson:"timestamp"`
-		Referrer     string    `bson:"referrer"`
-		ReferrerType string    `bson:"referrer_type"`
-	}{}
 	processedSkylinks := make(map[string]bool)
-	trafficMap := make(map[Referrer]trafficStats)
+	trafficMap := make(map[Referrer]*trafficStats)
 	var last24 bool
 	for c.Next(ctx) {
+		// We need this struct, so we can safely decode both int32 and int64.
+		result := struct {
+			Size         int64     `bson:"size"`
+			Skylink      string    `bson:"skylink"`
+			Unpinned     bool      `bson:"unpinned"`
+			Timestamp    time.Time `bson:"timestamp"`
+			Referrer     string    `bson:"referrer"`
+			ReferrerType string    `bson:"referrer_type"`
+		}{}
 		if err = c.Decode(&result); err != nil {
 			return nil, errors.AddContext(err, "failed to decode DB data")
 		}
@@ -242,10 +218,10 @@ func (db *DB) userUploadTraffic(ctx context.Context, userID primitive.ObjectID, 
 			Type:          result.ReferrerType,
 		}
 		if _, exists := trafficMap[ref]; !exists {
-			trafficMap[ref] = trafficStats{}
+			trafficMap[ref] = &trafficStats{}
 		}
 		traffic := trafficMap[ref]
-		last24 = result.Timestamp.After(time.Now().Add(-1 * time.Hour))
+		last24 = result.Timestamp.After(time.Now().Add(-1 * time.Hour * 24))
 		// All bandwidth is counted, regardless of unpinned status.
 		band := skynet.BandwidthUploadCost(result.Size)
 		traffic.BandwidthPeriod += band
@@ -273,7 +249,9 @@ func (db *DB) userUploadTraffic(ctx context.Context, userID primitive.ObjectID, 
 	return trafficMap, nil
 }
 
-func (db *DB) userDownloadTraffic(ctx context.Context, userID primitive.ObjectID, periodStart time.Time) (map[Referrer]trafficStats, error) {
+// userDownloadTraffic reports on the download traffic that specific
+// referrers have incurred.
+func (db *DB) userDownloadTraffic(ctx context.Context, userID primitive.ObjectID, periodStart time.Time) (map[Referrer]*trafficStats, error) {
 	c, err := db.staticDownloads.Aggregate(ctx, trafficPipeline(userID, periodStart))
 	if err != nil {
 		return nil, err
@@ -283,17 +261,17 @@ func (db *DB) userDownloadTraffic(ctx context.Context, userID primitive.ObjectID
 			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
 		}
 	}()
-	// We need this struct, so we can safely decode both int32 and int64.
-	result := struct {
-		Size         int64     `bson:"size"`
-		Skylink      string    `bson:"skylink"`
-		Timestamp    time.Time `bson:"timestamp"`
-		Referrer     string    `bson:"referrer"`
-		ReferrerType string    `bson:"referrer_type"`
-	}{}
-	trafficMap := make(map[Referrer]trafficStats)
+	trafficMap := make(map[Referrer]*trafficStats)
 	var last24 bool
 	for c.Next(ctx) {
+		// We need this struct, so we can safely decode both int32 and int64.
+		result := struct {
+			Size         int64     `bson:"size"`
+			Skylink      string    `bson:"skylink"`
+			Timestamp    time.Time `bson:"timestamp"`
+			Referrer     string    `bson:"referrer"`
+			ReferrerType string    `bson:"referrer_type"`
+		}{}
 		if err = c.Decode(&result); err != nil {
 			return nil, errors.AddContext(err, "failed to decode DB data")
 		}
@@ -302,7 +280,7 @@ func (db *DB) userDownloadTraffic(ctx context.Context, userID primitive.ObjectID
 			Type:          result.ReferrerType,
 		}
 		if _, exists := trafficMap[ref]; !exists {
-			trafficMap[ref] = trafficStats{}
+			trafficMap[ref] = &trafficStats{}
 		}
 		traffic := trafficMap[ref]
 		last24 = result.Timestamp.After(time.Now().Add(-1 * time.Hour))
@@ -319,34 +297,41 @@ func (db *DB) userDownloadTraffic(ctx context.Context, userID primitive.ObjectID
 	return trafficMap, nil
 }
 
-func (db *DB) userRegistryReadTraffic(ctx context.Context, userID primitive.ObjectID, periodStart time.Time) (map[Referrer]trafficStats, error) {
+// userRegistryReadTraffic reports on the registry read traffic that specific
+// referrers have incurred.
+func (db *DB) userRegistryReadTraffic(ctx context.Context, userID primitive.ObjectID, periodStart time.Time) (map[Referrer]*trafficStats, error) {
+	return db.userRegistryTraffic(ctx, userID, periodStart, db.staticRegistryReads, skynet.CostBandwidthRegistryRead)
+}
+
+// userRegistryWriteTraffic reports on the registry write traffic that specific
+// referrers have incurred.
+func (db *DB) userRegistryWriteTraffic(ctx context.Context, userID primitive.ObjectID, periodStart time.Time) (map[Referrer]*trafficStats, error) {
+	return db.userRegistryTraffic(ctx, userID, periodStart, db.staticRegistryWrites, skynet.CostBandwidthRegistryWrite)
+}
+
+// userRegistryTraffic is a meta method which calculates the registry traffic
+// incurred by either registry reads or writes.
+func (db *DB) userRegistryTraffic(ctx context.Context, userID primitive.ObjectID, periodStart time.Time, coll *mongo.Collection, opCost int64) (map[Referrer]*trafficStats, error) {
 	filter := bson.D{
 		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", periodStart}}},
+		{"referrer", bson.D{{"$ne", ""}}},
 	}
-	c, err := db.staticRegistryReads.Find(ctx, filter)
-	//matchStage := bson.D{{"$match", bson.D{
-	//	{"user_id", userID},
-	//	{"timestamp", bson.D{{"$gt", periodStart}}},
-	//}}}
-	//c, err := db.staticRegistryReads.Aggregate(ctx, mongo.Pipeline{matchStage})
-	//if err != nil {
-	//	return nil, err
-	//}
+	c, err := coll.Find(ctx, filter)
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
 			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
 		}
 	}()
-	// We need this struct, so we can safely decode both int32 and int64.
-	result := struct {
-		Timestamp    time.Time `bson:"timestamp"`
-		Referrer     string    `bson:"referrer"`
-		ReferrerType string    `bson:"referrer_type"`
-	}{}
-	trafficMap := make(map[Referrer]trafficStats)
+	trafficMap := make(map[Referrer]*trafficStats)
 	var last24 bool
 	for c.Next(ctx) {
+		// We need this struct, so we can safely decode both int32 and int64.
+		result := struct {
+			Timestamp    time.Time `bson:"timestamp"`
+			Referrer     string    `bson:"referrer"`
+			ReferrerType string    `bson:"referrer_type"`
+		}{}
 		if err = c.Decode(&result); err != nil {
 			return nil, errors.AddContext(err, "failed to decode DB data")
 		}
@@ -355,13 +340,13 @@ func (db *DB) userRegistryReadTraffic(ctx context.Context, userID primitive.Obje
 			Type:          result.ReferrerType,
 		}
 		if _, exists := trafficMap[ref]; !exists {
-			trafficMap[ref] = trafficStats{}
+			trafficMap[ref] = &trafficStats{}
 		}
 		traffic := trafficMap[ref]
 		last24 = result.Timestamp.After(time.Now().Add(-1 * time.Hour))
-		traffic.BandwidthPeriod += skynet.CostBandwidthRegistryRead
+		traffic.BandwidthPeriod += opCost
 		if last24 {
-			traffic.Bandwidth24Hours += skynet.CostBandwidthRegistryRead
+			traffic.Bandwidth24Hours += opCost
 		}
 		traffic.CountTotal++
 		if last24 {
@@ -377,6 +362,7 @@ func trafficPipeline(userID primitive.ObjectID, periodStart time.Time) mongo.Pip
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", periodStart}}},
+		{"referrer", bson.D{{"$ne", nil}}},
 	}}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{

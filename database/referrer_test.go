@@ -28,75 +28,81 @@ func TestFromString(t *testing.T) {
 			error:  errors.New("failed to detect referrer type"),
 		},
 		{
+			name:   "bare words should be treated as web",
+			input:  "justaword",
+			result: Referrer{CanonicalName: "justaword", Type: ReferrerTypeWeb},
+			error:  nil,
+		},
+		{
 			name:   "hns domain",
 			input:  "https://skygallery.hns.siasky.net/something/something?dark=side",
-			result: Referrer{CanonicalName: "skygallery", Type: "hns"},
+			result: Referrer{CanonicalName: "skygallery", Type: ReferrerTypeHNS},
 			error:  nil,
 		},
 		{
 			name:   "hns path",
 			input:  "https://siasky.net/hns/skygallery/something/something?dark=side",
-			result: Referrer{CanonicalName: "skygallery", Type: "hns"},
+			result: Referrer{CanonicalName: "skygallery", Type: ReferrerTypeHNS},
 			error:  nil,
 		},
 		{
 			name:   "hns path on specific server",
 			input:  "http://eu-ger-1.siasky.net/hns/skygallery/something/something?dark=side",
-			result: Referrer{CanonicalName: "skygallery", Type: "hns"},
+			result: Referrer{CanonicalName: "skygallery", Type: ReferrerTypeHNS},
 			error:  nil,
 		},
 		{
 			name:   "skylink base64",
 			input:  "http://siasky.net/_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng",
-			result: Referrer{CanonicalName: "_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng", Type: "skylink"},
+			result: Referrer{CanonicalName: "_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng", Type: ReferrerTypeSkylink},
 			error:  nil,
 		},
 		{
 			name:   "skylink base64 with path",
 			input:  "http://siasky.net/_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng/some_path",
-			result: Referrer{CanonicalName: "_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng", Type: "skylink"},
+			result: Referrer{CanonicalName: "_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng", Type: ReferrerTypeSkylink},
 			error:  nil,
 		},
 		{
 			name:   "skylink base32",
 			input:  "http://vg7f80v8jf7fr5l2sudtnsnemhccpasppfqrd9ger89cb1tas9r317g.siasky.net",
-			result: Referrer{CanonicalName: "_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng", Type: "skylink"},
+			result: Referrer{CanonicalName: "_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng", Type: ReferrerTypeSkylink},
 			error:  nil,
 		},
 		{
 			name:   "skylink base32 with path",
 			input:  "http://vg7f80v8jf7fr5l2sudtnsnemhccpasppfqrd9ger89cb1tas9r317g.siasky.net/some_path",
-			result: Referrer{CanonicalName: "_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng", Type: "skylink"},
+			result: Referrer{CanonicalName: "_A70A-ibzv2Woueb2_LutFjMq5nL9bamDtoSxYeq4nYwng", Type: ReferrerTypeSkylink},
 			error:  nil,
 		},
 		{
 			name:   "web",
 			input:  "http://example.com",
-			result: Referrer{CanonicalName: "example.com", Type: "web"},
+			result: Referrer{CanonicalName: "example.com", Type: ReferrerTypeWeb},
 			error:  nil,
 		},
 		{
-			name:   "web eithout protocol",
+			name:   "web without protocol",
 			input:  "example.com",
-			result: Referrer{CanonicalName: "example.com", Type: "web"},
+			result: Referrer{CanonicalName: "example.com", Type: ReferrerTypeWeb},
 			error:  nil,
 		},
 		{
 			name:   "web with subdomain",
 			input:  "http://one.two.three-lala.example.com",
-			result: Referrer{CanonicalName: "one.two.three-lala.example.com", Type: "web"},
+			result: Referrer{CanonicalName: "one.two.three-lala.example.com", Type: ReferrerTypeWeb},
 			error:  nil,
 		},
 		{
 			name:   "web with path",
 			input:  "http://example.com/one/two/three?four=five",
-			result: Referrer{CanonicalName: "example.com", Type: "web"},
+			result: Referrer{CanonicalName: "example.com", Type: ReferrerTypeWeb},
 			error:  nil,
 		},
 		{
 			name:   "web with path and subdomain",
 			input:  "http://one.two.example.com/three/four=five",
-			result: Referrer{CanonicalName: "one.two.example.com", Type: "web"},
+			result: Referrer{CanonicalName: "one.two.example.com", Type: ReferrerTypeWeb},
 			error:  nil,
 		},
 	}
@@ -109,7 +115,7 @@ func TestFromString(t *testing.T) {
 		}
 		if tt.error != nil && (e == nil || e.Error() != tt.error.Error()) {
 			t.Logf("Failing test: %s", tt.name)
-			t.Fatalf("Expected error '%s', got '%v' for input '%s'.", tt.error.Error(), e, tt.input)
+			t.Fatalf("Expected error '%s', got '%v' and '%v' for input '%s'.", tt.error.Error(), e, r, tt.input)
 		}
 		if tt.error != nil {
 			continue

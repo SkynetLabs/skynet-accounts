@@ -465,14 +465,14 @@ func (db *DB) userUploadStats(ctx context.Context, userID primitive.ObjectID, mo
 		}
 	}()
 
-	// We need this struct, so we can safely decode both int32 and int64.
-	result := struct {
-		Size     int64  `bson:"size"`
-		Skylink  string `bson:"skylink"`
-		Unpinned bool   `bson:"unpinned"`
-	}{}
 	processedSkylinks := make(map[string]bool)
 	for c.Next(ctx) {
+		// We need this struct, so we can safely decode both int32 and int64.
+		result := struct {
+			Size     int64  `bson:"size"`
+			Skylink  string `bson:"skylink"`
+			Unpinned bool   `bson:"unpinned"`
+		}{}
 		if err = c.Decode(&result); err != nil {
 			err = errors.AddContext(err, "failed to decode DB data")
 			return
@@ -544,11 +544,11 @@ func (db *DB) userDownloadStats(ctx context.Context, userID primitive.ObjectID, 
 		}
 	}()
 
-	// We need this struct, so we can safely decode both int32 and int64.
-	result := struct {
-		Size int64 `bson:"size"`
-	}{}
 	for c.Next(ctx) {
+		// We need this struct, so we can safely decode both int32 and int64.
+		result := struct {
+			Size int64 `bson:"size"`
+		}{}
 		if err = c.Decode(&result); err != nil {
 			err = errors.AddContext(err, "failed to decode DB data")
 			return

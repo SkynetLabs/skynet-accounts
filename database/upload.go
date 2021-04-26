@@ -46,9 +46,9 @@ type UploadsResponseDTO struct {
 
 // UploadByID fetches a single upload from the DB.
 func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, error) {
-	var d Upload
 	filter := bson.D{{"_id", id}}
 	sr := db.staticUploads.FindOne(ctx, filter)
+	var d Upload
 	err := sr.Decode(&d)
 	if err != nil {
 		return nil, err

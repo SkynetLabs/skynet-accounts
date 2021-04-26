@@ -220,35 +220,18 @@ func (api *API) userTopReferrersHandler(w http.ResponseWriter, req *http.Request
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	//offset, err1 := fetchOffset(req.Form)
-	//pageSize, err2 := fetchPageSize(req.Form)
-	//if err = errors.Compose(err1, err2); err != nil {
-	//	api.WriteError(w, err, http.StatusBadRequest)
-	//	return
-	//}
 
-	//ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize, req.Form.Get("referrer"))
-	//if err != nil {
-	//	api.WriteError(w, err, http.StatusInternalServerError)
-	//	return
-	//}
-	//response := database.UploadsResponseDTO{
-	//	Items:    ups,
-	//	Offset:   offset,
-	//	PageSize: pageSize,
-	//	Count:    total,
-	//}
-	//api.WriteJSON(w, response)
-	tm, err := api.staticDB.UserTraffic(req.Context(), *u, time.Now().Add(-1*time.Hour*24*30*100))
+	// TODO
+	//  - order the skapps by any column we report on
+	//  - by default we use storage used
+	//  - make sure the pagination works well
+
+	tm, err := api.staticDB.UserTrafficByTopReferrers(req.Context(), *u, time.Now().Add(-1*time.Hour*24*30*100), 10)
 	if err != nil {
 		api.WriteError(w, err, 500)
 		return
 	}
-	m := make(map[string]database.TrafficDTO)
-	for k, v := range tm {
-		m[k.CanonicalName] = v
-	}
-	api.WriteJSON(w, m)
+	api.WriteJSON(w, tm)
 }
 
 // userUploadsHandler returns all uploads made by the current user.
