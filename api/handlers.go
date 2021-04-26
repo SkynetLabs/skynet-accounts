@@ -203,6 +203,54 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 	api.WriteJSON(w, u)
 }
 
+// userTopReferrersHandler returns a breakdown of the traffic caused by the top
+// referrers for this user.
+func (api *API) userTopReferrersHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if err = req.ParseForm(); err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	//offset, err1 := fetchOffset(req.Form)
+	//pageSize, err2 := fetchPageSize(req.Form)
+	//if err = errors.Compose(err1, err2); err != nil {
+	//	api.WriteError(w, err, http.StatusBadRequest)
+	//	return
+	//}
+
+	//ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize, req.Form.Get("referrer"))
+	//if err != nil {
+	//	api.WriteError(w, err, http.StatusInternalServerError)
+	//	return
+	//}
+	//response := database.UploadsResponseDTO{
+	//	Items:    ups,
+	//	Offset:   offset,
+	//	PageSize: pageSize,
+	//	Count:    total,
+	//}
+	//api.WriteJSON(w, response)
+	tm, err := api.staticDB.UserTraffic(req.Context(), *u, time.Now().Add(-1*time.Hour*24*30*100))
+	if err != nil {
+		api.WriteError(w, err, 500)
+		return
+	}
+	m := make(map[string]database.TrafficDTO)
+	for k, v := range tm {
+		m[k.CanonicalName] = v
+	}
+	api.WriteJSON(w, m)
+}
+
 // userUploadsHandler returns all uploads made by the current user.
 func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())

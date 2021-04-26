@@ -34,6 +34,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsHandler))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsHandler))
 	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsHandler))
+	api.staticRouter.GET("/user/top_referrers", api.validate(api.userTopReferrersHandler))
 	api.staticRouter.DELETE("/user/uploads/:uploadId", api.validate(api.userUploadDeleteHandler))
 }
 
