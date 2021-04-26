@@ -425,7 +425,6 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, rawStorageUsed int64, totalBandwidth int64, err error) {
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", id},
-		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
@@ -451,7 +450,6 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 		{"skylink_data", 0},
 		{"name", 0},
 		{"skylink_id", 0},
-		{"timestamp", 0},
 	}}}
 
 	pipeline := mongo.Pipeline{matchStage, lookupStage, replaceStage, projectStage}
@@ -467,15 +465,26 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 
 	// We need this struct, so we can safely decode both int32 and int64.
 	result := struct {
-		Size     int64  `bson:"size"`
-		Skylink  string `bson:"skylink"`
-		Unpinned bool   `bson:"unpinned"`
+		Size      int64     `bson:"size"`
+		Skylink   string    `bson:"skylink"`
+		Unpinned  bool      `bson:"unpinned"`
+		Timestamp time.Time `bson:"timestamp"`
 	}{}
 	processedSkylinks := make(map[string]bool)
 	for c.Next(ctx) {
 		if err = c.Decode(&result); err != nil {
 			err = errors.AddContext(err, "failed to decode DB data")
 			return
+		}
+		// We first weed out any old uploads that we fetch only in order to
+		// calculate the total used storage.
+		if result.Timestamp.Before(monthStart) {
+			if result.Unpinned || processedSkylinks[result.Skylink] {
+				continue
+			}
+			processedSkylinks[result.Skylink] = true
+			totalSize += result.Size
+			continue
 		}
 		// All bandwidth is counted, regardless of unpinned status.
 		totalBandwidth += skynet.BandwidthUploadCost(result.Size)
