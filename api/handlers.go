@@ -235,6 +235,7 @@ func (api *API) userTopReferrersHandler(w http.ResponseWriter, req *http.Request
 	if sortBy == "" {
 		sortBy = "uploadSize"
 	}
+	sortAsc := strings.ToLower(req.Form.Get("sortAsc")) == "true"
 
 	traffic, err := api.staticDB.UserTrafficByReferrer(req.Context(), *u, time.Now().Add(-1*time.Hour*24*30*100))
 	if err != nil {
@@ -252,7 +253,7 @@ func (api *API) userTopReferrersHandler(w http.ResponseWriter, req *http.Request
 	if end > l {
 		end = l
 	}
-	err = sortTrafficBy(traffic, sortBy)
+	err = sortTrafficBy(traffic, sortBy, sortAsc)
 	if err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -600,7 +601,7 @@ func fetchPageSize(form url.Values) (int, error) {
 // The metric is specified by its JSON representation and it is taken from the
 // `Total` field of each element in the slice. This allows the client to sort
 // the data by a tag that makes sense to them.
-func sortTrafficBy(t []*database.TrafficDTO, jsonTag string) (err error) {
+func sortTrafficBy(t []*database.TrafficDTO, jsonTag string, sortAsc bool) (err error) {
 	if len(t) == 0 {
 		return
 	}
@@ -616,6 +617,9 @@ func sortTrafficBy(t []*database.TrafficDTO, jsonTag string) (err error) {
 	sort.Slice(t, func(i, j int) bool {
 		a := reflect.ValueOf(*t[i].Total).FieldByName(field)
 		b := reflect.ValueOf(*t[j].Total).FieldByName(field)
+		if sortAsc {
+			return a.Int() < b.Int()
+		}
 		return a.Int() > b.Int()
 	})
 	return
@@ -627,6 +631,7 @@ func fieldNameByJsonTag(a interface{}, jsonTag string) (string, error) {
 	if a == nil {
 		return "", errors.New("nil value passed")
 	}
+	jsonTag = strings.ToLower(jsonTag)
 	rt := reflect.TypeOf(a)
 	if rt.Kind() != reflect.Struct {
 		return "", errors.New("type is not a struct")
@@ -634,7 +639,7 @@ func fieldNameByJsonTag(a interface{}, jsonTag string) (string, error) {
 	for i := 0; i < rt.NumField(); i++ {
 		field := rt.Field(i)
 		v := strings.Split(field.Tag.Get("json"), ",")[0]
-		if v == jsonTag {
+		if strings.ToLower(v) == jsonTag {
 			return field.Name, nil
 		}
 	}
