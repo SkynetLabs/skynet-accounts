@@ -6,7 +6,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"reflect"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
@@ -205,7 +208,7 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 
 // userTopReferrersHandler returns a breakdown of the traffic caused by the top
 // referrers for this user.
-func (api *API) userTopReferrersHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *API) userTopReferrersHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -220,18 +223,41 @@ func (api *API) userTopReferrersHandler(w http.ResponseWriter, req *http.Request
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
+	page, _ := strconv.Atoi(req.Form.Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(req.Form.Get("pageSize"))
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+	sortBy := req.Form.Get("sortBy")
+	if sortBy == "" {
+		sortBy = "uploadSize"
+	}
 
-	// TODO
-	//  - order the skapps by any column we report on
-	//  - by default we use storage used
-	//  - make sure the pagination works well
-
-	tm, err := api.staticDB.UserTrafficByTopReferrers(req.Context(), *u, time.Now().Add(-1*time.Hour*24*30*100), 10)
+	traffic, err := api.staticDB.UserTrafficByReferrer(req.Context(), *u, time.Now().Add(-1*time.Hour*24*30*100))
 	if err != nil {
 		api.WriteError(w, err, 500)
 		return
 	}
-	api.WriteJSON(w, tm)
+	start := (page - 1) * pageSize
+	end := (page) * pageSize
+	l := len(traffic)
+	if start > l {
+		// The requested page doesn't exist, so there's no need to sort the data.
+		api.WriteJSON(w, []*database.TrafficDTO{})
+		return
+	}
+	if end > l {
+		end = l
+	}
+	err = sortTrafficBy(traffic, sortBy)
+	if err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	api.WriteJSON(w, traffic[start:end])
 }
 
 // userUploadsHandler returns all uploads made by the current user.
@@ -568,4 +594,49 @@ func fetchPageSize(form url.Values) (int, error) {
 		pageSize = database.DefaultPageSize
 	}
 	return pageSize, nil
+}
+
+// sortTrafficBy sorts a slice of `database.TrafficDTO`s by a specific metric.
+// The metric is specified by its JSON representation and it is taken from the
+// `Total` field of each element in the slice. This allows the client to sort
+// the data by a tag that makes sense to them.
+func sortTrafficBy(t []*database.TrafficDTO, jsonTag string) (err error) {
+	if len(t) == 0 {
+		return
+	}
+	defer func() {
+		if panicErr := recover(); panicErr != nil {
+			err = panicErr.(error)
+		}
+	}()
+	field, err := fieldNameByJsonTag(*t[0].Total, jsonTag)
+	if err != nil {
+		return
+	}
+	sort.Slice(t, func(i, j int) bool {
+		a := reflect.ValueOf(*t[i].Total).FieldByName(field)
+		b := reflect.ValueOf(*t[j].Total).FieldByName(field)
+		return a.Int() > b.Int()
+	})
+	return
+}
+
+// fieldNameByJsonTag inspects the given struct and returns the name of the
+// field that has the given json tag.
+func fieldNameByJsonTag(a interface{}, jsonTag string) (string, error) {
+	if a == nil {
+		return "", errors.New("nil value passed")
+	}
+	rt := reflect.TypeOf(a)
+	if rt.Kind() != reflect.Struct {
+		return "", errors.New("type is not a struct")
+	}
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		v := strings.Split(field.Tag.Get("json"), ",")[0]
+		if v == jsonTag {
+			return field.Name, nil
+		}
+	}
+	return "", errors.New("field not found")
 }

@@ -43,10 +43,10 @@ type (
 	}
 )
 
-// UserTrafficByTopReferrers reports on the various kinds of traffic that the
+// UserTrafficByReferrer reports on the various kinds of traffic that the
 // user has been charged, broken down the by the referrer that incurred the
 // traffic.
-func (db *DB) UserTrafficByTopReferrers(ctx context.Context, user User, startOfPeriod time.Time, numReferrers int) ([]*TrafficDTO, error) {
+func (db *DB) UserTrafficByReferrer(ctx context.Context, user User, startOfPeriod time.Time) ([]*TrafficDTO, error) {
 	tr, err := db.userTrafficByReferrer(ctx, user, startOfPeriod)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,6 @@ func (db *DB) UserTrafficByTopReferrers(ctx context.Context, user User, startOfP
 	for _, v := range tr {
 		result = append(result, v)
 	}
-	// TODO ordering + pagination
 	return result, err
 }
 
