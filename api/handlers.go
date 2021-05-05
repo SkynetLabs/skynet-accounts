@@ -22,10 +22,8 @@ func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httpro
 	status := struct {
 		DBAlive bool `json:"dbAlive"`
 	}{}
-	_, err := api.staticDB.UserBySub(req.Context(), "", false)
-	if err == nil || errors.Contains(err, database.ErrUserNotFound) {
-		status.DBAlive = true
-	}
+	err := api.staticDB.Ping(req.Context())
+	status.DBAlive = err == nil
 	api.WriteJSON(w, status)
 }
 
