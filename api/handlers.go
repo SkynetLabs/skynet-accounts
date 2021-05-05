@@ -17,6 +17,18 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
+// healthHandler returns the status of the service
+func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	status := struct {
+		DBAlive bool `json:"dbAlive"`
+	}{}
+	_, err := api.staticDB.UserBySub(req.Context(), "", false)
+	if err == nil || errors.Contains(err, database.ErrUserNotFound) {
+		status.DBAlive = true
+	}
+	api.WriteJSON(w, status)
+}
+
 // loginHandler starts a user session by issuing a cookie
 func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	tokenStr, err := tokenFromRequest(req)
