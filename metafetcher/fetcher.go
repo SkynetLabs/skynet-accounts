@@ -113,7 +113,7 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		go func() { mf.Queue <- m }()
 		return
 	}
-	bodyBytes, err := ioutil.ReadAll(req.Body)
+	bodyBytes, err := ioutil.ReadAll(res.Body)
 	var meta struct {
 		Filename string `json:"filename"`
 		Length   int64  `json:"length"`
