@@ -93,7 +93,7 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		return
 	}
 	req := http.Request{
-		Method: http.MethodHead,
+		Method: http.MethodGet,
 		URL:    metaURL,
 		Header: http.Header{"User-Agent": []string{"Sia-Agent"}},
 	}
