@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 
@@ -86,14 +87,14 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	}
 	// Make a HEAD request directly to the local `sia` container. We do that, so
 	// we don't get rate-limited by nginx in case we need to make many requests.
-	skylinkURL, err := url.Parse(fmt.Sprintf("http://sia:9980/skynet/skylink/%s", sl.Skylink))
+	metaURL, err := url.Parse(fmt.Sprintf("http://sia:9980/skynet/metadata/%s", sl.Skylink))
 	if err != nil {
 		mf.logger.Debugf("Error while forming skylink URL for skylink %s. Error: %v", sl.Skylink, err)
 		return
 	}
 	req := http.Request{
-		Method: http.MethodHead,
-		URL:    skylinkURL,
+		Method: http.MethodGet,
+		URL:    metaURL,
 		Header: http.Header{"User-Agent": []string{"Sia-Agent"}},
 	}
 	client := http.Client{}
@@ -103,7 +104,7 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		if res != nil {
 			statusCode = res.StatusCode
 		}
-		mf.logger.Tracef("Failed to fetch skyfile. Skylink: %s, status: %v, error: %v", sl.Skylink, statusCode, err)
+		mf.logger.Tracef("Failed to fetch metadata. Skylink: %s, status: %v, error: %v", sl.Skylink, statusCode, err)
 		if m.Attempts >= maxAttempts {
 			mf.logger.Debugf("Message exceeded its maximum number of attempts, dropping: %v. Last error: %v.", m, err)
 			return
@@ -112,16 +113,12 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		go func() { mf.Queue <- m }()
 		return
 	}
-	mhs, ok := res.Header["Skynet-File-Metadata"]
-	if !ok {
-		mf.logger.Debugf("Skyfile doesn't have metadata: %s. Headers: %v", sl.Skylink, res.Header)
-		return
-	}
+	bodyBytes, err := ioutil.ReadAll(res.Body)
 	var meta struct {
 		Filename string `json:"filename"`
 		Length   int64  `json:"length"`
 	}
-	err = json.Unmarshal([]byte(mhs[0]), &meta)
+	err = json.Unmarshal(bodyBytes, &meta)
 	if err != nil {
 		mf.logger.Debugf("Failed to parse skyfile metadata: %s", err)
 		return
