@@ -63,7 +63,7 @@ var (
 		TierFree: {
 			UploadBandwidth:   10 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
-			MaxUploadSize:     1 * skynet.GiB,
+			MaxUploadSize:     100 * skynet.GiB,
 			MaxNumberUploads:  0.1 * filesAllowedPerTB,
 			RegistryDelay:     125,
 			Storage:           100 * skynet.GiB,
@@ -71,7 +71,7 @@ var (
 		TierPremium5: {
 			UploadBandwidth:   20 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 80 * mbpsToBytesPerSecond,
-			MaxUploadSize:     1 * skynet.GiB,
+			MaxUploadSize:     100 * skynet.GiB,
 			MaxNumberUploads:  1 * filesAllowedPerTB,
 			RegistryDelay:     0,
 			Storage:           1 * skynet.TiB,
@@ -79,7 +79,7 @@ var (
 		TierPremium20: {
 			UploadBandwidth:   40 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 160 * mbpsToBytesPerSecond,
-			MaxUploadSize:     1 * skynet.GiB,
+			MaxUploadSize:     100 * skynet.GiB,
 			MaxNumberUploads:  4 * filesAllowedPerTB,
 			RegistryDelay:     0,
 			Storage:           4 * skynet.TiB,
@@ -87,7 +87,7 @@ var (
 		TierPremium80: {
 			UploadBandwidth:   80 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 320 * mbpsToBytesPerSecond,
-			MaxUploadSize:     1 * skynet.GiB,
+			MaxUploadSize:     100 * skynet.GiB,
 			MaxNumberUploads:  20 * filesAllowedPerTB,
 			RegistryDelay:     0,
 			Storage:           20 * skynet.TiB,
