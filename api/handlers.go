@@ -108,8 +108,14 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 
 // userLimitsHandler returns the speed limits which apply for this user.
 func (api *API) userLimitsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	u := api.userFromRequest(req)
-	if u == nil || u.QuotaExceeded {
+	sub, err := api.subFromRequest(req)
+	if err != nil {
+		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+		return
+	}
+	// TODO: If we want to add caching to the /limits endpoint, this is the spot.
+	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	if err != nil || u == nil || u.QuotaExceeded {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 		return
 	}

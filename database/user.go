@@ -141,6 +141,8 @@ type (
 
 // UserBySub returns the user with the given sub. If `create` is `true` it will
 // create the user if it doesn't exist. The sub is the Kratos id of that user.
+// TODO: Add cache here. We're hitting this method waaaay too often and the data doesn't change that much.
+// 	Also make sure **invalidate** that cache whenever needed.
 func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "sub", sub)
 	if create && errors.Contains(err, ErrUserNotFound) {
