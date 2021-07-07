@@ -27,6 +27,16 @@ func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httpro
 	api.WriteJSON(w, status)
 }
 
+// limitsHandler returns the speed limits of this portal.
+func (api *API) limitsHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	resp := struct {
+		UserLimits map[int]database.TierLimits `json:"userLimits"`
+	}{
+		UserLimits: database.UserLimits,
+	}
+	api.WriteJSON(w, resp)
+}
+
 // loginHandler starts a user session by issuing a cookie
 func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	tokenStr, err := tokenFromRequest(req)
@@ -106,7 +116,7 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 	api.WriteJSON(w, u)
 }
 
-// userLimitsHandler returns the speed limits which apply for this user.
+// userLimitsHandler returns the speed limits which apply to this user.
 func (api *API) userLimitsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, err := api.subFromRequest(req)
 	if err != nil {

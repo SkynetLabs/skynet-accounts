@@ -16,6 +16,8 @@ import (
 func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/health", api.noValidate(api.healthHandler))
 
+	api.staticRouter.GET("/limits", api.noValidate(api.limitsHandler))
+
 	api.staticRouter.POST("/login", api.noValidate(api.loginHandler))
 	api.staticRouter.POST("/logout", api.validate(api.logoutHandler))
 

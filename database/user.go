@@ -53,6 +53,7 @@ var (
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
 		TierAnonymous: {
+			TierName:          "anonymous",
 			UploadBandwidth:   5 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 20 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.GiB,
@@ -61,6 +62,7 @@ var (
 			Storage:           0,
 		},
 		TierFree: {
+			TierName:          "free",
 			UploadBandwidth:   10 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
 			MaxUploadSize:     100 * skynet.GiB,
@@ -69,6 +71,7 @@ var (
 			Storage:           100 * skynet.GiB,
 		},
 		TierPremium5: {
+			TierName:          "plus",
 			UploadBandwidth:   20 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 80 * mbpsToBytesPerSecond,
 			MaxUploadSize:     100 * skynet.GiB,
@@ -77,6 +80,7 @@ var (
 			Storage:           1 * skynet.TiB,
 		},
 		TierPremium20: {
+			TierName:          "pro",
 			UploadBandwidth:   40 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 160 * mbpsToBytesPerSecond,
 			MaxUploadSize:     100 * skynet.GiB,
@@ -85,6 +89,7 @@ var (
 			Storage:           4 * skynet.TiB,
 		},
 		TierPremium80: {
+			TierName:          "extreme",
 			UploadBandwidth:   80 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 320 * mbpsToBytesPerSecond,
 			MaxUploadSize:     100 * skynet.GiB,
@@ -130,12 +135,13 @@ type (
 	// TierLimits defines the speed limits imposed on the user based on their
 	// tier.
 	TierLimits struct {
-		UploadBandwidth   int   `json:"upload"`        // bytes per second
-		DownloadBandwidth int   `json:"download"`      // bytes per second
-		MaxUploadSize     int64 `json:"maxUploadSize"` // the max size of a single upload in bytes
-		MaxNumberUploads  int   `json:"-"`
-		RegistryDelay     int   `json:"registry"` // ms delay
-		Storage           int64 `json:"-"`
+		TierName          string `json:"tierName"`
+		UploadBandwidth   int    `json:"upload"`        // bytes per second
+		DownloadBandwidth int    `json:"download"`      // bytes per second
+		MaxUploadSize     int64  `json:"maxUploadSize"` // the max size of a single upload in bytes
+		MaxNumberUploads  int    `json:"-"`
+		RegistryDelay     int    `json:"registry"` // ms delay
+		Storage           int64  `json:"-"`
 	}
 )
 
