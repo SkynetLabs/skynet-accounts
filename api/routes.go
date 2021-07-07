@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 
 	jwt2 "github.com/dgrijalva/jwt-go"
@@ -79,27 +80,6 @@ func (api *API) logRequest(r *http.Request) {
 	api.staticLogger.Tracef("Processing request: %v %v, Auth: %v, Skynet Cookie: %v, Referer: %v, Host: %v, RemoreAddr: %v", r.Method, r.URL, hasAuth, hasCookie, r.Referer(), r.Host, r.RemoteAddr)
 }
 
-// subFromRequest returns a user's sub based on the JWT within the request.
-// This method does not read from the DB or any other external sources.
-func (api *API) subFromRequest(r *http.Request) (string, error) {
-	t, err := tokenFromRequest(r)
-	if err != nil {
-		return "", err
-	}
-	token, err := jwt.ValidateToken(api.staticLogger, t)
-	if err != nil {
-		return "", err
-	}
-	if reflect.ValueOf(token.Claims).Kind() != reflect.ValueOf(jwt2.MapClaims{}).Kind() {
-		return "", err
-	}
-	claims := token.Claims.(jwt2.MapClaims)
-	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
-		return "", err
-	}
-	return claims["sub"].(string), nil
-}
-
 // tokenFromRequest extracts the JWT token from the request and returns it.
 // It first checks the request headers and then the cookies.
 func tokenFromRequest(r *http.Request) (string, error) {
@@ -123,4 +103,29 @@ func tokenFromRequest(r *http.Request) (string, error) {
 		return "", err
 	}
 	return value, nil
+}
+
+// userFromRequest returns a user object based on the JWT within the request.
+// Note that this method does not rely on a token being stored in the context.
+func (api *API) userFromRequest(r *http.Request) *database.User {
+	t, err := tokenFromRequest(r)
+	if err != nil {
+		return nil
+	}
+	token, err := jwt.ValidateToken(api.staticLogger, t)
+	if err != nil {
+		return nil
+	}
+	if reflect.ValueOf(token.Claims).Kind() != reflect.ValueOf(jwt2.MapClaims{}).Kind() {
+		return nil
+	}
+	claims := token.Claims.(jwt2.MapClaims)
+	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
+		return nil
+	}
+	u, err := api.staticDB.UserBySub(r.Context(), claims["sub"].(string), false)
+	if err != nil {
+		return nil
+	}
+	return u
 }
