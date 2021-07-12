@@ -18,6 +18,11 @@ import (
 )
 
 type (
+	// LimitsPublic provides public information of the various limits this
+	// portal has.
+	LimitsPublic struct {
+		UserLimits []TierLimitsPublic `json:"userLimits"`
+	}
 	// TierLimitsPublic is a DTO specifically designed to inform the public
 	// about the different limits of each account tier.
 	TierLimitsPublic struct {
@@ -55,9 +60,7 @@ func (api *API) limitsHandler(w http.ResponseWriter, _ *http.Request, _ httprout
 			Storage:           t.Storage,
 		}
 	}
-	resp := struct {
-		UserLimits []TierLimitsPublic `json:"userLimits"`
-	}{
+	resp := LimitsPublic{
 		UserLimits: ul,
 	}
 	api.WriteJSON(w, resp)
