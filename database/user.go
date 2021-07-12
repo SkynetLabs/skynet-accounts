@@ -143,6 +143,17 @@ type (
 		RegistryDelay     int    `json:"registry"` // ms delay
 		Storage           int64  `json:"-"`
 	}
+	// TierLimitsPublic is a DTO specifically designed to inform the public
+	// about the different limits of each account tier.
+	TierLimitsPublic struct {
+		TierName          string `json:"tierName"`
+		UploadBandwidth   int    `json:"uploadBandwidth"`   // bits per second
+		DownloadBandwidth int    `json:"downloadBandwidth"` // bits per second
+		MaxUploadSize     int64  `json:"maxUploadSize"`     // the max size of a single upload in bytes
+		MaxNumberUploads  int    `json:"maxNumberUploads"`
+		RegistryDelay     int    `json:"registryDelay"` // ms
+		Storage           int64  `json:"storageLimit"`
+	}
 )
 
 // UserBySub returns the user with the given sub. If `create` is `true` it will

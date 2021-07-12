@@ -29,10 +29,22 @@ func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httpro
 
 // limitsHandler returns the speed limits of this portal.
 func (api *API) limitsHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	ul := make(map[int]database.TierLimitsPublic)
+	for i, t := range database.UserLimits {
+		ul[i] = database.TierLimitsPublic{
+			TierName:          t.TierName,
+			UploadBandwidth:   t.UploadBandwidth * 8,   // convert from bytes
+			DownloadBandwidth: t.DownloadBandwidth * 8, // convert from bytes
+			MaxUploadSize:     t.MaxUploadSize,
+			MaxNumberUploads:  t.MaxNumberUploads,
+			RegistryDelay:     t.RegistryDelay,
+			Storage:           t.Storage,
+		}
+	}
 	resp := struct {
-		UserLimits map[int]database.TierLimits `json:"userLimits"`
+		UserLimits map[int]database.TierLimitsPublic `json:"userLimits"`
 	}{
-		UserLimits: database.UserLimits,
+		UserLimits: ul,
 	}
 	api.WriteJSON(w, resp)
 }
