@@ -17,6 +17,25 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
+type (
+	// LimitsPublic provides public information of the various limits this
+	// portal has.
+	LimitsPublic struct {
+		UserLimits []TierLimitsPublic `json:"userLimits"`
+	}
+	// TierLimitsPublic is a DTO specifically designed to inform the public
+	// about the different limits of each account tier.
+	TierLimitsPublic struct {
+		TierName          string `json:"tierName"`
+		UploadBandwidth   int    `json:"uploadBandwidth"`   // bits per second
+		DownloadBandwidth int    `json:"downloadBandwidth"` // bits per second
+		MaxUploadSize     int64  `json:"maxUploadSize"`     // the max size of a single upload in bytes
+		MaxNumberUploads  int    `json:"maxNumberUploads"`
+		RegistryDelay     int    `json:"registryDelay"` // ms
+		Storage           int64  `json:"storageLimit"`
+	}
+)
+
 // healthHandler returns the status of the service
 func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	status := struct {
@@ -25,6 +44,26 @@ func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httpro
 	err := api.staticDB.Ping(req.Context())
 	status.DBAlive = err == nil
 	api.WriteJSON(w, status)
+}
+
+// limitsHandler returns the speed limits of this portal.
+func (api *API) limitsHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	ul := make([]TierLimitsPublic, len(database.UserLimits))
+	for i, t := range database.UserLimits {
+		ul[i] = TierLimitsPublic{
+			TierName:          t.TierName,
+			UploadBandwidth:   t.UploadBandwidth * 8,   // convert from bytes
+			DownloadBandwidth: t.DownloadBandwidth * 8, // convert from bytes
+			MaxUploadSize:     t.MaxUploadSize,
+			MaxNumberUploads:  t.MaxNumberUploads,
+			RegistryDelay:     t.RegistryDelay,
+			Storage:           t.Storage,
+		}
+	}
+	resp := LimitsPublic{
+		UserLimits: ul,
+	}
+	api.WriteJSON(w, resp)
 }
 
 // loginHandler starts a user session by issuing a cookie
@@ -106,7 +145,7 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 	api.WriteJSON(w, u)
 }
 
-// userLimitsHandler returns the speed limits which apply for this user.
+// userLimitsHandler returns the speed limits which apply to this user.
 func (api *API) userLimitsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	u := api.userFromRequest(req)
 	if u == nil || u.QuotaExceeded {
