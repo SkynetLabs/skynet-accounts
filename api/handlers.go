@@ -17,6 +17,20 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
+type (
+	// TierLimitsPublic is a DTO specifically designed to inform the public
+	// about the different limits of each account tier.
+	TierLimitsPublic struct {
+		TierName          string `json:"tierName"`
+		UploadBandwidth   int    `json:"uploadBandwidth"`   // bits per second
+		DownloadBandwidth int    `json:"downloadBandwidth"` // bits per second
+		MaxUploadSize     int64  `json:"maxUploadSize"`     // the max size of a single upload in bytes
+		MaxNumberUploads  int    `json:"maxNumberUploads"`
+		RegistryDelay     int    `json:"registryDelay"` // ms
+		Storage           int64  `json:"storageLimit"`
+	}
+)
+
 // healthHandler returns the status of the service
 func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	status := struct {
@@ -29,9 +43,9 @@ func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httpro
 
 // limitsHandler returns the speed limits of this portal.
 func (api *API) limitsHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	ul := make(map[int]database.TierLimitsPublic)
+	ul := make([]TierLimitsPublic, len(database.UserLimits))
 	for i, t := range database.UserLimits {
-		ul[i] = database.TierLimitsPublic{
+		ul[i] = TierLimitsPublic{
 			TierName:          t.TierName,
 			UploadBandwidth:   t.UploadBandwidth * 8,   // convert from bytes
 			DownloadBandwidth: t.DownloadBandwidth * 8, // convert from bytes
@@ -42,7 +56,7 @@ func (api *API) limitsHandler(w http.ResponseWriter, _ *http.Request, _ httprout
 		}
 	}
 	resp := struct {
-		UserLimits map[int]database.TierLimitsPublic `json:"userLimits"`
+		UserLimits []TierLimitsPublic `json:"userLimits"`
 	}{
 		UserLimits: ul,
 	}
