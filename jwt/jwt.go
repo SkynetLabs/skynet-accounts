@@ -139,7 +139,7 @@ func TokenFromContext(ctx context.Context) (sub string, claims jwt.MapClaims, to
 
 // UserDetailsFromJWT extracts the user details from the JWT token embedded in
 // the context. We do it that way, so we can call this from anywhere in the code.
-func UserDetailsFromJWT(ctx context.Context) (firstName, lastName, email string, err error) {
+func UserDetailsFromJWT(ctx context.Context) (email string, err error) {
 	if ctx == nil {
 		err = errors.New("Invalid context")
 		return
@@ -169,14 +169,7 @@ func UserDetailsFromJWT(ctx context.Context) (firstName, lastName, email string,
 		err = errors.New("the token does not contain the names we expect")
 		return
 	}
-	name := tr["name"].(map[string]interface{})
-	if reflect.ValueOf(tr["email"]).Kind() != reflect.String {
-		err = errors.New("the token does not contain the email we expect")
-		return
-	}
 	email = tr["email"].(string)
-	firstName = name["first"].(string)
-	lastName = name["last"].(string)
 	return
 }
 

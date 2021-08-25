@@ -29,7 +29,7 @@ func TestDatabase_UserBySub(t *testing.T) {
 	}
 
 	// Add a user to find.
-	u, err := db.UserCreate(ctx, sub, database.TierPremium5)
+	u, err := db.UserCreate(ctx, "email@example.com", "", sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestDatabase_UserByID(t *testing.T) {
 
 	// Add a user to find.
 	sub := "695725d4-a345-4e68-919a-7395cb68484c"
-	u, err := db.UserCreate(ctx, sub, database.TierFree)
+	u, err := db.UserCreate(ctx, "email@example.com", "", sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestDatabase_UserSave(t *testing.T) {
 	}
 
 	sub := "695725d4-a345-4e68-919a-7395cb68484c"
-	u, err := db.UserCreate(ctx, sub, database.TierFree)
+	u, err := db.UserCreate(ctx, "email@example.com", "", sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestDatabase_UserDelete(t *testing.T) {
 
 	sub := "695725d4-a345-4e68-919a-7395cb68484c"
 	// Add a user to delete.
-	u, err := db.UserCreate(ctx, sub, database.TierFree)
+	u, err := db.UserCreate(ctx, "email@example.com", "", sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}

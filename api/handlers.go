@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
-
 	"github.com/julienschmidt/httprouter"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -68,6 +69,41 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	err := req.ParseForm()
+	if err != nil {
+		api.staticLogger.Log(logrus.WarnLevel, "Error parsing POST form:", err)
+	}
+	email := req.PostForm.Get("email")
+	pass := req.PostFormValue("password")
+	if email != "" && pass != "" {
+		api.loginPOSTCredentials(w, req, email, pass)
+		return
+	}
+	api.loginPOSTToken(w, req)
+}
+
+// loginPOSTCredentials is a helper that handles logins with credentials.
+func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
+	// Fetch the user with that email, if they exist.
+	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
+	if err != nil {
+		api.staticLogger.Tracef("Error fetching a user with email '%s': %+v\n", email, err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	// Check if the password matches.
+	err = hash.Compare([]byte(password), []byte(u.PasswordHash))
+	if err != nil {
+		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
+		return
+	}
+	// TODO generate a token
+	// TODO write a cookie
+}
+
+// loginPOSTToken is a helper that handles logins via a token attached to the
+// request.
+func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -129,13 +165,11 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// We only do it here, instead of baking this into UserBySub because we only
 	// care about this information being correct when we're going to present it
 	// to the user, e.g. on the Dashboard.
-	fName, lName, email, err := jwt.UserDetailsFromJWT(req.Context())
+	email, err := jwt.UserDetailsFromJWT(req.Context())
 	if err != nil {
 		api.staticLogger.Debugln("Failed to get user details from JWT:", err)
 	}
-	if err == nil && (fName != u.FirstName || lName != u.LastName || email != u.Email) {
-		u.FirstName = fName
-		u.LastName = lName
+	if err == nil && email != u.Email {
 		u.Email = email
 		err = api.staticDB.UserSave(req.Context(), u)
 		if err != nil {

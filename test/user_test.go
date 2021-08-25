@@ -20,11 +20,9 @@ func TestUserSave(t *testing.T) {
 
 	// Case: save a user that doesn't exist in the DB.
 	u := &database.User{
-		FirstName: "John",
-		LastName:  "Doe",
-		Email:     "john.doe@siasky.net",
-		Sub:       t.Name() + "sub",
-		Tier:      1,
+		Email: "john.doe@siasky.net",
+		Sub:   t.Name() + "sub",
+		Tier:  1,
 	}
 	err = db.UserSave(ctx, u)
 	if err != nil {
@@ -38,7 +36,7 @@ func TestUserSave(t *testing.T) {
 		t.Fatalf("Expected user id %s, got %s.", u.ID.Hex(), u1.ID.Hex())
 	}
 	// Case: save a user that does exist in the DB.
-	u.FirstName = "New first name"
+	u.Email = "new@email.com"
 	err = db.UserSave(ctx, u)
 	if err != nil {
 		t.Fatal(err)
@@ -47,8 +45,8 @@ func TestUserSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u1.FirstName != u.FirstName {
-		t.Fatalf("Expected first name '%s', got '%s'.", u.FirstName, u1.FirstName)
+	if u1.Email != u.Email {
+		t.Fatalf("Expected first name '%s', got '%s'.", u.Email, u1.Email)
 	}
 }
 
@@ -62,7 +60,7 @@ func TestUserStats(t *testing.T) {
 
 	// Add a test user.
 	sub := string(fastrand.Bytes(userSubLen))
-	u, err := db.UserCreate(ctx, sub, database.TierPremium5)
+	u, err := db.UserCreate(ctx, "user@example.com", "", sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
 	}

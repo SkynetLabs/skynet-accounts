@@ -37,7 +37,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	testUploadSize := int64(1 + fastrand.Intn(1e10))
 	// Add a test user.
 	sub := string(fastrand.Bytes(userSubLen))
-	u, err := db.UserCreate(ctx, sub, database.TierPremium5)
+	u, err := db.UserCreate(ctx, "email@example.com", "", sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestUpload_UnpinUploads(t *testing.T) {
 	testUploadSize := int64(1 + fastrand.Intn(1e10))
 	// Add two test users.
 	sub1 := string(fastrand.Bytes(userSubLen))
-	u1, err := db.UserCreate(ctx, sub1, database.TierPremium5)
+	u1, err := db.UserCreate(ctx, "email1@example.com", "", sub1, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestUpload_UnpinUploads(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u1)
 	sub2 := string(fastrand.Bytes(userSubLen))
-	u2, err := db.UserCreate(ctx, sub2, database.TierPremium5)
+	u2, err := db.UserCreate(ctx, "email2@example.com", "", sub2, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
 	}
