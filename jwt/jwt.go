@@ -14,6 +14,14 @@ import (
 )
 
 var (
+	// accountsPubKeys is the public RS key used by accounts for JWT
+	// validation.
+	accountsPubKeys *jwk.Set = nil
+
+	// accountsPubKeysFile specifies the file from which to read the JWKS key
+	// used for signing JWT tokens.
+	accountsPubKeysFile = "/accounts/conf/jwks.json"
+
 	// oathkeeperPubKeys is the public RS key exposed by Oathkeeper for JWT
 	// validation. It's available at oathkeeperPubKeyURL.
 	oathkeeperPubKeys *jwk.Set = nil
@@ -179,15 +187,15 @@ func UserDetailsFromJWT(ctx context.Context) (firstName, lastName, email string,
 //
 // Header:
 //
-//{
+// {
 //  "alg": "RS256",
 //  "kid": "a2aa9739-d753-4a0d-87ee-61f101050277",
 //  "typ": "JWT"
-//}
+// }
 //
 // Payload:
 //
-//{
+// {
 //  "exp": 1607594172,
 //  "iat": 1607593272,
 //  "iss": "https://siasky.net/",
@@ -230,25 +238,54 @@ func UserDetailsFromJWT(ctx context.Context) (firstName, lastName, email string,
 //    "issued_at": "2020-12-09T16:09:35.004042Z"
 //  },
 //  "sub": "695725d4-a345-4e68-919a-7395cb68484c"
-//}
+// }
 func ValidateToken(logger *logrus.Logger, t string) (*jwt.Token, error) {
-	keyForTokenWithLogger := func(token *jwt.Token) (interface{}, error) {
-		return keyForToken(logger, token)
+	// try to parse the token as an accounts token
+	keyForAccountsTokenWithLogger := func(token *jwt.Token) (interface{}, error) {
+		return keyForAccountsToken(logger, token)
 	}
-	token, err := jwt.Parse(t, keyForTokenWithLogger)
+	token, err := jwt.Parse(t, keyForAccountsTokenWithLogger)
+	if err == nil && token.Valid {
+		return token, nil
+	}
+
+	// try to parse the token as an oathkeeper token
+	keyForOathkeeperTokenWithLogger := func(token *jwt.Token) (interface{}, error) {
+		return keyForOathkeeperToken(logger, token)
+	}
+	token, err = jwt.Parse(t, keyForOathkeeperTokenWithLogger)
 	if err != nil {
 		return nil, err
 	}
 	if !token.Valid {
 		return nil, errors.New("token is invalid")
 	}
-	// TODO Verify issuer, scope, etc.?
 	return token, nil
 }
 
-// keyForToken finds a suitable key for validating the
+// keyForOathkeeperToken finds a suitable key for validating the
 // given token among the public keys provided by Oathkeeper.
-func keyForToken(logger *logrus.Logger, token *jwt.Token) (interface{}, error) {
+func keyForAccountsToken(logger *logrus.Logger, token *jwt.Token) (interface{}, error) {
+	if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+		return nil, errors.New(fmt.Sprintf("unexpected signing method: %v", token.Header["alg"]))
+	}
+	keySet, err := accountsPublicKeys(logger)
+	if err != nil {
+		return nil, err
+	}
+	if reflect.ValueOf(token.Header["kid"]).Kind() != reflect.String {
+		return nil, errors.New("invalid jwk header - the kid field is not a string")
+	}
+	keys := keySet.LookupKeyID(token.Header["kid"].(string))
+	if len(keys) == 0 {
+		return nil, errors.New("no suitable keys found")
+	}
+	return keys[0].Materialize()
+}
+
+// keyForOathkeeperToken finds a suitable key for validating the
+// given token among the public keys provided by Oathkeeper.
+func keyForOathkeeperToken(logger *logrus.Logger, token *jwt.Token) (interface{}, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 		return nil, errors.New(fmt.Sprintf("unexpected signing method: %v", token.Header["alg"]))
 	}
@@ -264,6 +301,33 @@ func keyForToken(logger *logrus.Logger, token *jwt.Token) (interface{}, error) {
 		return nil, errors.New("no suitable keys found")
 	}
 	return keys[0].Materialize()
+}
+
+// accountsPublicKeys checks whether we have the
+// needed public key cached and if we don't it fetches it and caches it for us.
+//
+// See https://tools.ietf.org/html/rfc7517
+// See https://auth0.com/blog/navigating-rs256-and-jwks/
+// See http://self-issued.info/docs/draft-ietf-oauth-json-web-token.html
+// Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
+func accountsPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
+	if accountsPubKeys == nil {
+		b, err := ioutil.ReadFile("./jwks.json") // DEBUG
+		// b, err := ioutil.ReadFile(accountsPubKeysFile)
+		if err != nil {
+			logger.Warningln("ERROR while reading accounts JWKS", err)
+			return nil, err
+		}
+		var set *jwk.Set
+		set, err = jwk.ParseString(string(b))
+		if err != nil {
+			logger.Warningln("ERROR while parsing accounts JWKS", err)
+			logger.Warningln("JWKS string:", string(b))
+			return nil, err
+		}
+		accountsPubKeys = set
+	}
+	return accountsPubKeys, nil
 }
 
 // oathkeeperPublicKeys checks whether we have the
