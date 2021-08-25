@@ -36,8 +36,8 @@ type (
 	}
 )
 
-// healthHandler returns the status of the service
-func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// healthGET returns the status of the service
+func (api *API) healthGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	status := struct {
 		DBAlive bool `json:"dbAlive"`
 	}{}
@@ -46,8 +46,8 @@ func (api *API) healthHandler(w http.ResponseWriter, req *http.Request, _ httpro
 	api.WriteJSON(w, status)
 }
 
-// limitsHandler returns the speed limits of this portal.
-func (api *API) limitsHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+// limitsGET returns the speed limits of this portal.
+func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	ul := make([]TierLimitsPublic, len(database.UserLimits))
 	for i, t := range database.UserLimits {
 		ul[i] = TierLimitsPublic{
@@ -66,8 +66,8 @@ func (api *API) limitsHandler(w http.ResponseWriter, _ *http.Request, _ httprout
 	api.WriteJSON(w, resp)
 }
 
-// loginHandler starts a user session by issuing a cookie
-func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// loginPOST starts a user session by issuing a cookie
+func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -95,8 +95,8 @@ func (api *API) loginHandler(w http.ResponseWriter, req *http.Request, _ httprou
 	api.WriteSuccess(w)
 }
 
-// logoutHandler ends a user session by removing a cookie
-func (api *API) logoutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// logoutPOST ends a user session by removing a cookie
+func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	_, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from context:", err)
@@ -112,9 +112,9 @@ func (api *API) logoutHandler(w http.ResponseWriter, req *http.Request, _ httpro
 	api.WriteSuccess(w)
 }
 
-// userHandler returns information about an existing user and create it if it
+// userGET returns information about an existing user and create it if it
 // doesn't exist.
-func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -145,8 +145,8 @@ func (api *API) userHandler(w http.ResponseWriter, req *http.Request, _ httprout
 	api.WriteJSON(w, u)
 }
 
-// userLimitsHandler returns the speed limits which apply to this user.
-func (api *API) userLimitsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// userLimitsGET returns the speed limits which apply to this user.
+func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	u := api.userFromRequest(req)
 	if u == nil || u.QuotaExceeded {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
@@ -155,8 +155,8 @@ func (api *API) userLimitsHandler(w http.ResponseWriter, req *http.Request, _ ht
 	api.WriteJSON(w, database.UserLimits[u.Tier])
 }
 
-// userStatsHandler returns statistics about an existing user.
-func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// userStatsGET returns statistics about an existing user.
+func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -179,8 +179,8 @@ func (api *API) userStatsHandler(w http.ResponseWriter, req *http.Request, _ htt
 	api.WriteJSON(w, us)
 }
 
-// userPutHandler allows changing some user information.
-func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// userPUT allows changing some user information.
+func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -252,8 +252,8 @@ func (api *API) userPutHandler(w http.ResponseWriter, req *http.Request, _ httpr
 	api.WriteJSON(w, u)
 }
 
-// userUploadsHandler returns all uploads made by the current user.
-func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// userUploadsGET returns all uploads made by the current user.
+func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -288,8 +288,8 @@ func (api *API) userUploadsHandler(w http.ResponseWriter, req *http.Request, _ h
 	api.WriteJSON(w, response)
 }
 
-// userUploadDeleteHandler unpins a single upload by this user.
-func (api *API) userUploadDeleteHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+// userUploadDELETE unpins a single upload by this user.
+func (api *API) userUploadDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -318,8 +318,8 @@ func (api *API) userUploadDeleteHandler(w http.ResponseWriter, req *http.Request
 	go api.checkUserQuotas(context.Background(), u)
 }
 
-// userDownloadsHandler returns all downloads made by the current user.
-func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// userDownloadsGET returns all downloads made by the current user.
+func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -354,8 +354,8 @@ func (api *API) userDownloadsHandler(w http.ResponseWriter, req *http.Request, _
 	api.WriteJSON(w, response)
 }
 
-// trackUploadHandler registers a new upload in the system.
-func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+// trackUploadPOST registers a new upload in the system.
+func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -402,8 +402,8 @@ func (api *API) trackUploadHandler(w http.ResponseWriter, req *http.Request, ps 
 	go api.checkUserQuotas(context.Background(), u)
 }
 
-// trackDownloadHandler registers a new download in the system.
-func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+// trackDownloadPOST registers a new download in the system.
+func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -466,8 +466,8 @@ func (api *API) trackDownloadHandler(w http.ResponseWriter, req *http.Request, p
 	api.WriteSuccess(w)
 }
 
-// trackRegistryReadHandler registers a new registry read in the system.
-func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// trackRegistryReadPOST registers a new registry read in the system.
+func (api *API) trackRegistryReadPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -486,8 +486,8 @@ func (api *API) trackRegistryReadHandler(w http.ResponseWriter, req *http.Reques
 	api.WriteSuccess(w)
 }
 
-// trackRegistryWriteHandler registers a new registry write in the system.
-func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// trackRegistryWritePOST registers a new registry write in the system.
+func (api *API) trackRegistryWritePOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -506,8 +506,8 @@ func (api *API) trackRegistryWriteHandler(w http.ResponseWriter, req *http.Reque
 	api.WriteSuccess(w)
 }
 
-// skylinkDeleteHandler unpins all uploads of a skylink uploaded by the user.
-func (api *API) skylinkDeleteHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+// skylinkDELETE unpins all uploads of a skylink uploaded by the user.
+func (api *API) skylinkDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
