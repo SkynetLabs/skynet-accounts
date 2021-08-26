@@ -20,7 +20,7 @@ var (
 	// This is the configuration of the argon2id hasher. For the moment we'll
 	// use the setup we had with Kratos. Later on we can move this to a config.
 
-	config = hashConf{
+	config = argon2Config{
 		SaltLength:  16,
 		Iterations:  2,
 		Memory:      131072,
@@ -29,7 +29,7 @@ var (
 	}
 )
 
-type hashConf struct {
+type argon2Config struct {
 	SaltLength  uint32
 	Iterations  uint32
 	Memory      uint32
@@ -79,7 +79,7 @@ func Compare(password []byte, hash []byte) error {
 
 // decodeHash is a helper method which extracts the configuration from the
 // encoded hash string and returns its parts.
-func decodeHash(encodedHash string) (cf *hashConf, salt, hash []byte, err error) {
+func decodeHash(encodedHash string) (cf *argon2Config, salt, hash []byte, err error) {
 	// {"hashed_password":"$argon2id$v=19$m=131072,t=2,p=1$dwr95pEjaa7emZOu9bDAWw$eDQwOMoSyRmzyvpD/wwGBg"}
 	parts := strings.Split(encodedHash, "$")
 	if len(parts) != 6 {

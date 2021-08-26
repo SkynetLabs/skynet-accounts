@@ -2,13 +2,14 @@ package jwt
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"reflect"
 
-	"github.com/dgrijalva/jwt-go"
-	"github.com/lestrrat/go-jwx/jwk"
+	"github.com/golang-jwt/jwt/v4"
+	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -139,7 +140,7 @@ func TokenFromContext(ctx context.Context) (sub string, claims jwt.MapClaims, to
 
 // UserDetailsFromJWT extracts the user details from the JWT token embedded in
 // the context. We do it that way, so we can call this from anywhere in the code.
-func UserDetailsFromJWT(ctx context.Context) (email string, err error) {
+func UserDetailsFromJWT(ctx context.Context) (sub, email string, err error) {
 	if ctx == nil {
 		err = errors.New("Invalid context")
 		return
@@ -148,6 +149,11 @@ func UserDetailsFromJWT(ctx context.Context) (email string, err error) {
 	if err != nil {
 		return
 	}
+	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
+		err = errors.New("the token does not contain the sub we expect")
+		return
+	}
+	sub = claims["sub"].(string)
 	// Validate the chain of inset maps claims->session->identity->traits->name
 	// and then extract the data we need.
 	if reflect.ValueOf(claims["session"]).Kind() != reflect.Map {
@@ -194,10 +200,12 @@ func UserDetailsFromJWT(ctx context.Context) (email string, err error) {
 //  "iss": "https://siasky.net/",
 //  "jti": "1e5872ae-71d8-49ec-a550-4fc6163cbbf2",
 //  "nbf": 1607593272,
+//  "sub": "695725d4-a345-4e68-919a-7395cb68484c"
 //  "session": {
 //    "active": true,
 //    "authenticated_at": "2020-12-09T16:09:35.004003Z",
 //    "expires_at": "2020-12-10T16:09:35.004003Z",
+//    "issued_at": "2020-12-09T16:09:35.004042Z"
 //    "id": "9911ad26-e47f-4ec4-86a1-fbbc7fd5073e",
 //    "identity": {
 //      "id": "695725d4-a345-4e68-919a-7395cb68484c",
@@ -228,9 +236,7 @@ func UserDetailsFromJWT(ctx context.Context) (email string, err error) {
 //        }
 //      ]
 //    },
-//    "issued_at": "2020-12-09T16:09:35.004042Z"
 //  },
-//  "sub": "695725d4-a345-4e68-919a-7395cb68484c"
 // }
 func ValidateToken(logger *logrus.Logger, t string) (*jwt.Token, error) {
 	// try to parse the token as an accounts token
@@ -269,11 +275,11 @@ func keyForAccountsToken(logger *logrus.Logger, token *jwt.Token) (interface{}, 
 	if reflect.ValueOf(token.Header["kid"]).Kind() != reflect.String {
 		return nil, errors.New("invalid jwk header - the kid field is not a string")
 	}
-	keys := keySet.LookupKeyID(token.Header["kid"].(string))
-	if len(keys) == 0 {
+	key, found := (*keySet).LookupKeyID(token.Header["kid"].(string))
+	if !found {
 		return nil, errors.New("no suitable keys found")
 	}
-	return keys[0].Materialize()
+	return key, nil
 }
 
 // keyForOathkeeperToken finds a suitable key for validating the
@@ -289,11 +295,11 @@ func keyForOathkeeperToken(logger *logrus.Logger, token *jwt.Token) (interface{}
 	if reflect.ValueOf(token.Header["kid"]).Kind() != reflect.String {
 		return nil, errors.New("invalid jwk header - the kid field is not a string")
 	}
-	keys := keySet.LookupKeyID(token.Header["kid"].(string))
-	if len(keys) == 0 {
+	key, found := (*keySet).LookupKeyID(token.Header["kid"].(string))
+	if !found {
 		return nil, errors.New("no suitable keys found")
 	}
-	return keys[0].Materialize()
+	return key, nil
 }
 
 // accountsPublicKeys checks whether we have the
@@ -311,14 +317,14 @@ func accountsPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
 			logger.Warningln("ERROR while reading accounts JWKS", err)
 			return nil, err
 		}
-		var set *jwk.Set
-		set, err = jwk.ParseString(string(b))
+		set := jwk.NewSet()
+		err = json.Unmarshal(b, &set)
 		if err != nil {
 			logger.Warningln("ERROR while parsing accounts JWKS", err)
 			logger.Warningln("JWKS string:", string(b))
 			return nil, err
 		}
-		accountsPubKeys = set
+		accountsPubKeys = &set
 	}
 	return accountsPubKeys, nil
 }
@@ -346,14 +352,14 @@ func oathkeeperPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
 			logger.Warningln("ERROR while reading JWKS from oathkeeper", err)
 			return nil, err
 		}
-		var set *jwk.Set
-		set, err = jwk.ParseString(string(b))
+		set := jwk.NewSet()
+		err = json.Unmarshal(b, &set)
 		if err != nil {
 			logger.Warningln("ERROR while parsing JWKS from oathkeeper", err)
 			logger.Warningln("JWKS string:", string(b))
 			return nil, err
 		}
-		oathkeeperPubKeys = set
+		oathkeeperPubKeys = &set
 	}
 	return oathkeeperPubKeys, nil
 }

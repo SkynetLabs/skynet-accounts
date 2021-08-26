@@ -153,7 +153,7 @@ func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, er
 	users, err := db.managedUsersByField(ctx, "sub", sub)
 	if create && errors.Contains(err, ErrUserNotFound) {
 		var u *User
-		email, err := jwt.UserDetailsFromJWT(ctx)
+		_, email, err := jwt.UserDetailsFromJWT(ctx)
 		if err != nil {
 			// Log the error but don't do anything differently.
 			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())

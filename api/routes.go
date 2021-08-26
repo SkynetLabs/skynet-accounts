@@ -8,7 +8,7 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 
-	jwt2 "github.com/dgrijalva/jwt-go"
+	jwt2 "github.com/golang-jwt/jwt/v4"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
