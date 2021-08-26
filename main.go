@@ -78,6 +78,7 @@ func main() {
 	portal, ok := os.LookupEnv(envPortal)
 	if !ok {
 		portal = defaultPortal
+		jwt.JWTPortalName = portal
 	}
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
