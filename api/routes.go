@@ -37,6 +37,8 @@ func (api *API) buildHTTPRoutes() {
 
 	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookPOST))
 	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesGET))
+
+	api.staticRouter.GET("/.well-known/jwks.json", api.noValidate(api.wellKnownJwksGET))
 }
 
 // noValidate is a pass-through method used for decorating the request and

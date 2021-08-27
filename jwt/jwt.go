@@ -57,7 +57,41 @@ type (
 	tokenTraits struct {
 		Email string `json:"email"`
 	}
+
+	// PublicJWKS represents the public form of a JWKS. It's the same as the
+	// full version but skips the D, P, and Q fields of the keys.
+	PublicJWKS struct {
+		Keys []publicJWK `json:"keys"`
+	}
+	publicJWK struct {
+		Use string `json:"use"`
+		Kty string `json:"kty"`
+		Kid string `json:"kid"`
+		Alg string `json:"alg"`
+		N   string `json:"n"`
+		E   string `json:"e"`
+	}
 )
+
+// AccountsPublicKeySet exposes the public version of the JWKS we use for
+// signing JWTs. This allows anyone to fetch the public key and verify that the
+// tokens they receive are issued by us.
+func AccountsPublicKeySet(logger *logrus.Logger) (*PublicJWKS, error) {
+	ks, err := accountsKeySet(logger)
+	if err != nil {
+		return nil, err
+	}
+	b, err := json.Marshal(ks)
+	if err != nil {
+		return nil, err
+	}
+	var pks PublicJWKS
+	err = json.Unmarshal(b, &pks)
+	if err != nil {
+		return nil, err
+	}
+	return &pks, nil
+}
 
 // ContextWithToken returns a copy of the given context that contains a token.
 func ContextWithToken(ctx context.Context, token *jwt.Token) context.Context {
@@ -332,7 +366,7 @@ func ValidateToken(logger *logrus.Logger, t string) (jwt.Token, error) {
 // Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
 func accountsKeySet(logger *logrus.Logger) (jwk.Set, error) {
 	if accountsJWKS == nil {
-		b, err := ioutil.ReadFile("../jwks.json") // DEBUG
+		b, err := ioutil.ReadFile("jwks.json") // DEBUG
 		// b, err := ioutil.ReadFile(accountsPubKeysFile)
 		if err != nil {
 			logger.Warningln("ERROR while reading accounts JWKS", err)
@@ -347,7 +381,7 @@ func accountsKeySet(logger *logrus.Logger) (jwk.Set, error) {
 		}
 		accountsJWKS = set
 
-		b, err = ioutil.ReadFile("../jwks_pub.json") // DEBUG
+		b, err = ioutil.ReadFile("jwks_pub.json") // DEBUG
 		// b, err := ioutil.ReadFile(accountsPubKeysFile)
 		if err != nil {
 			logger.Warningln("ERROR while reading accounts JWKS PUB", err)

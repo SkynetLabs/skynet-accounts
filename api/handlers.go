@@ -600,6 +600,17 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 	}
 }
 
+// wellKnownJwksGET returns our public JWKS, so people can use that to verify
+// the authenticity of the JWT tokens we issue.
+func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	k, err := jwt.AccountsPublicKeySet(api.staticLogger)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to get the public JWKS"), http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, k)
+}
+
 // fetchOffset extracts the offset from the params and validates its value.
 func fetchOffset(form url.Values) (int, error) {
 	offset, _ := strconv.Atoi(form.Get("offset"))

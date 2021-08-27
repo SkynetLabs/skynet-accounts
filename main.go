@@ -84,9 +84,6 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
 	}
-	if kaddr := os.Getenv(envKratosAddr); kaddr != "" {
-		jwt.KratosAddr = kaddr
-	}
 	if oaddr := os.Getenv(envOathkeeperAddr); oaddr != "" {
 		jwt.OathkeeperAddr = oaddr
 	}
