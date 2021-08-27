@@ -73,6 +73,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	if err != nil {
 		api.staticLogger.Log(logrus.WarnLevel, "Error parsing POST form:", err)
 	}
+	// TODO Check if this is the correct way to fetch POST parameters.
 	email := req.PostForm.Get("email")
 	pass := req.PostFormValue("password")
 	if email != "" && pass != "" {
@@ -97,8 +98,22 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
 		return
 	}
-	// TODO generate a token
-	// TODO write a cookie
+	// Generate a JWT.
+	tk, tkBytes, err := jwt.TokenForUser(api.staticLogger, u.Email, u.Sub)
+	if err != nil {
+		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
+		err = errors.AddContext(err, "failed to create a token for user")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Write the JWT to an encrypted cookie.
+	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
+	if err != nil {
+		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
 }
 
 // loginPOSTToken is a helper that handles logins via a token attached to the

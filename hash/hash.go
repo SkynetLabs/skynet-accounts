@@ -79,8 +79,10 @@ func Compare(password []byte, hash []byte) error {
 
 // decodeHash is a helper method which extracts the configuration from the
 // encoded hash string and returns its parts.
-func decodeHash(encodedHash string) (cf *argon2Config, salt, hash []byte, err error) {
-	// {"hashed_password":"$argon2id$v=19$m=131072,t=2,p=1$dwr95pEjaa7emZOu9bDAWw$eDQwOMoSyRmzyvpD/wwGBg"}
+//
+// Example password record:
+// {"hashed_password":"$argon2id$v=19$m=131072,t=2,p=1$dwr95pEjaa7emZOu9bDAWw$eDQwOMoSyRmzyvpD/wwGBg"}
+func decodeHash(encodedHash string) (ac *argon2Config, salt, hash []byte, err error) {
 	parts := strings.Split(encodedHash, "$")
 	if len(parts) != 6 {
 		return nil, nil, nil, ErrInvalidHash
@@ -95,7 +97,8 @@ func decodeHash(encodedHash string) (cf *argon2Config, salt, hash []byte, err er
 		return nil, nil, nil, ErrIncompatibleVersion
 	}
 
-	_, err = fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &cf.Memory, &cf.Iterations, &cf.Parallelism)
+	ac = &argon2Config{}
+	_, err = fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &ac.Memory, &ac.Iterations, &ac.Parallelism)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -104,13 +107,13 @@ func decodeHash(encodedHash string) (cf *argon2Config, salt, hash []byte, err er
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	cf.SaltLength = uint32(len(salt))
+	ac.SaltLength = uint32(len(salt))
 
 	hash, err = base64.RawStdEncoding.DecodeString(parts[5])
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	cf.KeyLength = uint32(len(hash))
+	ac.KeyLength = uint32(len(hash))
 
-	return cf, salt, hash, nil
+	return ac, salt, hash, nil
 }

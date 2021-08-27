@@ -15,7 +15,7 @@ all: release
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./ ./api ./build ./database ./lib
+pkgs = ./ ./api ./build ./database ./lib ./jwt
 
 # integration-pkgs defines the packages which contain integration tests
 integration-pkgs = ./test

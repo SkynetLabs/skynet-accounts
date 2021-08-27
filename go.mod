@@ -14,5 +14,4 @@ require (
 	gitlab.com/NebulousLabs/fastrand v0.0.0-20181126182046-603482d69e40
 	go.mongodb.org/mongo-driver v1.4.4
 	golang.org/x/crypto v0.0.0-20201217014255-9d1352758620
-	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 )
