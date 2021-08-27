@@ -1,0 +1,91 @@
+TODO:
+ - check all UserBySub calls that create an account - those should no longer create an account but return an error
+ - remove github.com/golang-jwt/jwt/v4
+
+NOTES:
+ - the dockerfile for the service needs to define the JWKS.json file and map it to /accounts/conf/JWKS.json
+
+TRANSITION CODE:
+ - copy over email and password hash per sub
+ - when copying the password, extract the hashed_password value instead of copying the entire record
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	// tokenClaims struct {
+	// 	Expires        int64  `json:"exp"`
+	// 	IssuedAt       int64  `json:"iat"`
+	// 	IssuingService string `json:"iss"`
+	// 	// JTI            int `json:"jti"`
+	// 	// NBF            int `json:"nbf"`
+	// 	Sub     string       `json:"sub"`
+	// 	Session tokenSession `json:"session"`
+	// }
+	tokenSession struct {
+		Active bool `json:"active"`
+		// AuthAt time.Time `json:"authenticated_at"`
+		// ExpiresAt time.Time `json:"expires_at"`
+		// IssuedAt  time.Time `json:"issued_at"`
+		// Id        string        `json:"id"`
+		Identity tokenIdentity `json:"identity"`
+	}
+	tokenIdentity struct {
+		// Id string `json:"id"`
+		// RecoveryAddresses []tokenRecoveryAddresses `json:"recovery_addresses"`
+		// SchemaId            string         `json:"schema_id"`
+		// SchemaUrl           string         `json:"schema_url"`
+		Traits tokenTraits `json:"traits"`
+		// VerifiableAddresses []tokenVerAddr `json:"verifiable_addresses"`
+	}
+	// tokenRecoveryAddresses struct {
+	// 	Id    string `json:"id"`
+	// 	Value string `json:"value"`
+	// 	Via   string `json:"via"`
+	// }
+	tokenTraits struct {
+		Email string `json:"email"`
+		// Name  tokenTraitsName `json:"name"`
+	}
+	// tokenTraitsName struct {
+	// 	First string `json:"first"`
+	// 	Last  string `json:"last"`
+	// }
+	// tokenVerAddr struct {
+	// 	Id         string    `json:"id"`
+	// 	Status     string    `json:"status"`
+	// 	Value      string    `json:"value"`
+	// 	Verified   bool      `json:"verified"`
+	// 	VerifiedAt time.Time `json:"verified_at"`
+	// 	Via        string    `json:"via"`
+	// }
