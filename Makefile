@@ -15,7 +15,7 @@ all: release
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./ ./api ./build ./database ./lib
+pkgs = ./ ./api ./build ./database ./lib ./jwt
 
 # integration-pkgs defines the packages which contain integration tests
 integration-pkgs = ./test
@@ -99,7 +99,7 @@ check:
 
 test:
 	go test -short -tags='debug testing netgo' -timeout=5s $(pkgs) -run=. -count=$(count)
-test-long: clean fmt vet lint-ci
+test-long: clean fmt vet lint-ci test
 	@mkdir -p cover
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
 

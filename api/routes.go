@@ -2,13 +2,11 @@ package api
 
 import (
 	"net/http"
-	"reflect"
 	"strings"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 
-	jwt2 "github.com/dgrijalva/jwt-go"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -39,6 +37,8 @@ func (api *API) buildHTTPRoutes() {
 
 	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookPOST))
 	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesGET))
+
+	api.staticRouter.GET("/.well-known/jwks.json", api.noValidate(api.wellKnownJwksGET))
 }
 
 // noValidate is a pass-through method used for decorating the request and
@@ -67,7 +67,7 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 			return
 		}
 		// Embed the verified token in the context of the request.
-		ctx := jwt.ContextWithToken(req.Context(), token)
+		ctx := jwt.ContextWithToken(req.Context(), &token)
 		h(w, req.WithContext(ctx), ps)
 	}
 }
@@ -116,14 +116,15 @@ func (api *API) userFromRequest(r *http.Request) *database.User {
 	if err != nil {
 		return nil
 	}
-	if reflect.ValueOf(token.Claims).Kind() != reflect.ValueOf(jwt2.MapClaims{}).Kind() {
+	tokenMap, err := token.AsMap(r.Context())
+	if err != nil {
 		return nil
 	}
-	claims := token.Claims.(jwt2.MapClaims)
-	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
+	sub, exists := tokenMap["sub"]
+	if !exists {
 		return nil
 	}
-	u, err := api.staticDB.UserBySub(r.Context(), claims["sub"].(string), false)
+	u, err := api.staticDB.UserBySub(r.Context(), sub.(string), false)
 	if err != nil {
 		return nil
 	}
