@@ -370,33 +370,6 @@ func accountsKeySet(logger *logrus.Logger) (jwk.Set, error) {
 	return accountsJWKS, nil
 }
 
-// accountsPublicKeys checks whether we have the
-// needed public key cached and if we don't it fetches it and caches it for us.
-//
-// See https://tools.ietf.org/html/rfc7517
-// See https://auth0.com/blog/navigating-rs256-and-jwks/
-// See http://self-issued.info/docs/draft-ietf-oauth-json-web-token.html
-// Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
-func accountsPublicKeys(logger *logrus.Logger) (*jwk.Set, error) {
-	if accountsPubKeys == nil {
-		b, err := ioutil.ReadFile("./jwks.json") // DEBUG
-		// b, err := ioutil.ReadFile(accountsPubKeysFile)
-		if err != nil {
-			logger.Warningln("ERROR while reading accounts JWKS", err)
-			return nil, err
-		}
-		var set *jwk.Set
-		set, err = jwk.ParseString(string(b))
-		if err != nil {
-			logger.Warningln("ERROR while parsing accounts JWKS", err)
-			logger.Warningln("JWKS string:", string(b))
-			return nil, err
-		}
-		accountsPubKeys = set
-	}
-	return accountsPubKeys, nil
-}
-
 // oathkeeperPublicKeys checks whether we have the
 // needed public key cached and if we don't it fetches it and caches it for us.
 //
