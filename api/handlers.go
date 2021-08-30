@@ -73,11 +73,10 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	if err != nil {
 		api.staticLogger.Log(logrus.WarnLevel, "Error parsing POST form:", err)
 	}
-	// TODO Check if this is the correct way to fetch POST parameters.
-	email := req.PostForm.Get("email")
-	pass := req.PostFormValue("password")
-	if email != "" && pass != "" {
-		api.loginPOSTCredentials(w, req, email, pass)
+	email := req.PostFormValue("email")
+	pw := req.PostFormValue("password")
+	if email != "" && pw != "" {
+		api.loginPOSTCredentials(w, req, email, pw)
 		return
 	}
 	api.loginPOSTToken(w, req)
@@ -225,6 +224,38 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 		return
 	}
 	api.WriteJSON(w, us)
+}
+
+// userPOST creates a new user.
+func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	err := req.ParseForm()
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	email := req.PostFormValue("email")
+	// TODO Validation
+	if email == "" {
+		api.WriteError(w, errors.New("email is required"), http.StatusBadRequest)
+		return
+	}
+	pw := req.PostFormValue("password")
+	// TODO Validation (basic complexity)
+	if pw == "" {
+		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
+		return
+	}
+
+	u, err := api.staticDB.UserCreate(req.Context(), email, pw, "", database.TierFree)
+	if errors.Contains(err, database.ErrUserAlreadyExists) {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, u)
 }
 
 // userPUT allows changing some user information.

@@ -256,19 +256,38 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 }
 
 // UserCreate creates a new user in the DB.
-func (db *DB) UserCreate(ctx context.Context, email, passHash, sub string, tier int) (*User, error) {
-	// Check for an existing user with this sub.
-	users, err := db.managedUsersByField(ctx, "sub", sub)
+func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int) (*User, error) {
+	// Check for an existing user with this email.
+	users, err := db.managedUsersByField(ctx, "email", email)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
 	if len(users) > 0 {
 		return nil, ErrUserAlreadyExists
 	}
+	// Check for an existing user with this sub.
+	if sub != "" {
+		users, err := db.managedUsersByField(ctx, "sub", sub)
+		if err != nil && !errors.Contains(err, ErrUserNotFound) {
+			return nil, errors.AddContext(err, "failed to query DB")
+		}
+		if len(users) > 0 {
+			return nil, ErrUserAlreadyExists
+		}
+	} else {
+		sub = generateSub()
+	}
+	var passHash []byte
+	if pass != "" {
+		passHash, err = hash.Generate([]byte(pass))
+		if err != nil {
+			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
+		}
+	}
 	u := &User{
 		ID:           primitive.ObjectID{},
 		Email:        email,
-		PasswordHash: passHash,
+		PasswordHash: string(passHash),
 		Sub:          sub,
 		Tier:         tier,
 	}
@@ -657,30 +676,6 @@ func monthStart(subscribedUntil time.Time) time.Time {
 	}
 	d := now.AddDate(0, monthsDelta, daysDelta)
 	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
-}
-
-// TODO docstring + maybe merge this into the db.UserCreate? or make all calls
-//  to that use this helper.
-func createUser(ctx context.Context, db *DB, email, pass string) (*User, error) {
-	passHash, err := hash.Generate([]byte(pass))
-	if err != nil {
-		return nil, err
-	}
-	sub := generateSub()
-	u, err := db.UserCreate(ctx, email, string(passHash), sub, TierFree)
-	// If we're successful or hit any error, other than a duplicate key, we
-	// want to just return. Hitting a duplicate key error means we ran into
-	// a race condition which we can simply ignore.
-	if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-		return u, err
-	}
-	// Recover from the race condition by fetching the existing user from
-	// the DB.
-	users, err := db.managedUsersByField(ctx, "sub", sub)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to create user")
-	}
-	return users[0], nil
 }
 
 // generateSub is a helper method that generates a UUID and encodes it in hex.
