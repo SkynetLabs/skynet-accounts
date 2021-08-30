@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 	"github.com/julienschmidt/httprouter"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -67,6 +69,55 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	err := req.ParseForm()
+	if err != nil {
+		api.staticLogger.Log(logrus.WarnLevel, "Error parsing POST form:", err)
+	}
+	email := req.PostFormValue("email")
+	pw := req.PostFormValue("password")
+	if email != "" && pw != "" {
+		api.loginPOSTCredentials(w, req, email, pw)
+		return
+	}
+	api.loginPOSTToken(w, req)
+}
+
+// loginPOSTCredentials is a helper that handles logins with credentials.
+func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
+	// Fetch the user with that email, if they exist.
+	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
+	if err != nil {
+		api.staticLogger.Tracef("Error fetching a user with email '%s': %+v\n", email, err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	// Check if the password matches.
+	err = hash.Compare([]byte(password), []byte(u.PasswordHash))
+	if err != nil {
+		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
+		return
+	}
+	// Generate a JWT.
+	tk, tkBytes, err := jwt.TokenForUser(api.staticLogger, u.Email, u.Sub)
+	if err != nil {
+		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
+		err = errors.AddContext(err, "failed to create a token for user")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Write the JWT to an encrypted cookie.
+	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
+	if err != nil {
+		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// loginPOSTToken is a helper that handles logins via a token attached to the
+// request.
+func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -173,6 +224,38 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 		return
 	}
 	api.WriteJSON(w, us)
+}
+
+// userPOST creates a new user.
+func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	err := req.ParseForm()
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	email := req.PostFormValue("email")
+	// TODO Validation
+	if email == "" {
+		api.WriteError(w, errors.New("email is required"), http.StatusBadRequest)
+		return
+	}
+	pw := req.PostFormValue("password")
+	// TODO Validation (basic complexity)
+	if pw == "" {
+		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
+		return
+	}
+
+	u, err := api.staticDB.UserCreate(req.Context(), email, pw, "", database.TierFree)
+	if errors.Contains(err, database.ErrUserAlreadyExists) {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, u)
 }
 
 // userPUT allows changing some user information.

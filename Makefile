@@ -107,5 +107,6 @@ test-long: clean fmt vet lint-ci test
 test-int: test-long start-mongo
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
 	make stop-mongo
+	go mod tidy
 
 .PHONY: all fmt install release clean check test test-int test-long stop-mongo
