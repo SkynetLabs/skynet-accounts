@@ -26,6 +26,9 @@ const (
 )
 
 var (
+	// envAccountsJWKSFile holds the name of the environment variable which
+	// holds the path to the JWKS file we need to use. Optional.
+	envAccountsJWKSFile = "ACCOUNTS_JWKS_FILE"
 	// envDBHost holds the name of the environment variable for DB host.
 	envDBHost = "SKYNET_DB_HOST"
 	// envDBPort holds the name of the environment variable for DB port.
@@ -90,6 +93,9 @@ func main() {
 	if sk := os.Getenv(envStripeApiKey); sk != "" {
 		stripe.Key = sk
 		api.StripeTestMode = !strings.HasPrefix(stripe.Key, "sk_live_")
+	}
+	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
+		jwt.AccountsJWKSFile = jwks
 	}
 
 	ctx := context.Background()
