@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
-
 	"github.com/julienschmidt/httprouter"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -68,6 +69,56 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	err := req.ParseForm()
+	if err != nil {
+		api.staticLogger.Log(logrus.WarnLevel, "Error parsing POST form:", err)
+	}
+	// TODO Check if this is the correct way to fetch POST parameters.
+	email := req.PostForm.Get("email")
+	pass := req.PostFormValue("password")
+	if email != "" && pass != "" {
+		api.loginPOSTCredentials(w, req, email, pass)
+		return
+	}
+	api.loginPOSTToken(w, req)
+}
+
+// loginPOSTCredentials is a helper that handles logins with credentials.
+func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
+	// Fetch the user with that email, if they exist.
+	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
+	if err != nil {
+		api.staticLogger.Tracef("Error fetching a user with email '%s': %+v\n", email, err)
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	// Check if the password matches.
+	err = hash.Compare([]byte(password), []byte(u.PasswordHash))
+	if err != nil {
+		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
+		return
+	}
+	// Generate a JWT.
+	tk, tkBytes, err := jwt.TokenForUser(api.staticLogger, u.Email, u.Sub)
+	if err != nil {
+		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
+		err = errors.AddContext(err, "failed to create a token for user")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Write the JWT to an encrypted cookie.
+	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
+	if err != nil {
+		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// loginPOSTToken is a helper that handles logins via a token attached to the
+// request.
+func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -80,13 +131,12 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	exp, err := jwt.TokenExpiration(token)
-	if err != nil {
-		api.staticLogger.Traceln("Error checking token expiration:", err)
-		api.WriteError(w, err, http.StatusUnauthorized)
+	exp := token.Expiration()
+	if time.Now().UTC().After(exp) {
+		api.WriteError(w, errors.New("token has expired"), http.StatusUnauthorized)
 		return
 	}
-	err = writeCookie(w, tokenStr, exp)
+	err = writeCookie(w, tokenStr, exp.UTC().Unix())
 	if err != nil {
 		api.staticLogger.Traceln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -129,13 +179,11 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// We only do it here, instead of baking this into UserBySub because we only
 	// care about this information being correct when we're going to present it
 	// to the user, e.g. on the Dashboard.
-	fName, lName, email, err := jwt.UserDetailsFromJWT(req.Context())
+	_, email, err := jwt.UserDetailsFromJWT(req.Context())
 	if err != nil {
 		api.staticLogger.Debugln("Failed to get user details from JWT:", err)
 	}
-	if err == nil && (fName != u.FirstName || lName != u.LastName || email != u.Email) {
-		u.FirstName = fName
-		u.LastName = lName
+	if err == nil && email != u.Email {
 		u.Email = email
 		err = api.staticDB.UserSave(req.Context(), u)
 		if err != nil {
@@ -565,6 +613,17 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 			api.staticLogger.Infof("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
 	}
+}
+
+// wellKnownJwksGET returns our public JWKS, so people can use that to verify
+// the authenticity of the JWT tokens we issue.
+func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	k, err := jwt.AccountsPublicKeySet(api.staticLogger)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to get the public JWKS"), http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, k)
 }
 
 // fetchOffset extracts the offset from the params and validates its value.
