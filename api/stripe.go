@@ -86,9 +86,9 @@ type (
 	}
 )
 
-// stripeWebhookHandler handles various events issued by Stripe.
+// stripeWebhookPOST handles various events issued by Stripe.
 // See https://stripe.com/docs/api/events/types
-func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *API) stripeWebhookPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	api.staticLogger.Tracef("Webhook request: %+v", req)
 	event, code, err := readStripeEvent(w, req)
 	if err != nil {
@@ -153,8 +153,8 @@ func (api *API) stripeWebhookHandler(w http.ResponseWriter, req *http.Request, _
 	api.WriteSuccess(w)
 }
 
-// stripePricesHandler returns a list of plans and prices.
-func (api *API) stripePricesHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+// stripePricesGET returns a list of plans and prices.
+func (api *API) stripePricesGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	var sPrices []stripePrice
 	params := &stripe.PriceListParams{Active: &True}
 	params.AddExpand("data.product")

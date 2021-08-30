@@ -15,30 +15,30 @@ import (
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
 func (api *API) buildHTTPRoutes() {
-	api.staticRouter.GET("/health", api.noValidate(api.healthHandler))
+	api.staticRouter.GET("/health", api.noValidate(api.healthGET))
 
-	api.staticRouter.GET("/limits", api.noValidate(api.limitsHandler))
+	api.staticRouter.GET("/limits", api.noValidate(api.limitsGET))
 
-	api.staticRouter.POST("/login", api.noValidate(api.loginHandler))
-	api.staticRouter.POST("/logout", api.validate(api.logoutHandler))
+	api.staticRouter.POST("/login", api.noValidate(api.loginPOST))
+	api.staticRouter.POST("/logout", api.validate(api.logoutPOST))
 
-	api.staticRouter.POST("/track/upload/:skylink", api.validate(api.trackUploadHandler))
-	api.staticRouter.POST("/track/download/:skylink", api.validate(api.trackDownloadHandler))
-	api.staticRouter.POST("/track/registry/read", api.validate(api.trackRegistryReadHandler))
-	api.staticRouter.POST("/track/registry/write", api.validate(api.trackRegistryWriteHandler))
+	api.staticRouter.POST("/track/upload/:skylink", api.validate(api.trackUploadPOST))
+	api.staticRouter.POST("/track/download/:skylink", api.validate(api.trackDownloadPOST))
+	api.staticRouter.POST("/track/registry/read", api.validate(api.trackRegistryReadPOST))
+	api.staticRouter.POST("/track/registry/write", api.validate(api.trackRegistryWritePOST))
 
-	api.staticRouter.GET("/user", api.validate(api.userHandler))
-	api.staticRouter.PUT("/user", api.validate(api.userPutHandler))
-	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsHandler))
-	api.staticRouter.GET("/user/stats", api.validate(api.userStatsHandler))
-	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsHandler))
-	api.staticRouter.DELETE("/user/uploads/:uploadId", api.validate(api.userUploadDeleteHandler))
-	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsHandler))
+	api.staticRouter.GET("/user", api.validate(api.userGET))
+	api.staticRouter.PUT("/user", api.validate(api.userPUT))
+	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
+	api.staticRouter.GET("/user/stats", api.validate(api.userStatsGET))
+	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsGET))
+	api.staticRouter.DELETE("/user/uploads/:uploadId", api.validate(api.userUploadDELETE))
+	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsGET))
 
-	api.staticRouter.DELETE("/skylink/:skylink", api.validate(api.skylinkDeleteHandler))
+	api.staticRouter.DELETE("/skylink/:skylink", api.validate(api.skylinkDELETE))
 
-	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookHandler))
-	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesHandler))
+	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookPOST))
+	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesGET))
 }
 
 // noValidate is a pass-through method used for decorating the request and
