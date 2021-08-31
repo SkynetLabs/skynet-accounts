@@ -14,4 +14,6 @@ require (
 	gitlab.com/NebulousLabs/fastrand v0.0.0-20181126182046-603482d69e40
 	go.mongodb.org/mongo-driver v1.4.4
 	golang.org/x/crypto v0.0.0-20201217014255-9d1352758620
+	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
+	gopkg.in/mail.v2 v2.3.1
 )

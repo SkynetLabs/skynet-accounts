@@ -27,7 +27,13 @@ var (
 	accountsPublicJWKS jwk.Set = nil
 
 	// AccountsJWKSFile defines where to look for the JWKS file.
-	AccountsJWKSFile = "/accounts/conf/jwks.json"
+	AccountsJWKSFile = build.Select(
+		build.Var{
+			Dev:      "jwks.json",
+			Testing:  "fixtures/jwks.json",
+			Standard: "/accounts/conf/jwks.json",
+		},
+	).(string)
 
 	// oathkeeperPubKeys is the public RS key set exposed by Oathkeeper for JWT
 	// validation. It's available at oathkeeperPubKeyURL.
@@ -330,16 +336,7 @@ func ValidateToken(logger *logrus.Logger, t string) (jwt.Token, error) {
 // Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
 func accountsKeySet(logger *logrus.Logger) (jwk.Set, error) {
 	if accountsJWKS == nil {
-		var b []byte
-		var err error
-		switch build.Release {
-		case "dev":
-			b, err = ioutil.ReadFile("jwks.json")
-		case "testing":
-			b, err = ioutil.ReadFile("fixtures/jwks.json")
-		default:
-			b, err = ioutil.ReadFile(AccountsJWKSFile)
-		}
+		b, err := ioutil.ReadFile(AccountsJWKSFile)
 		if err != nil {
 			logger.Warningln("ERROR while reading accounts JWKS", err)
 			return nil, err

@@ -10,6 +10,7 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/api"
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/email"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
@@ -37,15 +38,14 @@ var (
 	envDBUser = "SKYNET_DB_USER"
 	// envDBPass holds the name of the environment variable for DB password.
 	envDBPass = "SKYNET_DB_PASS" // #nosec G101: Potential hardcoded credentials
+	// envEmailUri holds the name of the environment variable for email URI.
+	envEmailUri = "ACCOUNTS_EMAIL_URI"
 	// envLogLevel holds the name of the environment variable which defines the
 	// desired log level.
 	envLogLevel = "SKYNET_ACCOUNTS_LOG_LEVEL"
 	// envPortal holds the name of the environment variable for the portal to
 	// use to fetch skylinks.
 	envPortal = "PORTAL_URL"
-	// envKratosAddr hold the name of the environment variable for Kratos's
-	// address. Defaults to "kratos:4433".
-	envKratosAddr = "KRATOS_ADDR"
 	// envOathkeeperAddr hold the name of the environment variable for
 	// Oathkeeper's address. Defaults to "oathkeeper:4456".
 	envOathkeeperAddr = "OATHKEEPER_ADDR"
@@ -96,6 +96,9 @@ func main() {
 	}
 	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
 		jwt.AccountsJWKSFile = jwks
+	}
+	if emailStr := os.Getenv(envEmailUri); emailStr != "" {
+		email.ConnectionURI = emailStr
 	}
 
 	ctx := context.Background()
