@@ -67,6 +67,8 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Fetch a JWT token from the request. This token will tell us who the user
+	// is and until when their current session is going to stay valid.
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -79,11 +81,16 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
+	// We fetch the expiration time of the token, so we can set the expiration
+	// time of the cookie to match it.
 	exp := token.Expiration()
 	if time.Now().UTC().After(exp) {
 		api.WriteError(w, errors.New("token has expired"), http.StatusUnauthorized)
 		return
 	}
+	// Write a secure cookie containing the JWT token of the user. This allows
+	// us to verify the user's identity and permissions (i.e. tier) without
+	// requesting their credentials or accessing the DB.
 	err = writeCookie(w, tokenStr, exp.UTC().Unix())
 	if err != nil {
 		api.staticLogger.Traceln("Error writing cookie:", err)

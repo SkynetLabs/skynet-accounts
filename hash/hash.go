@@ -17,9 +17,9 @@ var (
 	ErrIncompatibleVersion       = errors.New("incompatible version of argon2")
 	ErrMismatchedHashAndPassword = errors.New("passwords do not match")
 
-	// This is the configuration of the argon2id hasher. For the moment we'll
-	// use the setup we had with Kratos. Later on we can move this to a config.
-
+	// config is the configuration of the argon2id hasher.
+	// For the moment we'll use the setup we had with Kratos. Later on we can
+	// move this to a configuration file, if needed.
 	config = argon2Config{
 		SaltLength:  16,
 		Iterations:  2,
@@ -80,8 +80,8 @@ func Compare(password []byte, hash []byte) error {
 // decodeHash is a helper method which extracts the configuration from the
 // encoded hash string and returns its parts.
 //
-// Example password record:
-// {"hashed_password":"$argon2id$v=19$m=131072,t=2,p=1$dwr95pEjaa7emZOu9bDAWw$eDQwOMoSyRmzyvpD/wwGBg"}
+// Example of a password hash record:
+// "$argon2id$v=19$m=131072,t=2,p=1$dwr95pEjaa7emZOu9bDAWw$eDQwOMoSyRmzyvpD/wwGBg"
 func decodeHash(encodedHash string) (ac *argon2Config, salt, hash []byte, err error) {
 	parts := strings.Split(encodedHash, "$")
 	if len(parts) != 6 {
