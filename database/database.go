@@ -277,7 +277,7 @@ func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipe
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
-			{"localField", "skylink_id"}, // field in the downloads collection
+			{"localField", "skylink_id"}, // field in the uploads collection
 			{"foreignField", "_id"},      // field in the skylinks collection
 			{"as", "fromSkylinks"},
 		}},
@@ -320,7 +320,7 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 		}},
 	}
 	// This stage checks if the download has a non-zero `bytes` field and if so,
-	// it takes it as the download's size. Otherwise it reports the full
+	// it takes it as the download's size, otherwise it reports the full
 	// skylink's size as download's size.
 	projectStage := bson.D{{"$project", bson.D{
 		{"skylink", 1},

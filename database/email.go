@@ -7,6 +7,13 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+const (
+	// maxAttemptsToSend defines the maximum number of attempts we will make to
+	// send a given email message before giving up.
+	maxAttemptsToSend = 3
 )
 
 type (
@@ -19,7 +26,7 @@ type (
 		Body                 string             `bson:"body"`
 		BodyMime             string             `bson:"body_mime"`
 		LockedBy             string             `bson:"locked_by"`
-		SentOn               time.Time          `bson:"sent_on,omitempty"`
+		SentAt               time.Time          `bson:"sent_at,omitempty"`
 		FailedAttemptsToSend int                `bson:"failed_attempts_to_send"`
 		Failed               bool               `bson:"failed,omitempty"`
 	}
@@ -38,10 +45,166 @@ func (db *DB) EmailCreate(ctx context.Context, m EmailMessage) error {
 	return nil
 }
 
-// TODO LockBatch - lock up to N messages and return them
+// EmailLockAndFetch locks up to batchSize records with the given lockId and
+// returns up to batchSize locked entries. Some of the returned entries might
+// not have been locked during the current execution.
+func (db *DB) EmailLockAndFetch(ctx context.Context, lockId string, batchSize int64) ([]EmailMessage, error) {
+	// Find out how many entries are already locked by this id. Maybe we don't
+	// need to lock any additional ones.
+	filter := bson.M{
+		"locked_by": lockId,
+		"failed":    False, // TODO Double-check that this actually filters out failed messages.
+	}
+	count, err := db.staticEmails.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to count locked email messages")
+	}
+	// Lock some more entries in order to fill the batch.
+	if count < batchSize {
+		// As MongoDB doesn't have an "update up to N entries" operation, what
+		// we do here is fetch the ids of the desired number of entries to
+		// lock and then lock them by ids.
+		ids, err := db.fetchUnlockedMessageIDs(ctx, batchSize-count)
+		if err != nil {
+			return nil, errors.AddContext(err, "failed to fetch message ids to lock")
+		}
+		err = db.lockMessages(ctx, lockId, ids)
+		if err != nil {
+			return nil, errors.AddContext(err, "failed to lock messages")
+		}
+	}
+	// Fetch up to batchSize messages already locked with lockId.
+	filter = bson.M{
+		"locked_by": lockId,
+		"failed":    False, // TODO Double-check that this actually filters out failed messages.
+	}
+	opts := options.Find()
+	// opts.SetSort(bson.D{{"_id", -1}})
+	opts.SetLimit(batchSize)
+	c, err := db.staticEmails.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to fetch emails")
+	}
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
+	var msgs []EmailMessage
+	for c.Next(ctx) {
+		var m EmailMessage
+		if err = c.Decode(&m); err != nil {
+			return nil, errors.AddContext(err, "failed to parse value from DB")
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs, nil
+}
 
-// TODO UnlockMessages - unlock a batch of messages identified by their ids. We do this if we fail to send them.
+// fetchUnlockedMessageIDs is a helper method that fetches the ids of up to num
+// unlocked email messages waiting to be sent.
+// TODO test
+func (db *DB) fetchUnlockedMessageIDs(ctx context.Context, num int64) ([]primitive.ObjectID, error) {
+	filter := bson.M{
+		"locked_by": "",
+		"failed":    False, // TODO does this filter?
+	}
+	opts := options.Find()
+	// opts.SetSort(bson.D{{"_id", -1}})
+	opts.SetLimit(num)
+	c, err := db.staticEmails.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to fetch ids")
+	}
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+		}
+	}()
+	var ids []primitive.ObjectID
+	for c.Next(ctx) {
+		var m EmailMessage
+		if err = c.Decode(&m); err != nil {
+			return nil, errors.AddContext(err, "failed to parse value from DB")
+		}
+		ids = append(ids, m.ID)
+	}
+	return ids, nil
+}
 
-// TODO EmailFetchByLocker(locker string) - fetch all email messages locked by a certain locker
+// lockMessages is a helper method that locks the messages with the given ids.
+// TODO test
+func (db *DB) lockMessages(ctx context.Context, lockId string, ids []primitive.ObjectID) error {
+	filter := bson.M{"_id": bson.M{
+		"$in": ids,
+	}}
+	update := bson.M{"$set": bson.M{
+		"locked_by": lockId,
+	}}
+	_, err := db.staticUsers.UpdateMany(ctx, filter, update)
+	if err != nil {
+		return errors.AddContext(err, "failed to update")
+	}
+	return nil
+}
 
-// TODO EmailMarkSent(ms ...EmailMessage) - Mark one or more messages as sent
+// MarkAsSent unlocks all given messages and marks them as sent.
+// TODO test
+func (db *DB) MarkAsSent(ctx context.Context, ids []primitive.ObjectID) error {
+	filter := bson.M{"_id": bson.M{
+		"$in": ids,
+	}}
+	update := bson.M{
+		"locked_by": "",
+		"$set":      bson.M{"sent_at": time.Now().UTC()},
+	}
+	_, err := db.staticEmails.UpdateMany(ctx, filter, update)
+	if err != nil {
+		return errors.AddContext(err, "failed to mark emails as sent")
+	}
+	return nil
+}
+
+// MarkAsFailed increments the FailedAttemptsToSend counter on each message and
+// marks the message as Failed if that counter exceeds the maxAttemptsToSend.
+// It also unlocks all given messages.
+// TODO test
+func (db *DB) MarkAsFailed(ctx context.Context, msgs []*EmailMessage) error {
+	ids := make([]primitive.ObjectID, len(msgs))
+	var failed []primitive.ObjectID
+	for i, m := range msgs {
+		ids[i] = m.ID
+		// the messages that are about to reach or exceed the limit will be
+		// marked as failed and won't be retries again.
+		if m.FailedAttemptsToSend >= maxAttemptsToSend-1 {
+			failed = append(failed, m.ID)
+		}
+	}
+
+	// Increment the counter on all listed messages.
+	filter := bson.M{"_id": bson.M{
+		"$in": ids,
+	}}
+	update := bson.M{
+		"locked_by": "",
+		"$inc":      bson.M{"failed_attempts_to_send": 1},
+	}
+	_, errInc := db.staticEmails.UpdateMany(ctx, filter, update)
+
+	// Mark all messages that exceeded the limit on failures as permanently
+	// failed.
+	var errFailed error
+	if len(failed) > 0 {
+		db.staticLogger.Warningf("%d email messages failed to be sent more than %d times and won't be tried.", len(failed), maxAttemptsToSend)
+
+		filter = bson.M{"_id": bson.M{
+			"$in": failed,
+		}}
+		update = bson.M{"$set": bson.M{
+			"failed": True,
+		}}
+		_, errFailed = db.staticEmails.UpdateMany(ctx, filter, update)
+	}
+
+	return errors.Compose(errInc, errFailed)
+}

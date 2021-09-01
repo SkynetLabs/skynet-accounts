@@ -44,8 +44,11 @@ var (
 	// desired log level.
 	envLogLevel = "SKYNET_ACCOUNTS_LOG_LEVEL"
 	// envPortal holds the name of the environment variable for the portal to
-	// use to fetch skylinks.
-	envPortal = "PORTAL_URL"
+	// use to fetch skylinks and sign JWT tokens.
+	envPortal = "PORTAL_DOMAIN"
+	// envServerDomain holds the name of the environment variable for the
+	// identity of this server. Example: eu-ger-1.siasky.net
+	envServerDomain = "SERVER_DOMAIN"
 	// envOathkeeperAddr hold the name of the environment variable for
 	// Oathkeeper's address. Defaults to "oathkeeper:4456".
 	envOathkeeperAddr = "OATHKEEPER_ADDR"
@@ -78,10 +81,24 @@ func main() {
 	// Load the environment variables from the .env file.
 	// Existing variables take precedence and won't be overwritten.
 	_ = godotenv.Load()
+	ctx := context.Background()
+	logger := logrus.New()
+	logger.SetLevel(logLevel())
+
 	portal, ok := os.LookupEnv(envPortal)
 	if !ok {
 		portal = defaultPortal
-		jwt.JWTPortalName = portal
+	}
+	if !strings.HasPrefix(portal, "https://") && !strings.HasPrefix(portal, "http://") {
+		portal = "https://" + portal
+	}
+	jwt.JWTPortalName = portal
+	email.ServerDomain = os.Getenv(envServerDomain)
+	if email.ServerDomain == "" {
+		email.ServerDomain = jwt.JWTPortalName
+		logger.Warningf(`Environment variable %s is missing! This server's identity 
+			is set to the default '%s' value. That is OK only if this server is running on its own 
+			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerDomain)
 	}
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
@@ -101,16 +118,13 @@ func main() {
 		email.ConnectionURI = emailStr
 	}
 
-	ctx := context.Background()
-	logger := logrus.New()
-	logger.SetLevel(logLevel())
 	db, err := database.New(ctx, dbCreds, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
 	mailer := email.New(db)
 	// Start the mail sender background thread.
-	email.NewSender(ctx, db).Start()
+	email.NewSender(ctx, db, logger).Start()
 	// Start the metadata fetcher background thread.
 	mf := metafetcher.New(ctx, db, portal, logger)
 	server, err := api.New(db, mf, logger, mailer)
