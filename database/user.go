@@ -342,9 +342,7 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 // UserSetStripeId changes the user's stripe id in the DB.
 func (db *DB) UserSetStripeId(ctx context.Context, u *User, stripeId string) error {
 	filter := bson.M{"_id": u.ID}
-	update := bson.M{"$set": bson.M{
-		"stripe_id": stripeId,
-	}}
+	update := bson.M{"$set": bson.M{"stripe_id": stripeId}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
@@ -359,9 +357,7 @@ func (db *DB) UserSetTier(ctx context.Context, u *User, t int) error {
 		return errors.New("invalid tier value")
 	}
 	filter := bson.M{"_id": u.ID}
-	update := bson.M{"$set": bson.M{
-		"tier": t,
-	}}
+	update := bson.M{"$set": bson.M{"tier": t}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
@@ -488,9 +484,7 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 // userUploadStats reports on the user's uploads - count, total size and total
 // bandwidth used. It uses the total size of the uploaded skyfiles as basis.
 func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, rawStorageUsed int64, totalBandwidth int64, err error) {
-	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", id},
-	}}}
+	matchStage := bson.D{{"$match", bson.D{{"user_id", id}}}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},

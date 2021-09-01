@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -37,6 +38,8 @@ unlock it, so it can be retried later. If a message fails to get sent more than
 const (
 	// emailBatchSize defines the largest batch of emails we will try to send.
 	emailBatchSize = 10
+
+	from = "noreply@siasky.net" // TODO
 )
 
 var (
@@ -84,9 +87,9 @@ func (em Mailer) Send(ctx context.Context, from, to, subject, body, bodyMime str
 
 // SendEmailAddressConfirmation sends a new email to the given email address
 // with a link to confirm the ownership of the address.
-func (em Mailer) SendEmailAddressConfirmation(email, code string) error {
+func (em Mailer) SendEmailAddressConfirmation(ctx context.Context, email, code string) error {
 	// TODO Implement
-	return nil
+	return em.Send(ctx, from, email, "activation email", code, "text/plain")
 }
 
 // send an email message.
@@ -120,7 +123,9 @@ func sendMultiple(m ...*mail.Message) error {
 		ServerName:         c.Server,
 	}
 	// send!
-	return d.DialAndSend(m...)
+	fmt.Println("SENDING!", m) // TODO DEBUG
+	return nil
+	// return d.DialAndSend(m...)
 }
 
 // config parses the ConnectionURI variable and extracts the configuration

@@ -46,9 +46,7 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 		// omit it when it's empty but that doesn't cover the case where it's
 		// zero because in that case it's a valid array of ints which happen to
 		// be zeros.
-		upsert := bson.M{"$set": bson.M{
-			"skylink": skylinkHash,
-		}}
+		upsert := bson.M{"$set": bson.M{"skylink": skylinkHash}}
 		opts := options.Update().SetUpsert(true)
 		var ur *mongo.UpdateResult
 		ur, err = db.staticSkylinks.UpdateOne(ctx, filter, upsert, opts)

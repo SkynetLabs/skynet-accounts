@@ -44,13 +44,16 @@ func NewSender(ctx context.Context, db *database.DB, logger *logrus.Logger) Send
 // and sends them.
 func (s Sender) Start() {
 	go func() {
-		select {
-		case <-s.staticCtx.Done():
-			return
-		default:
+		for {
+			s.staticLogger.Tracef(" >>> daemon loop")
+			select {
+			case <-s.staticCtx.Done():
+				return
+			default:
+			}
+			s.scanAndSend()
+			time.Sleep(sleepBetweenScans)
 		}
-		s.scanAndSend()
-		time.Sleep(sleepBetweenScans)
 	}()
 }
 
@@ -59,11 +62,13 @@ func (s Sender) Start() {
 //
 // We lock the messages before sending them and update their SentAt field after
 // sending them. We also don't lock more than emailBatchSize messages.
-// TODO test
 func (s Sender) scanAndSend() {
 	msgs, err := s.staticDB.EmailLockAndFetch(s.staticCtx, ServerDomain, emailBatchSize)
 	if err != nil {
 		s.staticLogger.Warningln(errors.AddContext(err, "failed to send email batch"))
+		return
+	}
+	if len(msgs) == 0 {
 		return
 	}
 	var sent []primitive.ObjectID
@@ -78,9 +83,11 @@ func (s Sender) scanAndSend() {
 		}
 		sent = append(sent, m.ID)
 	}
-	err = errors.Compose(errs...)
-	err = errors.AddContext(err, "failed to send some emails")
-	s.staticLogger.Warningln(err)
+	if len(errs) > 0 {
+		err = errors.Compose(errs...)
+		err = errors.AddContext(err, "failed to send some emails")
+		s.staticLogger.Warningln(err)
+	}
 
 	err = s.staticDB.MarkAsSent(s.staticCtx, sent)
 	if err != nil {

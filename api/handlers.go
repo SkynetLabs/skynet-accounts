@@ -258,7 +258,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 	}
 
 	// Send an email address confirmation email.
-	err = api.staticMailer.SendEmailAddressConfirmation(u.Email, u.EmailConfirmationToken)
+	err = api.staticMailer.SendEmailAddressConfirmation(req.Context(), u.Email, u.EmailConfirmationToken)
 	if err != nil {
 		// We failed to send a confirmation email. We'll try to delete the user
 		// we just created and return an error.
