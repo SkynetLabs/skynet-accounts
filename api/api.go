@@ -6,6 +6,7 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/email"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
@@ -19,10 +20,11 @@ type API struct {
 	staticMF     *metafetcher.MetaFetcher
 	staticRouter *httprouter.Router
 	staticLogger *logrus.Logger
+	staticMailer *email.Mailer
 }
 
 // New returns a new initialised API.
-func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger) (*API, error) {
+func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
 	}
@@ -37,6 +39,7 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger) (*
 		staticMF:     mf,
 		staticRouter: router,
 		staticLogger: logger,
+		staticMailer: mailer,
 	}
 	api.buildHTTPRoutes()
 	return api, nil

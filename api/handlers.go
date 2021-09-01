@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
@@ -255,6 +256,27 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+
+	// Send an email address confirmation email.
+	err = api.staticMailer.SendEmailAddressConfirmation(u.Email, u.EmailConfirmationToken)
+	if err != nil {
+		// We failed to send a confirmation email. We'll try to delete the user
+		// we just created and return an error.
+		errDel := api.staticDB.UserDelete(context.Background(), u)
+		if errDel != nil {
+			// We failed to delete the newly created user. We will return a
+			// success to the user and log a build.Critical. The user will not
+			// receive a confirmation email, but they will be able to request a
+			// new one to be sent to them via the established channel for that.
+			build.Critical("Failed to delete newly created user after failing to send a confirmation email. The user will continue existing. Deletion error:", err)
+			api.WriteJSON(w, u)
+			return
+		}
+		err = errors.AddContext(err, "failed to send a confirmation email, user is not created")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+
 	api.WriteJSON(w, u)
 }
 

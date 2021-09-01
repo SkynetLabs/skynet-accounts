@@ -108,8 +108,12 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
+	mailer := email.New(db)
+	// Start the mail sender background thread.
+	email.NewSender(ctx, db).Start()
+	// Start the metadata fetcher background thread.
 	mf := metafetcher.New(ctx, db, portal, logger)
-	server, err := api.New(db, mf, logger)
+	server, err := api.New(db, mf, logger, mailer)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}

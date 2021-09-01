@@ -35,6 +35,9 @@ var (
 	// dbRegistryWritesCollection defines the name of the "registry_writes"
 	// collection within skynet's database.
 	dbRegistryWritesCollection = "registry_writes"
+	// dbEmails defines the name of the "emails" collection within skynet's
+	// database.
+	dbEmails = "emails"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -77,6 +80,7 @@ type (
 		staticDownloads      *mongo.Collection
 		staticRegistryReads  *mongo.Collection
 		staticRegistryWrites *mongo.Collection
+		staticEmails         *mongo.Collection
 		staticDep            lib.Dependencies
 		staticLogger         *logrus.Logger
 	}
@@ -118,6 +122,7 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 		staticDownloads:      database.Collection(dbDownloadsCollection),
 		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
 		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
+		staticEmails:         database.Collection(dbEmails),
 		staticLogger:         logger,
 	}
 	return db, nil
@@ -196,6 +201,12 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 			},
 		},
 		dbRegistryWritesCollection: {
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("user_id"),
+			},
+		},
+		dbEmails: {
 			{
 				Keys:    bson.D{{"user_id", 1}},
 				Options: options.Index().SetName("user_id"),

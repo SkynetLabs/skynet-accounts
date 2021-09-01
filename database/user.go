@@ -110,6 +110,7 @@ type (
 		// its ID.Hex() form.
 		ID                            primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Email                         string             `bson:"email" json:"email"`
+		EmailConfirmationToken        string             `bson:"email_confirmation_token" json:"-"`
 		PasswordHash                  string             `bson:"password_hash" json:"password_hash"`
 		Sub                           string             `bson:"sub" json:"sub"`
 		Tier                          int                `bson:"tier" json:"tier"`
@@ -181,7 +182,7 @@ func (db *DB) UserByEmail(ctx context.Context, email string, create bool) (*User
 	users, err := db.managedUsersByField(ctx, "email", email)
 	if create && errors.Contains(err, ErrUserNotFound) {
 		var u *User
-		sub := generateSub()
+		sub := generateUUID()
 		u, err = db.UserCreate(ctx, email, "", sub, TierFree)
 		// If we're successful or hit any error, other than a duplicate key we
 		// want to just return. Hitting a duplicate key error means we ran into
@@ -256,6 +257,9 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 }
 
 // UserCreate creates a new user in the DB.
+//
+// The new user is created as "unconfirmed" and a confirmation email is sent to
+// the address they provided.
 func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int) (*User, error) {
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", email)
@@ -275,7 +279,7 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 			return nil, ErrUserAlreadyExists
 		}
 	} else {
-		sub = generateSub()
+		sub = generateUUID()
 	}
 	var passHash []byte
 	if pass != "" {
@@ -284,12 +288,14 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
 		}
 	}
+	emailConfToken := generateUUID()
 	u := &User{
-		ID:           primitive.ObjectID{},
-		Email:        email,
-		PasswordHash: string(passHash),
-		Sub:          sub,
-		Tier:         tier,
+		ID:                     primitive.ObjectID{},
+		Email:                  email,
+		EmailConfirmationToken: emailConfToken,
+		PasswordHash:           string(passHash),
+		Sub:                    sub,
+		Tier:                   tier,
 	}
 	// Insert the user.
 	fields, err := bson.Marshal(u)
@@ -678,8 +684,8 @@ func monthStart(subscribedUntil time.Time) time.Time {
 	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// generateSub is a helper method that generates a UUID and encodes it in hex.
-func generateSub() string {
+// generateUUID is a helper method that generates a UUID and encodes it in hex.
+func generateUUID() string {
 	uid, err := uuid.New()
 	// the only way to get an error here is for uuid to be unable to read from
 	// the RNG reader, which is highly unlikely. We'll log and retry.
@@ -689,10 +695,3 @@ func generateSub() string {
 	}
 	return hex.EncodeToString(uid[:])
 }
-
-// {"hashed_password":"$argon2id$v=19$m=131072,t=2,p=1$dwr95pEjaa7emZOu9bDAWw$eDQwOMoSyRmzyvpD/wwGBg"}
-
-// TODO Generate a token for this user. The token needs to be signed by accounts.
-// func TokenForUser(db *DB, u User) jwt.Token {
-//
-// }
