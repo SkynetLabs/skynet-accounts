@@ -45,7 +45,6 @@ func NewSender(ctx context.Context, db *database.DB, logger *logrus.Logger) Send
 func (s Sender) Start() {
 	go func() {
 		for {
-			s.staticLogger.Tracef(" >>> daemon loop")
 			select {
 			case <-s.staticCtx.Done():
 				return

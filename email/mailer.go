@@ -39,7 +39,7 @@ const (
 	// emailBatchSize defines the largest batch of emails we will try to send.
 	emailBatchSize = 10
 
-	from = "noreply@siasky.net" // TODO
+	from = "noreply@siasky.net" // TODO this needs to come from a config, I guess?
 )
 
 var (
@@ -75,21 +75,41 @@ func New(db *database.DB) *Mailer {
 
 // Send queues an email message for sending. The message will be sent by Sender
 // with the next batch of emails.
-func (em Mailer) Send(ctx context.Context, from, to, subject, body, bodyMime string) error {
-	return em.staticDB.EmailCreate(ctx, database.EmailMessage{
-		From:     from,
-		To:       to,
-		Subject:  subject,
-		Body:     body,
-		BodyMime: bodyMime,
-	})
+func (em Mailer) Send(ctx context.Context, m database.EmailMessage) error {
+	return em.staticDB.EmailCreate(ctx, m)
 }
 
-// SendEmailAddressConfirmation sends a new email to the given email address
+// SendAddressConfirmationEmail sends a new email to the given email address
 // with a link to confirm the ownership of the address.
-func (em Mailer) SendEmailAddressConfirmation(ctx context.Context, email, code string) error {
-	// TODO Implement
-	return em.Send(ctx, from, email, "activation email", code, "text/plain")
+func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email, code string) error {
+	m, err := confirmEmailEmail(email, confirmEmailData{code})
+	if err != nil {
+		return errors.AddContext(err, "failed to generate email template")
+	}
+	return em.Send(ctx, *m)
+}
+
+// SendRecoverAccountEmail sends a new email to the given email address
+// with a link to recover the account.
+func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email, code string) error {
+	m, err := recoverAccountEmail(email, recoverAccountData{code})
+	if err != nil {
+		return errors.AddContext(err, "failed to generate email template")
+	}
+	return em.Send(ctx, *m)
+}
+
+// SendAccountAccessAttemptedEmail sends a new email to the given email address
+// that notifies the user that someone used their email address in an attempt to
+// recover a Skynet account but their email is not in our system. The main
+// reason to do that is because the user might have forgotten which email they
+// used for signing up.
+func (em Mailer) SendAccountAccessAttemptedEmail(ctx context.Context, email string) error {
+	m, err := accountAccessAttemptedEmail(email)
+	if err != nil {
+		return errors.AddContext(err, "failed to generate email template")
+	}
+	return em.Send(ctx, *m)
 }
 
 // send an email message.
