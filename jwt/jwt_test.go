@@ -12,7 +12,11 @@ import (
 // accurately reject forged tokens.
 func TestJWT(t *testing.T) {
 	logger := logrus.StandardLogger()
-	_, tkBytes, err := TokenForUser(logger, "user@example.com", "this_is_a_sub")
+	err := LoadAccountsKeySet(logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, tkBytes, err := TokenForUser("user@example.com", "this_is_a_sub")
 	if err != nil {
 		t.Fatal("failed to generate token:", err)
 	}

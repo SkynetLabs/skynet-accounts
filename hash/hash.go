@@ -13,8 +13,14 @@ import (
 )
 
 var (
-	ErrInvalidHash               = errors.New("the encoded hash is not in the correct format")
-	ErrIncompatibleVersion       = errors.New("incompatible version of argon2")
+	// ErrInvalidHash is returned when the given hash does not conform to the
+	// expected format.
+	ErrInvalidHash = errors.New("the encoded hash is not in the correct format")
+	// ErrIncompatibleVersion is returned when the hash was created with a
+	// different version of argon2.
+	ErrIncompatibleVersion = errors.New("incompatible version of argon2")
+	// ErrMismatchedHashAndPassword is returned when the given password doesn't
+	// match the given hash.
 	ErrMismatchedHashAndPassword = errors.New("passwords do not match")
 
 	// config is the configuration of the argon2id hasher.
@@ -29,19 +35,39 @@ var (
 	}
 )
 
-type argon2Config struct {
-	SaltLength  uint32
-	Iterations  uint32
-	Memory      uint32
-	Parallelism uint8
-	KeyLength   uint32
-}
+type (
+	// Argon2HashRecord represents a password hashed with argon2id and combined
+	// with the settings used for the hash creation using the standard argon2id
+	// format.
+	Argon2HashRecord []byte
 
-// Generate hashes the given password with the default configuration.
-func Generate(password []byte) ([]byte, error) {
+	// argon2Config wraps together all configuration values we need in order to
+	// create a hash with argon2.
+	argon2Config struct {
+		SaltLength  uint32
+		Iterations  uint32
+		Memory      uint32
+		Parallelism uint8
+		KeyLength   uint32
+	}
+)
+
+// Generate returns an argon2 hash record of the given data. That hash record
+// will be produced using the configuration settings in the `config` variable.
+// The hash record contains not only the hash itself but also the configuration
+// setting used for its creation, as well as the auto-generated salt used.
+//
+// Example hash record value:
+// "$argon2id$v=19$m=131072,t=2,p=1$dwr95pEjaa7emZOu9bDAWw$eDQwOMoSyRmzyvpD/wwGBg"
+func Generate(password string) (Argon2HashRecord, error) {
+	// Generate a random salt with the length given in config.SaltLength.
 	salt := fastrand.Bytes(int(config.SaltLength))
-	hash := argon2.IDKey(password, salt, config.Iterations, config.Memory, config.Parallelism, config.KeyLength)
+	// Generate an argon2id hash of the given password using the salt we just
+	// generated, as well as the settings from `config`.
+	hash := argon2.IDKey([]byte(password), salt, config.Iterations, config.Memory, config.Parallelism, config.KeyLength)
 
+	// Generate a hash record value, consisting of the produced hash and the
+	// parameters for its production - salt and settings.
 	var b bytes.Buffer
 	if _, err := fmt.Fprintf(
 		&b,
@@ -52,21 +78,20 @@ func Generate(password []byte) ([]byte, error) {
 	); err != nil {
 		return nil, errors.AddContext(err, "failed to generate password hash")
 	}
-
 	return b.Bytes(), nil
 }
 
 // Compare verifies whether the given password matches the given hash.
-func Compare(password []byte, hash []byte) error {
+func Compare(password string, hash Argon2HashRecord) error {
 	// Extract the parameters, salt and derived key from the encoded password
 	// hash.
-	cf, salt, hash, err := decodeHash(string(hash))
+	cf, salt, hash, err := decodeHash(hash)
 	if err != nil {
-		return err
+		return errors.AddContext(err, "failed to decode hash record")
 	}
 
 	// Derive the key from the other password using the same parameters.
-	otherHash := argon2.IDKey(password, salt, cf.Iterations, cf.Memory, cf.Parallelism, cf.KeyLength)
+	otherHash := argon2.IDKey([]byte(password), salt, cf.Iterations, cf.Memory, cf.Parallelism, cf.KeyLength)
 
 	// Check that the contents of the hashed passwords are identical. Note
 	// that we are using the subtle.ConstantTimeCompare() function for this
@@ -78,12 +103,19 @@ func Compare(password []byte, hash []byte) error {
 }
 
 // decodeHash is a helper method which extracts the configuration from the
-// encoded hash string and returns its parts.
+// encoded hash record and returns its parts.
 //
 // Example of a password hash record:
 // "$argon2id$v=19$m=131072,t=2,p=1$dwr95pEjaa7emZOu9bDAWw$eDQwOMoSyRmzyvpD/wwGBg"
-func decodeHash(encodedHash string) (ac *argon2Config, salt, hash []byte, err error) {
-	parts := strings.Split(encodedHash, "$")
+func decodeHash(encodedHash Argon2HashRecord) (ac *argon2Config, salt, hash []byte, err error) {
+	// The encodedHash contains six groups of data which provide all
+	// configuration parameters needed to decode the hash:
+	// - the sub-type of the hashing function used, e.g. argon2id
+	// - the version of the hashing function, e.g. 19
+	// - memory, iterations, and parallelism settings, e.g. m=131072,t=2,p=1
+	// - the salt used for hashing, e.g. dwr95pEjaa7emZOu9bDAWw
+	// - the hash itself, e.g. eDQwOMoSyRmzyvpD/wwGBg
+	parts := strings.Split(string(encodedHash), "$")
 	if len(parts) != 6 {
 		return nil, nil, nil, ErrInvalidHash
 	}

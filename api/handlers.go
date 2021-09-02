@@ -84,7 +84,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	// We fetch the expiration time of the token, so we can set the expiration
 	// time of the cookie to match it.
 	exp := token.Expiration()
-	if time.Now().UTC().After(exp) {
+	if time.Now().UTC().After(exp.UTC()) {
 		api.WriteError(w, errors.New("token has expired"), http.StatusUnauthorized)
 		return
 	}
@@ -573,12 +573,7 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 // wellKnownJwksGET returns our public JWKS, so people can use that to verify
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	k, err := jwt.AccountsPublicKeySet(api.staticLogger)
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to get the public JWKS"), http.StatusInternalServerError)
-		return
-	}
-	api.WriteJSON(w, k)
+	api.WriteJSON(w, jwt.AccountsPublicJWKS)
 }
 
 // fetchOffset extracts the offset from the params and validates its value.
