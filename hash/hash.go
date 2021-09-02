@@ -88,6 +88,8 @@ func decodeHash(encodedHash string) (ac *argon2Config, salt, hash []byte, err er
 		return nil, nil, nil, ErrInvalidHash
 	}
 
+	// Make sure the hash is created with the same version of the hashing
+	// algorithm that we're using.
 	var version int
 	_, err = fmt.Sscanf(parts[2], "v=%d", &version)
 	if err != nil {
@@ -97,18 +99,24 @@ func decodeHash(encodedHash string) (ac *argon2Config, salt, hash []byte, err er
 		return nil, nil, nil, ErrIncompatibleVersion
 	}
 
+	// Fetch the settings used for creating the password hash. Those settings
+	// affect the complexity of calculating the hash and also change the
+	// resulting hash, so it's important to use the same ones when verifying
+	// that a password matches the hash.
 	ac = &argon2Config{}
 	_, err = fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &ac.Memory, &ac.Iterations, &ac.Parallelism)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
+	// Get the auto-generated salt used when creating the hash.
 	salt, err = base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	ac.SaltLength = uint32(len(salt))
 
+	// Get the hash itself.
 	hash, err = base64.RawStdEncoding.DecodeString(parts[5])
 	if err != nil {
 		return nil, nil, nil, err
