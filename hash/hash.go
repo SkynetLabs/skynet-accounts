@@ -28,9 +28,9 @@ var (
 	// move this to a configuration file, if needed.
 	config = argon2Config{
 		SaltLength:  16,
-		Iterations:  2,
-		Memory:      131072,
-		Parallelism: 1,
+		Iterations:  1,
+		Memory:      65536,
+		Parallelism: 4,
 		KeyLength:   16,
 	}
 )
