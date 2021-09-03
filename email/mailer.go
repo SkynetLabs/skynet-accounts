@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+
 	"gitlab.com/NebulousLabs/errors"
 	"gopkg.in/mail.v2"
 )
@@ -81,8 +82,8 @@ func (em Mailer) Send(ctx context.Context, m database.EmailMessage) error {
 
 // SendAddressConfirmationEmail sends a new email to the given email address
 // with a link to confirm the ownership of the address.
-func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email, code string) error {
-	m, err := confirmEmailEmail(email, confirmEmailData{code})
+func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email, token string) error {
+	m, err := confirmEmailEmail(email, confirmEmailData{token})
 	if err != nil {
 		return errors.AddContext(err, "failed to generate email template")
 	}
@@ -91,8 +92,9 @@ func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email, code s
 
 // SendRecoverAccountEmail sends a new email to the given email address
 // with a link to recover the account.
-func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email, code string) error {
-	m, err := recoverAccountEmail(email, recoverAccountData{code})
+func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email, token string) error {
+	// TODO Something should check if the email is confirmed before using it to recover the account.
+	m, err := recoverAccountEmail(email, recoverAccountData{token})
 	if err != nil {
 		return errors.AddContext(err, "failed to generate email template")
 	}

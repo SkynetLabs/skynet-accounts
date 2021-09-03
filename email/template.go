@@ -22,7 +22,7 @@ Content-Type: text/plain; charset=UTF-8
 
 Hi, please verify your account by clicking the following link:
 
-<a href="https://siasky.net/confirmEmail?code={{.Code}}">https://siasky.net/confirmEmail?code={{.Code}}</a>
+<a href="https://siasky.net/confirmEmail?code={{.Token}}">https://siasky.net/confirmEmail?code={{.Token}}</a>
 
 --e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a
 Content-Transfer-Encoding: quoted-printable
@@ -30,7 +30,7 @@ Content-Type: text/html; charset=UTF-8
 
 Hi, please verify your account by clicking the following link:
 
-<a href="https://siasky.net/confirmEmail?code={{.Code}}">https://siasky.net/confirmEmail?code={{.Code}}</a>
+<a href="https://siasky.net/confirmEmail?code={{.Token}}">https://siasky.net/confirmEmail?code={{.Token}}</a>
 
 --e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a
 `
@@ -46,7 +46,7 @@ Hi,
 
 please recover access to your account by clicking the following link:
 
-<a href="https://siasky.net/recoverAccount?code={{.Code}}">https://siasky.net/recoverAccount?code={{.Code}}</a>
+<a href="https://siasky.net/recoverAccount?code={{.Token}}">https://siasky.net/recoverAccount?code={{.Token}}</a>
 
 --9f0f6cc6978acbf34b218925c8b6be77292fcc0ec91a086b04045aafa8ca
 Content-Transfer-Encoding: quoted-printable
@@ -56,7 +56,7 @@ Hi,
 
 please recover access to your account by clicking the following link:
 
-<a href="https://siasky.net/recoverAccount?code={{.Code}}">https://siasky.net/recoverAccount?code={{.Code}}</a>
+<a href="https://siasky.net/recoverAccount?code={{.Token}}">https://siasky.net/recoverAccount?code={{.Token}}</a>
 
 --9f0f6cc6978acbf34b218925c8b6be77292fcc0ec91a086b04045aafa8ca--
 `
@@ -102,16 +102,19 @@ If this was not you, please ignore this email.
 
 type (
 	confirmEmailData struct {
-		Code string
+		Token string
 	}
 	recoverAccountData struct {
-		Code string
+		Token string
 	}
 )
 
 // confirmEmailEmail generates an email for confirming that the user owns the
 // given email address.
 func confirmEmailEmail(to string, data confirmEmailData) (*database.EmailMessage, error) {
+	// TODO Does this need to contain the email address as well?
+	// 	Maybe not, as long as we require confirmation each time the person
+	// 	changes their email address.
 	t, err := template.New("confirmEmail").Parse(confirmEmailTempl)
 	if err != nil {
 		return nil, err

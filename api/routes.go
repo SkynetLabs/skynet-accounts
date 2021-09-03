@@ -34,6 +34,22 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.DELETE("/user/uploads/:uploadId", api.validate(api.userUploadDELETE))
 	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsGET))
 
+	/**
+	TODO
+	 - check that we actually send emails on:
+		- user creation
+		- reconfirm
+		- recover
+		- recover when there is no such email on record (SendAccountAccessAttemptedEmail)
+	 - allow userPUT to chang the user's email and mark that email as unconfirmed + send a confirmation email
+	 - all endpoints that lead to sending emails should be rate limited. we don't want people to be able to cause us
+		to send billions of emails and DoS us by making us hit our email caps or getting flagged as spammers
+	*/
+	api.staticRouter.GET("/user/confirm", api.noValidate(api.userConfirmGET))
+	api.staticRouter.GET("/user/reconfirm", api.validate(api.userReconfirmGET))
+	api.staticRouter.GET("/user/recover", api.noValidate(api.userRecoverGET))
+	api.staticRouter.POST("/user/recover", api.noValidate(api.userRecoverPOST))
+
 	api.staticRouter.DELETE("/skylink/:skylink", api.validate(api.skylinkDELETE))
 
 	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookPOST))

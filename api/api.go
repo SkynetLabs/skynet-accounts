@@ -68,7 +68,7 @@ func (api *API) WriteError(w http.ResponseWriter, err error, code int) {
 // accordingly.
 func (api *API) WriteJSON(w http.ResponseWriter, obj interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	api.staticLogger.Debugln(http.StatusOK)
+	api.staticLogger.Traceln(http.StatusOK)
 	err := json.NewEncoder(w).Encode(obj)
 	if err != nil {
 		api.staticLogger.Debugln(err)

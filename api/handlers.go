@@ -13,7 +13,9 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
+	"github.com/NebulousLabs/skynet-accounts/lib"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -77,14 +79,14 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	email := req.PostFormValue("email")
 	pw := req.PostFormValue("password")
 	if email != "" && pw != "" {
-		api.loginPOSTCredentials(w, req, email, pw)
+		api.loginCredentials(w, req, email, pw)
 		return
 	}
-	api.loginPOSTToken(w, req)
+	api.loginToken(w, req)
 }
 
-// loginPOSTCredentials is a helper that handles logins with credentials.
-func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
+// loginCredentials is a helper that handles logins with credentials.
+func (api *API) loginCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
 	// Fetch the user with that email, if they exist.
 	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
 	if err != nil {
@@ -98,27 +100,12 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
 		return
 	}
-	// Generate a JWT.
-	tk, tkBytes, err := jwt.TokenForUser(api.staticLogger, u.Email, u.Sub)
-	if err != nil {
-		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
-		err = errors.AddContext(err, "failed to create a token for user")
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	// Write the JWT to an encrypted cookie.
-	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
-	if err != nil {
-		api.staticLogger.Traceln("Error writing cookie:", err)
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	api.WriteSuccess(w)
+	api.loginUser(w, u)
 }
 
-// loginPOSTToken is a helper that handles logins via a token attached to the
+// loginToken is a helper that handles logins via a token attached to the
 // request.
-func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
+func (api *API) loginToken(w http.ResponseWriter, req *http.Request) {
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -137,6 +124,27 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	err = writeCookie(w, tokenStr, exp.UTC().Unix())
+	if err != nil {
+		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// loginUser is a helper method that generates a JWT for the user and writes the
+// login cookie.
+func (api *API) loginUser(w http.ResponseWriter, u *database.User) {
+	// Generate a JWT.
+	tk, tkBytes, err := jwt.TokenForUser(api.staticLogger, u.Email, u.Sub)
+	if err != nil {
+		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
+		err = errors.AddContext(err, "failed to create a token for user")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Write the JWT to an encrypted cookie.
+	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
 	if err != nil {
 		api.staticLogger.Traceln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -282,6 +290,8 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 
 // userPUT allows changing some user information.
 func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// TODO Update this to allow updating the user's email.
+	// TODO Once an email is changed it needs to be re-confirmed.
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -453,6 +463,146 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 		Count:    total,
 	}
 	api.WriteJSON(w, response)
+}
+
+// userConfirmGET validates the given confirmation token and confirms that the
+// account under which this token was issued really owns the email address to
+// which this token was sent.
+// The user doesn't need to be logged in.
+func (api *API) userConfirmGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	if err := req.ParseForm(); err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	token := req.Form.Get("token")
+	if token == "" {
+		api.WriteError(w, errors.New("required parameter 'token' is missing"), http.StatusBadRequest)
+		return
+	}
+	u, err := api.staticDB.UserConfirmEmail(req.Context(), token)
+	if errors.Contains(err, database.ErrInvalidToken) {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.loginUser(w, u)
+}
+
+// userReconfirmGET allows the user to request a new email address confirmation
+// email, in case the previous one didn't arrive for some reason.
+// The user needs to be logged in.
+func (api *API) userReconfirmGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u.EmailConfirmationToken = lib.GenerateUUID()
+	err = api.staticDB.UserSave(req.Context(), u)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to generate a new confirmation token"), http.StatusInternalServerError)
+		return
+	}
+	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to send the new confirmation token"), http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// userRecoverGET allows the user to request an account recovery. This creates
+// a password-reset token that allows the user to change their password without
+// logging in.
+// The user doesn't need to be logged in.
+func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	if err := req.ParseForm(); err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	email := req.Form.Get("email")
+	if email == "" {
+		api.WriteError(w, errors.New("missing required parameter 'email'"), http.StatusBadRequest)
+		return
+	}
+	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, errors.AddContext(err, "no user with this email"), http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to fetch the user with this email"), http.StatusInternalServerError)
+		return
+	}
+	// Generate a new recovery token and add it to the user's account.
+	u.RecoveryToken = lib.GenerateUUID()
+	err = api.staticDB.UserSave(req.Context(), u)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to create a token"), http.StatusInternalServerError)
+		return
+	}
+	// Send the token to the user via an email.
+	err = api.staticMailer.SendRecoverAccountEmail(req.Context(), u.Email, u.RecoveryToken)
+	if err != nil {
+		// The token was successfully generated and added to the user's account
+		// but we failed to send it to the user. We will try to remove it.
+		u.RecoveryToken = ""
+		if errRem := api.staticDB.UserSave(req.Context(), u); errRem != nil {
+			api.WriteError(w, errors.AddContext(err, "failed to send recovery email. no token has been added to the account. please try again"), http.StatusInternalServerError)
+			return
+		}
+		// We failed to remove the token we added. The user needs to be notified.
+		api.WriteError(w, errors.AddContext(err, "failed to send recovery email. please try again"), http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// userRecoverPOST allows the user to change their password without logging in.
+// They need to provide a valid password-reset token.
+// The user doesn't need to be logged in.
+func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	if err := req.ParseForm(); err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	recoveryToken := req.Form.Get("token")
+	password := req.Form.Get("password")
+	confirmPassword := req.Form.Get("confirmPassword")
+	if recoveryToken == "" || password == "" || confirmPassword == "" {
+		api.WriteError(w, errors.New("missing required parameter"), http.StatusBadRequest)
+		return
+	}
+	if password != confirmPassword {
+		api.WriteError(w, errors.New("passwords don't match"), http.StatusBadRequest)
+		return
+	}
+	u, err := api.staticDB.UserByRecoveryToken(req.Context(), recoveryToken)
+	if err != nil {
+		api.WriteError(w, errors.New("no such user"), http.StatusBadRequest)
+		return
+	}
+	passHash, err := hash.Generate([]byte(password))
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to hash password"), http.StatusInternalServerError)
+		return
+	}
+	u.PasswordHash = string(passHash)
+	u.RecoveryToken = ""
+	err = api.staticDB.UserSave(req.Context(), u)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to save password"), http.StatusInternalServerError)
+		return
+	}
+	api.loginUser(w, u)
 }
 
 // trackUploadPOST registers a new upload in the system.
