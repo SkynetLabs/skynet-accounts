@@ -234,18 +234,16 @@ func (db *DB) UserCreate(ctx context.Context, sub string, tier int) (*User, erro
 	if len(users) > 0 {
 		return nil, ErrUserAlreadyExists
 	}
-	fName, lName, email, err := jwt.UserDetailsFromJWT(ctx)
+	_, email, err := jwt.UserDetailsFromJWT(ctx)
 	if err != nil {
 		// Log the error but don't do anything differently.
 		db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
 	}
 	u := &User{
-		ID:        primitive.ObjectID{},
-		FirstName: fName,
-		LastName:  lName,
-		Email:     email,
-		Sub:       sub,
-		Tier:      tier,
+		ID:    primitive.ObjectID{},
+		Email: email,
+		Sub:   sub,
+		Tier:  tier,
 	}
 	// Insert the user.
 	fields, err := bson.Marshal(u)

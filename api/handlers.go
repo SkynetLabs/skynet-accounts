@@ -12,7 +12,6 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
-
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -68,6 +67,8 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Fetch a JWT token from the request. This token will tell us who the user
+	// is and until when their current session is going to stay valid.
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -80,13 +81,17 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	exp, err := jwt.TokenExpiration(token)
-	if err != nil {
-		api.staticLogger.Traceln("Error checking token expiration:", err)
-		api.WriteError(w, err, http.StatusUnauthorized)
+	// We fetch the expiration time of the token, so we can set the expiration
+	// time of the cookie to match it.
+	exp := token.Expiration()
+	if time.Now().UTC().After(exp.UTC()) {
+		api.WriteError(w, errors.New("token has expired"), http.StatusUnauthorized)
 		return
 	}
-	err = writeCookie(w, tokenStr, exp)
+	// Write a secure cookie containing the JWT token of the user. This allows
+	// us to verify the user's identity and permissions (i.e. tier) without
+	// requesting their credentials or accessing the DB.
+	err = writeCookie(w, tokenStr, exp.UTC().Unix())
 	if err != nil {
 		api.staticLogger.Traceln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -129,13 +134,11 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// We only do it here, instead of baking this into UserBySub because we only
 	// care about this information being correct when we're going to present it
 	// to the user, e.g. on the Dashboard.
-	fName, lName, email, err := jwt.UserDetailsFromJWT(req.Context())
+	_, email, err := jwt.UserDetailsFromJWT(req.Context())
 	if err != nil {
 		api.staticLogger.Debugln("Failed to get user details from JWT:", err)
 	}
-	if err == nil && (fName != u.FirstName || lName != u.LastName || email != u.Email) {
-		u.FirstName = fName
-		u.LastName = lName
+	if err == nil && email != u.Email {
 		u.Email = email
 		err = api.staticDB.UserSave(req.Context(), u)
 		if err != nil {
@@ -565,6 +568,12 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 			api.staticLogger.Infof("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
 	}
+}
+
+// wellKnownJwksGET returns our public JWKS, so people can use that to verify
+// the authenticity of the JWT tokens we issue.
+func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	api.WriteJSON(w, jwt.AccountsPublicJWKS)
 }
 
 // fetchOffset extracts the offset from the params and validates its value.

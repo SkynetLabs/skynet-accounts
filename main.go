@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -26,6 +27,9 @@ const (
 )
 
 var (
+	// envAccountsJWKSFile holds the name of the environment variable which
+	// holds the path to the JWKS file we need to use. Optional.
+	envAccountsJWKSFile = "ACCOUNTS_JWKS_FILE"
 	// envDBHost holds the name of the environment variable for DB host.
 	envDBHost = "SKYNET_DB_HOST"
 	// envDBPort holds the name of the environment variable for DB port.
@@ -78,13 +82,11 @@ func main() {
 	portal, ok := os.LookupEnv(envPortal)
 	if !ok {
 		portal = defaultPortal
+		jwt.JWTPortalName = portal
 	}
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
-	}
-	if kaddr := os.Getenv(envKratosAddr); kaddr != "" {
-		jwt.KratosAddr = kaddr
 	}
 	if oaddr := os.Getenv(envOathkeeperAddr); oaddr != "" {
 		jwt.OathkeeperAddr = oaddr
@@ -93,15 +95,33 @@ func main() {
 		stripe.Key = sk
 		api.StripeTestMode = !strings.HasPrefix(stripe.Key, "sk_live_")
 	}
+	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
+		jwt.AccountsJWKSFile = jwks
+	}
 
+	// Initialise the global context and logger. These will be used throughout
+	// the service. Once the context is closed, all background threads will
+	// wind themselves down.
 	ctx := context.Background()
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
+
+	// Set up key components:
+
+	// Load the JWKS that we'll use to sign and validate JWTs.
+	err = jwt.LoadAccountsKeySet(logger)
+	if err != nil {
+		log.Fatal(errors.AddContext(err, fmt.Sprintf("failed to load JWKS file from %s", jwt.AccountsJWKSFile)))
+	}
+	// Connect to the database.
 	db, err := database.New(ctx, dbCreds, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
+	// The meta fetcher will fetch metadata for all skylinks. This is needed, so
+	// we can determine their size.
 	mf := metafetcher.New(ctx, db, portal, logger)
+	// Start the HTTP server.
 	server, err := api.New(db, mf, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))

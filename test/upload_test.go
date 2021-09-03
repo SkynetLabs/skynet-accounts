@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"testing"
@@ -195,7 +196,7 @@ func TestUpload_UnpinUploads(t *testing.T) {
 	}
 	testUploadSize := int64(1 + fastrand.Intn(1e10))
 	// Add two test users.
-	sub1 := string(fastrand.Bytes(userSubLen))
+	sub1 := hex.EncodeToString(fastrand.Bytes(userSubLen))
 	u1, err := db.UserCreate(ctx, sub1, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +204,7 @@ func TestUpload_UnpinUploads(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u1)
-	sub2 := string(fastrand.Bytes(userSubLen))
+	sub2 := hex.EncodeToString(fastrand.Bytes(userSubLen))
 	u2, err := db.UserCreate(ctx, sub2, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
