@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -98,14 +99,29 @@ func main() {
 		jwt.AccountsJWKSFile = jwks
 	}
 
+	// Initialise the global context and logger. These will be used throughout
+	// the service. Once the context is closed, all background threads will
+	// wind themselves down.
 	ctx := context.Background()
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
+
+	// Set up key components:
+
+	// Load the JWKS that we'll use to sign and validate JWTs.
+	err = jwt.LoadAccountsKeySet(logger)
+	if err != nil {
+		log.Fatal(errors.AddContext(err, fmt.Sprintf("failed to load JWKS file from %s", jwt.AccountsJWKSFile)))
+	}
+	// Connect to the database.
 	db, err := database.New(ctx, dbCreds, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
+	// The meta fetcher will fetch metadata for all skylinks. This is needed, so
+	// we can determine their size.
 	mf := metafetcher.New(ctx, db, portal, logger)
+	// Start the HTTP server.
 	server, err := api.New(db, mf, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))

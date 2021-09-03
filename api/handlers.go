@@ -92,13 +92,13 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 		return
 	}
 	// Check if the password matches.
-	err = hash.Compare([]byte(password), []byte(u.PasswordHash))
+	err = hash.Compare(password, []byte(u.PasswordHash))
 	if err != nil {
 		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
 		return
 	}
 	// Generate a JWT.
-	tk, tkBytes, err := jwt.TokenForUser(api.staticLogger, u.Email, u.Sub)
+	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
 	if err != nil {
 		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
 		err = errors.AddContext(err, "failed to create a token for user")
@@ -118,6 +118,8 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 // loginPOSTToken is a helper that handles logins via a token attached to the
 // request.
 func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
+	// Fetch a JWT token from the request. This token will tell us who the user
+	// is and until when their current session is going to stay valid.
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -130,11 +132,16 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
+	// We fetch the expiration time of the token, so we can set the expiration
+	// time of the cookie to match it.
 	exp := token.Expiration()
-	if time.Now().UTC().After(exp) {
+	if time.Now().UTC().After(exp.UTC()) {
 		api.WriteError(w, errors.New("token has expired"), http.StatusUnauthorized)
 		return
 	}
+	// Write a secure cookie containing the JWT token of the user. This allows
+	// us to verify the user's identity and permissions (i.e. tier) without
+	// requesting their credentials or accessing the DB.
 	err = writeCookie(w, tokenStr, exp.UTC().Unix())
 	if err != nil {
 		api.staticLogger.Traceln("Error writing cookie:", err)
@@ -649,12 +656,7 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 // wellKnownJwksGET returns our public JWKS, so people can use that to verify
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	k, err := jwt.AccountsPublicKeySet(api.staticLogger)
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to get the public JWKS"), http.StatusInternalServerError)
-		return
-	}
-	api.WriteJSON(w, k)
+	api.WriteJSON(w, jwt.AccountsPublicJWKS)
 }
 
 // fetchOffset extracts the offset from the params and validates its value.

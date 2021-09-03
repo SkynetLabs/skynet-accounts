@@ -279,7 +279,7 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 	}
 	var passHash []byte
 	if pass != "" {
-		passHash, err = hash.Generate([]byte(pass))
+		passHash, err = hash.Generate(pass)
 		if err != nil {
 			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
 		}
