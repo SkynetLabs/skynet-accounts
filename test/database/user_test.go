@@ -1,19 +1,145 @@
-package test
+package database
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/skynet"
-	"gitlab.com/NebulousLabs/errors"
+	"github.com/NebulousLabs/skynet-accounts/test"
 
+	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// TestUserByEmail ensures UserByEmail works as expected.
+// This method also tests UserCreate.
+func TestUserByEmail(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	email := t.Name() + "@siasky.net"
+	// Ensure we don't have a user with this email and the method handles that
+	// correctly.
+	_, err = db.UserByEmail(ctx, email, false)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error %v, got %v.\n", database.ErrUserNotFound, err)
+	}
+	// Ensure creating a user via this method works as expected.
+	u, err := db.UserByEmail(ctx, email, true)
+	if err != nil {
+		t.Fatal("Unexpected error", err)
+	}
+	if u == nil || u.Email != email {
+		t.Fatalf("Unexpected result %+v\n", u)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+	// Ensure that once the user exists, we'll fetch it correctly.
+	u2, err := db.UserByEmail(ctx, email, false)
+	if err != nil {
+		t.Fatal("Unexpected error", err)
+	}
+	// Ensuring the same ID is enough because the ID is unique.
+	if u2 == nil || u2.ID != u.ID {
+		t.Fatalf("Expected %+v, got %+v\n", u, u2)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u2)
+}
+
+// TestUserByID ensures UserByID works as expected.
+func TestUserByID(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := primitive.ObjectIDFromHex("5fac383fdafc482e510627c3")
+	if err != nil {
+		t.Fatalf("Expected to be able to parse id hex string, got %v", err)
+	}
+	// Test finding a non-existent user. This should fail.
+	_, err = db.UserByID(ctx, id)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error ErrUserNotFound, got %v", err)
+	}
+
+	// Add a user to find.
+	sub := "695725d4-a345-4e68-919a-7395cb68484c"
+	u, err := db.UserCreate(ctx, "email@example.com", "", sub, database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+
+	// Test finding an existent user. This should pass.
+	u1, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(u, u1) {
+		t.Fatalf("User not equal to original: %v vs %v", u, u1)
+	}
+}
+
+// TestUserByStripeID ensures UserByStripeID works as expected.
+// This method also tests UserCreate and UserSetStripeID.
+func TestUserByStripeID(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stripeID := t.Name() + "stripeID"
+
+	// Ensure we don't have a user with this StripeID and the method handles
+	// that correctly.
+	_, err = db.UserByStripeID(ctx, stripeID)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error %v, got %v.\n", database.ErrUserNotFound, err)
+	}
+	// Create a test user with the respective StripeID.
+	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+	err = db.UserSetStripeID(ctx, u, stripeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ensure that once the user exists, we'll fetch it correctly.
+	u2, err := db.UserByStripeID(ctx, stripeID)
+	if err != nil {
+		t.Fatal("Unexpected error", err)
+	}
+	// Ensuring the same ID is enough because the ID is unique.
+	if u2 == nil || u2.ID != u.ID {
+		t.Fatalf("Expected %+v, got %+v\n", u, u2)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u2)
+}
+
+// TestUserBySub ensures UserBySub works as expected.
+// This method also tests UserCreate.
 func TestUserBySub(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, DBTestCredentials(), nil)
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +148,7 @@ func TestUserBySub(t *testing.T) {
 	// Ensure we don't have a user with this sub and the method handles that
 	// correctly.
 	_, err = db.UserBySub(ctx, sub, false)
-	if err == nil || !errors.Contains(err, database.ErrUserNotFound) {
+	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error %v, got %v.\n", database.ErrUserNotFound, err)
 	}
 	// Ensure creating a user via this method works as expected.
@@ -33,20 +159,113 @@ func TestUserBySub(t *testing.T) {
 	if u == nil || u.Sub != sub {
 		t.Fatalf("Unexpected result %+v\n", u)
 	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
 	// Ensure that once the user exists, we'll fetch it correctly.
 	u2, err := db.UserBySub(ctx, sub, false)
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}
-	if u2 == nil || u2.Sub != u.Sub || u2.ID != u.ID {
+	// Ensuring the same ID is enough because the ID is unique.
+	if u2 == nil || u2.ID != u.ID {
 		t.Fatalf("Expected %+v, got %+v\n", u, u2)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u2)
+}
+
+// TestUserCreate ensures UserCreate works as expected.
+func TestUserCreate(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	email := t.Name() + "@siasky.net"
+	pass := t.Name() + "pass"
+	sub := t.Name() + "sub"
+
+	// TODO We should uncomment this once we remove Kratos.
+	// // Try to create a user with an invalid email.
+	// _, err = db.UserCreate(ctx, "invalid email", pass, sub, database.TierFree)
+	// if err == nil {
+	// 	t.Fatal("Expected a malformed email error, got nil.")
+	// }
+	// Add a user. Happy case.
+	u, err := db.UserCreate(ctx, email, pass, sub, database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+	// Make sure the user is there.
+	fu, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fu == nil {
+		t.Fatal("Expected to find a user but didn't.")
+	}
+	newEmail := t.Name() + "_new@siasky.net"
+	newPass := t.Name() + "pass_new"
+	newSub := t.Name() + "sub_new"
+	// Try to create a user with an email which is already in use.
+	_, err = db.UserCreate(ctx, email, newPass, newSub, database.TierFree)
+	if !errors.Contains(err, database.ErrUserAlreadyExists) {
+		t.Fatalf("Expected error %+v, got %+v.\n", database.ErrUserAlreadyExists, err)
+	}
+	// Try to create a user with a sub which is already in use.
+	_, err = db.UserCreate(ctx, newEmail, newPass, sub, database.TierFree)
+	if !errors.Contains(err, database.ErrUserAlreadyExists) {
+		t.Fatalf("Expected error %+v, got %+v.\n", database.ErrUserAlreadyExists, err)
+	}
+}
+
+// TestUserDelete ensures UserDelete works as expected.
+func TestUserDelete(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sub := "695725d4-a345-4e68-919a-7395cb68484c"
+	// Add a user to delete.
+	u, err := db.UserCreate(ctx, "email@example.com", "", sub, database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+	// Make sure the user is there.
+	fu, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fu == nil {
+		t.Fatal("expected to find a user but didn't")
+	}
+	// Delete the user.
+	err = db.UserDelete(ctx, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make sure the user is not there anymore.
+	_, err = db.UserByID(ctx, u.ID)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatal(err)
 	}
 }
 
 // TestUserSave ensures that UserSave works as expected.
 func TestUserSave(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, DBTestCredentials(), nil)
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +275,7 @@ func TestUserSave(t *testing.T) {
 	u := &database.User{
 		Email: username + "@siasky.net",
 		Sub:   t.Name() + "sub",
-		Tier:  1,
+		Tier:  database.TierFree,
 	}
 	err = db.UserSave(ctx, u)
 	if err != nil {
@@ -71,6 +290,7 @@ func TestUserSave(t *testing.T) {
 	}
 	// Case: save a user that does exist in the DB.
 	u.Email = username + "_changed@siasky.net"
+	u.Tier = database.TierPremium80
 	err = db.UserSave(ctx, u)
 	if err != nil {
 		t.Fatal(err)
@@ -80,20 +300,81 @@ func TestUserSave(t *testing.T) {
 		t.Fatal(err)
 	}
 	if u1.Email != u.Email {
-		t.Fatalf("Expected first name '%s', got '%s'.", u.Email, u1.Email)
+		t.Fatalf("Expected email '%s', got '%s'.", u.Email, u1.Email)
+	}
+	if u1.Tier != u.Tier {
+		t.Fatalf("Expected tier '%d', got '%d'.", u.Tier, u1.Tier)
+	}
+}
+
+// TestUserSetStripeID ensures that UserSetStripeID works as expected.
+func TestUserSetStripeID(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stripeID := t.Name() + "stripeid"
+	// Create a test user with the respective StripeID.
+	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+	err = db.UserSetStripeID(ctx, u, stripeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u2, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2.StripeID != stripeID {
+		t.Fatalf("Expected tier %s got %s.\n", stripeID, u2.StripeID)
+	}
+}
+
+// TestUserSetTier ensures that UserSetTier works as expected.
+func TestUserSetTier(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Create a test user with the respective StripeID.
+	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+	err = db.UserSetTier(ctx, u, database.TierPremium80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u2, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2.Tier != database.TierPremium80 {
+		t.Fatalf("Expected tier %d got %d.\n", database.TierPremium80, u2.Tier)
 	}
 }
 
 // TestUserStats ensures we report accurate statistics for users.
 func TestUserStats(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, DBTestCredentials(), nil)
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add a test user.
-	sub := string(fastrand.Bytes(userSubLen))
+	sub := string(fastrand.Bytes(test.UserSubLen))
 	u, err := db.UserCreate(ctx, "user@example.com", "", sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +389,7 @@ func TestUserStats(t *testing.T) {
 	expectedDownloadBandwidth := int64(0)
 
 	// Create a small upload.
-	skylinkSmall, _, err := createTestUpload(ctx, db, u, testUploadSizeSmall)
+	skylinkSmall, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeSmall)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +409,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Create a big upload.
-	skylinkBig, _, err := createTestUpload(ctx, db, u, testUploadSizeBig)
+	skylinkBig, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeBig)
 	if err != nil {
 		t.Fatal(err)
 	}

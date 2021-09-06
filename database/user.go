@@ -147,33 +147,6 @@ type (
 	}
 )
 
-// UserBySub returns the user with the given sub. If `create` is `true` it will
-// create the user if it doesn't exist. The sub is the Kratos id of that user.
-func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
-	users, err := db.managedUsersByField(ctx, "sub", sub)
-	if create && errors.Contains(err, ErrUserNotFound) {
-		_, email, err := jwt.UserDetailsFromJWT(ctx)
-		if err != nil {
-			// Log the error but don't do anything differently.
-			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
-		}
-		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
-		// If we're successful or hit any error, other than a duplicate key we
-		// want to just return. Hitting a duplicate key error means we ran into
-		// a race condition and we can easily recover from that.
-		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-			return u, err
-		}
-		// Recover from the race condition by fetching the existing user from
-		// the DB.
-		users, err = db.managedUsersByField(ctx, "sub", sub)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return users[0], nil
-}
-
 // UserByEmail returns the user with the given username. If `create` is `true`
 // it will create the user if it doesn't exist.
 func (db *DB) UserByEmail(ctx context.Context, email string, create bool) (*User, error) {
@@ -256,8 +229,36 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
+// UserBySub returns the user with the given sub. If `create` is `true` it will
+// create the user if it doesn't exist. The sub is the Kratos id of that user.
+func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
+	users, err := db.managedUsersByField(ctx, "sub", sub)
+	if create && errors.Contains(err, ErrUserNotFound) {
+		_, email, err := jwt.UserDetailsFromJWT(ctx)
+		if err != nil {
+			// Log the error but don't do anything differently.
+			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
+		}
+		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
+		// If we're successful or hit any error, other than a duplicate key we
+		// want to just return. Hitting a duplicate key error means we ran into
+		// a race condition and we can easily recover from that.
+		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
+			return u, err
+		}
+		// Recover from the race condition by fetching the existing user from
+		// the DB.
+		users, err = db.managedUsersByField(ctx, "sub", sub)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return users[0], nil
+}
+
 // UserCreate creates a new user in the DB.
 func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int) (*User, error) {
+	// TODO Once we remove Kratos we should start validating emails here.
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", email)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {

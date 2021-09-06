@@ -14,6 +14,7 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
