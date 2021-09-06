@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strconv"
 	"time"
@@ -14,7 +15,6 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 	"github.com/julienschmidt/httprouter"
-	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -69,16 +69,20 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	err := req.ParseForm()
-	if err != nil {
-		api.staticLogger.Log(logrus.WarnLevel, "Error parsing POST form:", err)
-	}
+	// Since we don't want to have separate endpoints for logging in with
+	// credentials and token, we'll do both here.
+	//
+	// Check whether credentials are provided. Those trump the token because a
+	// user with a valid token might want to relog. No need to force them to
+	// log out first.
 	email := req.PostFormValue("email")
 	pw := req.PostFormValue("password")
 	if email != "" && pw != "" {
 		api.loginPOSTCredentials(w, req, email, pw)
 		return
 	}
+	// In case credentials were not found try to log the user by detecting a
+	// token.
 	api.loginPOSTToken(w, req)
 }
 
@@ -235,19 +239,13 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	err := req.ParseForm()
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
 	email := req.PostFormValue("email")
-	// TODO Validation
-	if email == "" {
-		api.WriteError(w, errors.New("email is required"), http.StatusBadRequest)
+	_, err := mail.ParseAddress(email)
+	if err != nil {
+		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
 	pw := req.PostFormValue("password")
-	// TODO Validation (basic complexity)
 	if pw == "" {
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
@@ -304,7 +302,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		return
 	}
 	// Check if this user already has this ID assigned to them.
-	if payload.StripeID == u.StripeId {
+	if payload.StripeID == u.StripeID {
 		// Nothing to do.
 		api.WriteJSON(w, u)
 		return
@@ -321,20 +319,20 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		return
 	}
 	// Check if this user already has a Stripe customer ID.
-	if u.StripeId != "" {
-		err = errors.New("This user already has a Stripe customer id.")
+	if u.StripeID != "" {
+		err = errors.New("this user already has a Stripe customer id")
 		api.WriteError(w, err, http.StatusUnprocessableEntity)
 		return
 	}
 	// Save the changed Stripe ID to the DB.
-	err = api.staticDB.UserSetStripeId(req.Context(), u, payload.StripeID)
+	err = api.staticDB.UserSetStripeID(req.Context(), u, payload.StripeID)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	// We set this for the purpose of returning the updated value without
 	// reading from the DB.
-	u.StripeId = payload.StripeID
+	u.StripeID = payload.StripeID
 	api.WriteJSON(w, u)
 }
 
@@ -496,7 +494,11 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 		return
 	}
 
-	_ = req.ParseForm()
+	err = req.ParseForm()
+	if err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
 	downloadedBytes, err := strconv.ParseInt(req.Form.Get("bytes"), 10, 64)
 	if err != nil {
 		downloadedBytes = 0

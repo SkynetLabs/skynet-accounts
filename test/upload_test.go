@@ -131,8 +131,8 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	}
 	totalUploadSize -= 0 // total upload size stays the same
 	rawStorageUsed -= 0  // storage stays the same
-	uploadBandwidth -= 0 // upload bandwidth is already used, so it also stay the same
-	uploadsCount -= 1
+	uploadBandwidth -= 0 // upload bandwidth is already used, so it also stays the same
+	uploadsCount--
 	// Fetch the user's uploads.
 	ups, n, err = db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
 	if err != nil {

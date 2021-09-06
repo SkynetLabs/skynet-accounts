@@ -65,7 +65,7 @@ type (
 )
 
 // ContextWithToken returns a copy of the given context that contains a token.
-func ContextWithToken(ctx context.Context, token *jwt.Token) context.Context {
+func ContextWithToken(ctx context.Context, token jwt.Token) context.Context {
 	return context.WithValue(ctx, ctxValue("token"), token)
 }
 
@@ -194,7 +194,6 @@ func UserDetailsFromJWT(ctx context.Context) (sub, email string, err error) {
 		err = errors.New("the token does not contain the sub we expect")
 		return
 	}
-	sub = claims["sub"].(string)
 	// Validate the chain of inset maps claims->session->identity->traits->name
 	// and then extract the data we need.
 	if reflect.ValueOf(claims["session"]).Kind() != reflect.Map {
@@ -216,6 +215,7 @@ func UserDetailsFromJWT(ctx context.Context) (sub, email string, err error) {
 		err = errors.New("the token does not contain the names we expect")
 		return
 	}
+	sub = claims["sub"].(string)
 	email = tr["email"].(string)
 	return
 }
@@ -381,7 +381,7 @@ func oathkeeperPublicKeys(logger *logrus.Logger) (jwk.Set, error) {
 // on the provided values.
 func tokenForUser(email, sub string) (jwt.Token, error) {
 	if email == "" || sub == "" {
-		return nil, errors.New("Email and Sub cannot be empty.")
+		return nil, errors.New("email and sub cannot be empty")
 	}
 	session := tokenSession{
 		Active: true,

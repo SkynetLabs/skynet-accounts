@@ -117,7 +117,7 @@ type (
 		SubscriptionStatus            string             `bson:"subscription_status" json:"subscriptionStatus"`
 		SubscriptionCancelAt          time.Time          `bson:"subscription_cancel_at" json:"subscriptionCancelAt"`
 		SubscriptionCancelAtPeriodEnd bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
-		StripeId                      string             `bson:"stripe_id" json:"stripeCustomerId"`
+		StripeID                      string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                 bool               `bson:"quota_exceeded" json:"quotaExceeded"`
 	}
 	// UserStats contains statistical information about the user.
@@ -152,13 +152,12 @@ type (
 func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "sub", sub)
 	if create && errors.Contains(err, ErrUserNotFound) {
-		var u *User
 		_, email, err := jwt.UserDetailsFromJWT(ctx)
 		if err != nil {
 			// Log the error but don't do anything differently.
 			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
 		}
-		u, err = db.UserCreate(ctx, email, "", sub, TierFree)
+		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
 		// If we're successful or hit any error, other than a duplicate key we
 		// want to just return. Hitting a duplicate key error means we ran into
 		// a race condition and we can easily recover from that.
@@ -180,9 +179,11 @@ func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, er
 func (db *DB) UserByEmail(ctx context.Context, email string, create bool) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "email", email)
 	if create && errors.Contains(err, ErrUserNotFound) {
-		var u *User
-		sub := generateSub()
-		u, err = db.UserCreate(ctx, email, "", sub, TierFree)
+		sub, err := generateSub()
+		if err != nil {
+			return nil, errors.AddContext(err, "failed to generate user sub")
+		}
+		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
 		// If we're successful or hit any error, other than a duplicate key we
 		// want to just return. Hitting a duplicate key error means we ran into
 		// a race condition and we can easily recover from that.
@@ -265,18 +266,24 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 	if len(users) > 0 {
 		return nil, ErrUserAlreadyExists
 	}
-	// Check for an existing user with this sub.
-	if sub != "" {
-		users, err := db.managedUsersByField(ctx, "sub", sub)
-		if err != nil && !errors.Contains(err, ErrUserNotFound) {
-			return nil, errors.AddContext(err, "failed to query DB")
+	if sub == "" {
+		sub, err = generateSub()
+		if err != nil {
+			return nil, errors.AddContext(err, "failed to generate user sub")
 		}
-		if len(users) > 0 {
-			return nil, ErrUserAlreadyExists
-		}
-	} else {
-		sub = generateSub()
 	}
+	// Check for an existing user with this sub.
+	users, err = db.managedUsersByField(ctx, "sub", sub)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if len(users) > 0 {
+		return nil, ErrUserAlreadyExists
+	}
+	// Generate a password hash, if a password is provided. A password might not
+	// be provided if the user is generated externally, e.g. in Kratos. We can
+	// remove that option in the future when `accounts` is the only system
+	// managing users but for the moment we still need it.
 	var passHash []byte
 	if pass != "" {
 		passHash, err = hash.Generate(pass)
@@ -333,11 +340,11 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserSetStripeId changes the user's stripe id in the DB.
-func (db *DB) UserSetStripeId(ctx context.Context, u *User, stripeId string) error {
+// UserSetStripeID changes the user's stripe id in the DB.
+func (db *DB) UserSetStripeID(ctx context.Context, u *User, stripeID string) error {
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
-		"stripe_id": stripeId,
+		"stripe_id": stripeID,
 	}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
@@ -630,9 +637,9 @@ func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, mont
 
 // userRegistryWriteStats reports the number of registry writes by the user and
 // the bandwidth used.
-func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
+func (db *DB) userRegistryWriteStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", userId},
+		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	writes, err := db.count(ctx, db.staticRegistryWrites, matchStage)
@@ -644,9 +651,9 @@ func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.Objec
 
 // userRegistryReadsStats reports the number of registry reads by the user and
 // the bandwidth used.
-func (db *DB) userRegistryReadStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
+func (db *DB) userRegistryReadStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", userId},
+		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	reads, err := db.count(ctx, db.staticRegistryReads, matchStage)
@@ -679,20 +686,11 @@ func monthStart(subscribedUntil time.Time) time.Time {
 }
 
 // generateSub is a helper method that generates a UUID and encodes it in hex.
-func generateSub() string {
+func generateSub() (string, error) {
 	uid, err := uuid.New()
-	// the only way to get an error here is for uuid to be unable to read from
-	// the RNG reader, which is highly unlikely. We'll log and retry.
-	for err != nil {
-		fmt.Println("Error during UUID creation:", err)
-		uid, err = uuid.New()
+	if err != nil {
+		build.Critical("Error during UUID creation:", err)
+		return "", err
 	}
-	return hex.EncodeToString(uid[:])
+	return hex.EncodeToString(uid[:]), nil
 }
-
-// {"hashed_password":"$argon2id$v=19$m=131072,t=2,p=1$dwr95pEjaa7emZOu9bDAWw$eDQwOMoSyRmzyvpD/wwGBg"}
-
-// TODO Generate a token for this user. The token needs to be signed by accounts.
-// func TokenForUser(db *DB, u User) jwt.Token {
-//
-// }

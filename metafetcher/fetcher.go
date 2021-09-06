@@ -114,6 +114,10 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		return
 	}
 	bodyBytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		mf.logger.Debugf("Failed to read skyfile metadata: %s", err)
+		return
+	}
 	var meta struct {
 		Filename string `json:"filename"`
 		Length   int64  `json:"length"`

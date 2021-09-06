@@ -134,10 +134,10 @@ func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSi
 }
 
 // DownloadRecent returns the most recent download of the given skylink.
-func (db *DB) DownloadRecent(ctx context.Context, skylinkId primitive.ObjectID) (*Download, error) {
+func (db *DB) DownloadRecent(ctx context.Context, skylinkID primitive.ObjectID) (*Download, error) {
 	updatedAtThreshold := time.Now().UTC().Add(-1 * DownloadUpdateWindow)
 	filter := bson.D{
-		{"skylink_id", skylinkId},
+		{"skylink_id", skylinkID},
 		{"updated_at", bson.D{{"$gt", updatedAtThreshold}}},
 	}
 	opts := options.FindOneOptions{
