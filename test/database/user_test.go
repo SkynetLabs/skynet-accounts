@@ -6,9 +6,42 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/skynet"
+	"gitlab.com/NebulousLabs/errors"
 
 	"gitlab.com/NebulousLabs/fastrand"
 )
+
+func TestUserBySub(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sub := t.Name()
+	// Ensure we don't have a user with this sub and the method handles that
+	// correctly.
+	_, err = db.UserBySub(ctx, sub, false)
+	if err == nil || !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error %v, got %v.\n", database.ErrUserNotFound, err)
+	}
+	// Ensure creating a user via this method works as expected.
+	u, err := db.UserBySub(ctx, sub, true)
+	if err != nil {
+		t.Fatal("Unexpected error", err)
+	}
+	if u == nil || u.Sub != sub {
+		t.Fatalf("Unexpected result %+v\n", u)
+	}
+	// Ensure that once the user exists, we'll fetch it correctly.
+	u2, err := db.UserBySub(ctx, sub, false)
+	if err != nil {
+		t.Fatal("Unexpected error", err)
+	}
+	if u2 == nil || u2.Sub != u.Sub || u2.ID != u.ID {
+		t.Fatalf("Expected %+v, got %+v\n", u, u2)
+	}
+}
 
 // TestUserSave ensures that UserSave works as expected.
 func TestUserSave(t *testing.T) {
@@ -18,9 +51,10 @@ func TestUserSave(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	username := t.Name()
 	// Case: save a user that doesn't exist in the DB.
 	u := &database.User{
-		Email: "john.doe@siasky.net",
+		Email: username + "@siasky.net",
 		Sub:   t.Name() + "sub",
 		Tier:  1,
 	}
@@ -36,7 +70,7 @@ func TestUserSave(t *testing.T) {
 		t.Fatalf("Expected user id %s, got %s.", u.ID.Hex(), u1.ID.Hex())
 	}
 	// Case: save a user that does exist in the DB.
-	u.Email = "new@email.com"
+	u.Email = username + "_changed@siasky.net"
 	err = db.UserSave(ctx, u)
 	if err != nil {
 		t.Fatal(err)
