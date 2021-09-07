@@ -540,11 +540,24 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 	}
 	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
+		// Someone tried to recover an account with an email that's not in our
+		// database. It's possible that this is a user who forgot which email
+		// they used when they signed up. Let's send them an email that explains
+		// that to them.
+		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), email)
+		if errSend != nil {
+			api.staticLogger.Warningln(errors.AddContext(err, "failed to send an email"))
+		}
 		api.WriteError(w, errors.AddContext(err, "no user with this email"), http.StatusBadRequest)
 		return
 	}
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to fetch the user with this email"), http.StatusInternalServerError)
+		return
+	}
+	// Verify that the user's email is confirmed.
+	if u.EmailConfirmationToken != "" {
+		api.WriteError(w, errors.New("user's email is not confirmed. it cannot be used for account recovery"), http.StatusBadRequest)
 		return
 	}
 	// Generate a new recovery token and add it to the user's account.

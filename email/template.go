@@ -112,9 +112,6 @@ type (
 // confirmEmailEmail generates an email for confirming that the user owns the
 // given email address.
 func confirmEmailEmail(to string, data confirmEmailData) (*database.EmailMessage, error) {
-	// TODO Does this need to contain the email address as well?
-	// 	Maybe not, as long as we require confirmation each time the person
-	// 	changes their email address.
 	t, err := template.New("confirmEmail").Parse(confirmEmailTempl)
 	if err != nil {
 		return nil, err

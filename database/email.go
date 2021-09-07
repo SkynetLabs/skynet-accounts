@@ -26,7 +26,7 @@ type (
 		Body                 string             `bson:"body"`
 		BodyMime             string             `bson:"body_mime"`
 		LockedBy             string             `bson:"locked_by"`
-		SentAt               time.Time          `bson:"sent_at"`
+		SentAt               time.Time          `bson:"sent_at,omitempty"`
 		FailedAttemptsToSend int                `bson:"failed_attempts_to_send"`
 		Failed               bool               `bson:"failed"`
 	}
@@ -190,7 +190,7 @@ func (db *DB) MarkAsFailed(ctx context.Context, msgs []*EmailMessage) error {
 	// failed.
 	var errFailed error
 	if len(failed) > 0 {
-		db.staticLogger.Warningf("%d email messages failed to be sent more than %d times and won't be tried.", len(failed), maxAttemptsToSend)
+		db.staticLogger.Warningf("%d email messages failed to be sent more than %d times and won't be tried anymore.", len(failed), maxAttemptsToSend)
 
 		filter = bson.M{"_id": bson.M{"$in": failed}}
 		update = bson.M{"$set": bson.M{"failed": True}}

@@ -36,12 +36,7 @@ func (api *API) buildHTTPRoutes() {
 
 	/**
 	TODO
-	 - check that we actually send emails on:
-		- user creation
-		- reconfirm
-		- recover
-		- recover when there is no such email on record (SendAccountAccessAttemptedEmail)
-	 - allow userPUT to chang the user's email and mark that email as unconfirmed + send a confirmation email
+	 - allow userPUT to change the user's email and mark that email as unconfirmed + send a confirmation email
 	 - all endpoints that lead to sending emails should be rate limited. we don't want people to be able to cause us
 		to send billions of emails and DoS us by making us hit our email caps or getting flagged as spammers
 	*/

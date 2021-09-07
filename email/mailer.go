@@ -93,7 +93,6 @@ func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email, token 
 // SendRecoverAccountEmail sends a new email to the given email address
 // with a link to recover the account.
 func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email, token string) error {
-	// TODO Something should check if the email is confirmed before using it to recover the account.
 	m, err := recoverAccountEmail(email, recoverAccountData{token})
 	if err != nil {
 		return errors.AddContext(err, "failed to generate email template")
