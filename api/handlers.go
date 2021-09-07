@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
@@ -249,17 +248,19 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	email := req.PostFormValue("email")
-	_, err := mail.ParseAddress(email)
+	// Validate the email address.
+	a, err := mail.ParseAddress(email)
 	if err != nil {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
+	// Strip any names from the email and leave just the address.
+	email = a.Address
 	pw := req.PostFormValue("password")
 	if pw == "" {
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
 	}
-
 	u, err := api.staticDB.UserCreate(req.Context(), email, pw, "", database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -269,39 +270,82 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-
-	// Send an email address confirmation email.
 	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
 	if err != nil {
-		// We failed to send a confirmation email. We'll try to delete the user
-		// we just created and return an error.
-		errDel := api.staticDB.UserDelete(context.Background(), u)
-		if errDel != nil {
-			// We failed to delete the newly created user. We will return a
-			// success to the user and log a build.Critical. The user will not
-			// receive a confirmation email, but they will be able to request a
-			// new one to be sent to them via the established channel for that.
-			build.Critical("Failed to delete newly created user after failing to send a confirmation email. The user will continue existing. Deletion error:", err)
-			api.WriteJSON(w, u)
-			return
-		}
-		err = errors.AddContext(err, "failed to send a confirmation email, user is not created")
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
+		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
-
 	api.WriteJSON(w, u)
 }
 
 // userPUT allows changing some user information.
+// This method receives its parameters as a JSON object.
 func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// TODO Update this to allow updating the user's email.
-	// TODO Once an email is changed it needs to be re-confirmed.
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
+
+	// Read and parse the request body.
+	bodyBytes, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = errors.AddContext(err, "failed to read request body")
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	defer func() { _ = req.Body.Close() }()
+	payload := struct {
+		Email    string `json:"email,omitempty"`
+		StripeID string `json:"stripeCustomerId,omitempty"`
+	}{}
+	err = json.Unmarshal(bodyBytes, &payload)
+	if err != nil {
+		err = errors.AddContext(err, "failed to parse request body")
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if payload.Email == "" && payload.StripeID == "" {
+		// The payload is empty, nothing to do.
+		api.WriteSuccess(w)
+		return
+	}
+	// Verify that no other user owns this StripeID.
+	if payload.StripeID != "" {
+		su, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
+		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
+			api.WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
+		if err == nil && su.Sub != sub {
+			err = errors.New("this stripe customer id belongs to another user")
+			api.WriteError(w, err, http.StatusBadRequest)
+			return
+		}
+	}
+	// Validate the email and verify that no other user owns it.
+	if payload.Email != "" {
+		// Validate the new email.
+		a, err := mail.ParseAddress(payload.Email)
+		if err != nil {
+			api.WriteError(w, errors.AddContext(err, "invalid email address"), http.StatusBadRequest)
+			return
+		}
+		// Strip any names from the email and leave just the address.
+		payload.Email = a.Address
+		// Check if another user already has this email address.
+		eu, err := api.staticDB.UserByEmail(req.Context(), payload.Email, false)
+		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
+			api.WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
+		if err == nil && eu.Sub != sub {
+			err = errors.New("this email is already in use")
+			api.WriteError(w, err, http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Fetch the user from the DB.
 	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
 		api.WriteError(w, err, http.StatusNotFound)
@@ -311,60 +355,37 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	// Read body.
-	bodyBytes, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		err = errors.AddContext(err, "failed to read request body")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
+
+	// Update the user's data.
+	if payload.StripeID != "" {
+		// Check if this user already has a Stripe customer ID.
+		if u.StripeID != "" {
+			err = errors.New("this user already has a Stripe customer id")
+			api.WriteError(w, err, http.StatusUnprocessableEntity)
+			return
+		}
+		u.StripeID = payload.StripeID
 	}
-	defer func() { _ = req.Body.Close() }()
-	payload := struct {
-		StripeID string `json:"stripeCustomerId"`
-	}{}
-	err = json.Unmarshal(bodyBytes, &payload)
-	if err != nil {
-		err = errors.AddContext(err, "failed to parse request body")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
+	var changedEmail bool
+	if payload.Email != "" {
+		u.Email = payload.Email
+		u.EmailConfirmationToken = lib.GenerateUUID()
+		changedEmail = true
 	}
-	if payload.StripeID == "" {
-		err = errors.AddContext(err, "empty stripe id")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
-	// Check if this user already has this ID assigned to them.
-	if payload.StripeID == u.StripeID {
-		// Nothing to do.
-		api.WriteJSON(w, u)
-		return
-	}
-	// Check if a user already has this customer id.
-	eu, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
-	if err != nil && err != database.ErrUserNotFound {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	if err == nil && eu.ID.Hex() != u.ID.Hex() {
-		err = errors.New("this stripe customer id belongs to another user")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
-	// Check if this user already has a Stripe customer ID.
-	if u.StripeID != "" {
-		err = errors.New("this user already has a Stripe customer id")
-		api.WriteError(w, err, http.StatusUnprocessableEntity)
-		return
-	}
-	// Save the changed Stripe ID to the DB.
-	err = api.staticDB.UserSetStripeID(req.Context(), u, payload.StripeID)
+
+	// Save the changes.
+	err = api.staticDB.UserSave(req.Context(), u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	// We set this for the purpose of returning the updated value without
-	// reading from the DB.
-	u.StripeID = payload.StripeID
+	// Send a confirmation email if the user's email address was changed.
+	if changedEmail {
+		err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
+		if err != nil {
+			api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
+		}
+	}
 	api.WriteJSON(w, u)
 }
 
@@ -542,8 +563,7 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 	if errors.Contains(err, database.ErrUserNotFound) {
 		// Someone tried to recover an account with an email that's not in our
 		// database. It's possible that this is a user who forgot which email
-		// they used when they signed up. Let's send them an email that explains
-		// that to them.
+		// they used when they signed up. Email them, so they know.
 		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), email)
 		if errSend != nil {
 			api.staticLogger.Warningln(errors.AddContext(err, "failed to send an email"))
