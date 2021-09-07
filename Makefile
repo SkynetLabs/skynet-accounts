@@ -47,7 +47,7 @@ lint-ci:
 # golint is skipped on Windows.
 ifneq ("$(OS)","Windows_NT")
 # Linux
-	go get golang.org/x/lint/golint
+	go get -d golang.org/x/lint/golint
 	golint -min_confidence=1.0 -set_exit_status $(pkgs)
 endif
 
