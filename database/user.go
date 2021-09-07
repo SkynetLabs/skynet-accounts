@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -20,7 +19,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/uuid"
 )
 
 const (
@@ -159,7 +157,7 @@ type (
 func (db *DB) UserByEmail(ctx context.Context, email string, create bool) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "email", email)
 	if create && errors.Contains(err, ErrUserNotFound) {
-		sub, err := generateSub()
+		sub, err := lib.GenerateUUID()
 		if err != nil {
 			return nil, errors.AddContext(err, "failed to generate user sub")
 		}
@@ -313,7 +311,7 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 		return nil, ErrUserAlreadyExists
 	}
 	if sub == "" {
-		sub, err = generateSub()
+		sub, err = lib.GenerateUUID()
 		if err != nil {
 			return nil, errors.AddContext(err, "failed to generate user sub")
 		}
@@ -337,7 +335,10 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
 		}
 	}
-	emailConfToken := lib.GenerateUUID()
+	emailConfToken, err := lib.GenerateUUID()
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to generate an emil confirmation token")
+	}
 	u := &User{
 		ID:                     primitive.ObjectID{},
 		Email:                  email,
@@ -725,14 +726,4 @@ func monthStart(subscribedUntil time.Time) time.Time {
 	}
 	d := now.AddDate(0, monthsDelta, daysDelta)
 	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
-}
-
-// generateSub is a helper method that generates a UUID and encodes it in hex.
-func generateSub() (string, error) {
-	uid, err := uuid.New()
-	if err != nil {
-		build.Critical("Error during UUID creation:", err)
-		return "", err
-	}
-	return hex.EncodeToString(uid[:]), nil
 }
