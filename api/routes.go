@@ -84,7 +84,7 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 			return
 		}
 		// Embed the verified token in the context of the request.
-		ctx := jwt.ContextWithToken(req.Context(), &token)
+		ctx := jwt.ContextWithToken(req.Context(), token)
 		h(w, req.WithContext(ctx), ps)
 	}
 }

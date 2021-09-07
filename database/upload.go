@@ -91,11 +91,11 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pag
 
 // UnpinUpload unpins a single upload by this user. Returns the number of
 // unpinned uploads.
-func (db *DB) UnpinUpload(ctx context.Context, uploadId string, user User) (int64, error) {
-	if uploadId == "" {
+func (db *DB) UnpinUpload(ctx context.Context, uploadID string, user User) (int64, error) {
+	if uploadID == "" {
 		return 0, errors.New("invalid skylink")
 	}
-	uid, err := primitive.ObjectIDFromHex(uploadId)
+	uid, err := primitive.ObjectIDFromHex(uploadID)
 	if err != nil {
 		return 0, errors.New("invalid upload id")
 	}

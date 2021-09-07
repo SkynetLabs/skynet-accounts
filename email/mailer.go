@@ -140,6 +140,7 @@ func sendMultiple(m ...*mail.Message) error {
 	d := mail.NewDialer(c.Server, c.Port, c.User, c.Pass)
 	// This is only needed when SSL/TLS certificate is not valid on server.
 	// In production this should be set to false.
+	/* #nosec */
 	d.TLSConfig = &tls.Config{
 		InsecureSkipVerify: c.InsecureSkipVerify,
 		ServerName:         c.Server,
@@ -152,8 +153,8 @@ func sendMultiple(m ...*mail.Message) error {
 
 // config parses the ConnectionURI variable and extracts the configuration
 // values from it.
-func config(connUri string) (emailConfig, error) {
-	match := matchPattern.FindStringSubmatch(connUri)
+func config(connURI string) (emailConfig, error) {
+	match := matchPattern.FindStringSubmatch(connURI)
 	result := make(map[string]string)
 	for i, name := range matchPattern.SubexpNames() {
 		if i != 0 && name != "" {

@@ -73,11 +73,11 @@ func (s Sender) scanAndSend() {
 	var sent []primitive.ObjectID
 	var failed []*database.EmailMessage
 	var errs []error
-	for _, m := range msgs {
+	for i, m := range msgs {
 		err = send(m.From, m.To, m.Subject, m.Body, m.BodyMime)
 		if err != nil {
 			errs = append(errs, err)
-			failed = append(failed, &m)
+			failed = append(failed, &msgs[i])
 			continue
 		}
 		sent = append(sent, m.ID)

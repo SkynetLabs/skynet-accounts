@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/x/mongo/driver/uuid"
 )
 
 const (
@@ -122,7 +124,7 @@ type (
 		SubscriptionStatus            string             `bson:"subscription_status" json:"subscriptionStatus"`
 		SubscriptionCancelAt          time.Time          `bson:"subscription_cancel_at" json:"subscriptionCancelAt"`
 		SubscriptionCancelAtPeriodEnd bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
-		StripeId                      string             `bson:"stripe_id" json:"stripeCustomerId"`
+		StripeID                      string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                 bool               `bson:"quota_exceeded" json:"quotaExceeded"`
 	}
 	// UserStats contains statistical information about the user.
@@ -152,42 +154,16 @@ type (
 	}
 )
 
-// UserBySub returns the user with the given sub. If `create` is `true` it will
-// create the user if it doesn't exist. The sub is the Kratos id of that user.
-func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
-	users, err := db.managedUsersByField(ctx, "sub", sub)
-	if create && errors.Contains(err, ErrUserNotFound) {
-		var u *User
-		_, email, err := jwt.UserDetailsFromJWT(ctx)
-		if err != nil {
-			// Log the error but don't do anything differently.
-			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
-		}
-		u, err = db.UserCreate(ctx, email, "", sub, TierFree)
-		// If we're successful or hit any error, other than a duplicate key we
-		// want to just return. Hitting a duplicate key error means we ran into
-		// a race condition and we can easily recover from that.
-		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-			return u, err
-		}
-		// Recover from the race condition by fetching the existing user from
-		// the DB.
-		users, err = db.managedUsersByField(ctx, "sub", sub)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return users[0], nil
-}
-
 // UserByEmail returns the user with the given username. If `create` is `true`
 // it will create the user if it doesn't exist.
 func (db *DB) UserByEmail(ctx context.Context, email string, create bool) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "email", email)
 	if create && errors.Contains(err, ErrUserNotFound) {
-		var u *User
-		sub := lib.GenerateUUID()
-		u, err = db.UserCreate(ctx, email, "", sub, TierFree)
+		sub, err := generateSub()
+		if err != nil {
+			return nil, errors.AddContext(err, "failed to generate user sub")
+		}
+		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
 		// If we're successful or hit any error, other than a duplicate key we
 		// want to just return. Hitting a duplicate key error means we ran into
 		// a race condition and we can easily recover from that.
@@ -269,6 +245,33 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
+// UserBySub returns the user with the given sub. If `create` is `true` it will
+// create the user if it doesn't exist. The sub is the Kratos id of that user.
+func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
+	users, err := db.managedUsersByField(ctx, "sub", sub)
+	if create && errors.Contains(err, ErrUserNotFound) {
+		_, email, err := jwt.UserDetailsFromJWT(ctx)
+		if err != nil {
+			// Log the error but don't do anything differently.
+			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
+		}
+		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
+		// If we're successful or hit any error, other than a duplicate key we
+		// want to just return. Hitting a duplicate key error means we ran into
+		// a race condition and we can easily recover from that.
+		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
+			return u, err
+		}
+		// Recover from the race condition by fetching the existing user from
+		// the DB.
+		users, err = db.managedUsersByField(ctx, "sub", sub)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return users[0], nil
+}
+
 // UserConfirmEmail confirms that the email to which the passed confirmation
 // token belongs actually belongs to its user.
 func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error) {
@@ -300,6 +303,7 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int) (*User, error) {
+	// TODO Once we remove Kratos we should start validating emails here.
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", email)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
@@ -308,21 +312,27 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 	if len(users) > 0 {
 		return nil, ErrUserAlreadyExists
 	}
-	// Check for an existing user with this sub.
-	if sub != "" {
-		users, err := db.managedUsersByField(ctx, "sub", sub)
-		if err != nil && !errors.Contains(err, ErrUserNotFound) {
-			return nil, errors.AddContext(err, "failed to query DB")
+	if sub == "" {
+		sub, err = generateSub()
+		if err != nil {
+			return nil, errors.AddContext(err, "failed to generate user sub")
 		}
-		if len(users) > 0 {
-			return nil, ErrUserAlreadyExists
-		}
-	} else {
-		sub = lib.GenerateUUID()
 	}
+	// Check for an existing user with this sub.
+	users, err = db.managedUsersByField(ctx, "sub", sub)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if len(users) > 0 {
+		return nil, ErrUserAlreadyExists
+	}
+	// Generate a password hash, if a password is provided. A password might not
+	// be provided if the user is generated externally, e.g. in Kratos. We can
+	// remove that option in the future when `accounts` is the only system
+	// managing users but for the moment we still need it.
 	var passHash []byte
 	if pass != "" {
-		passHash, err = hash.Generate([]byte(pass))
+		passHash, err = hash.Generate(pass)
 		if err != nil {
 			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
 		}
@@ -378,10 +388,10 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserSetStripeId changes the user's stripe id in the DB.
-func (db *DB) UserSetStripeId(ctx context.Context, u *User, stripeId string) error {
+// UserSetStripeID changes the user's stripe id in the DB.
+func (db *DB) UserSetStripeID(ctx context.Context, u *User, stripeID string) error {
 	filter := bson.M{"_id": u.ID}
-	update := bson.M{"$set": bson.M{"stripe_id": stripeId}}
+	update := bson.M{"$set": bson.M{"stripe_id": stripeID}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
@@ -669,9 +679,9 @@ func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, mont
 
 // userRegistryWriteStats reports the number of registry writes by the user and
 // the bandwidth used.
-func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
+func (db *DB) userRegistryWriteStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", userId},
+		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	writes, err := db.count(ctx, db.staticRegistryWrites, matchStage)
@@ -683,9 +693,9 @@ func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.Objec
 
 // userRegistryReadsStats reports the number of registry reads by the user and
 // the bandwidth used.
-func (db *DB) userRegistryReadStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
+func (db *DB) userRegistryReadStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", userId},
+		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	reads, err := db.count(ctx, db.staticRegistryReads, matchStage)
@@ -715,4 +725,14 @@ func monthStart(subscribedUntil time.Time) time.Time {
 	}
 	d := now.AddDate(0, monthsDelta, daysDelta)
 	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// generateSub is a helper method that generates a UUID and encodes it in hex.
+func generateSub() (string, error) {
+	uid, err := uuid.New()
+	if err != nil {
+		build.Critical("Error during UUID creation:", err)
+		return "", err
+	}
+	return hex.EncodeToString(uid[:]), nil
 }

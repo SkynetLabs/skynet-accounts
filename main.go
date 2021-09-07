@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -38,8 +39,8 @@ var (
 	envDBUser = "SKYNET_DB_USER"
 	// envDBPass holds the name of the environment variable for DB password.
 	envDBPass = "SKYNET_DB_PASS" // #nosec G101: Potential hardcoded credentials
-	// envEmailUri holds the name of the environment variable for email URI.
-	envEmailUri = "ACCOUNTS_EMAIL_URI"
+	// envEmailURI holds the name of the environment variable for email URI.
+	envEmailURI = "ACCOUNTS_EMAIL_URI"
 	// envLogLevel holds the name of the environment variable which defines the
 	// desired log level.
 	envLogLevel = "SKYNET_ACCOUNTS_LOG_LEVEL"
@@ -52,9 +53,9 @@ var (
 	// envOathkeeperAddr hold the name of the environment variable for
 	// Oathkeeper's address. Defaults to "oathkeeper:4456".
 	envOathkeeperAddr = "OATHKEEPER_ADDR"
-	// envStripeApiKey hold the name of the environment variable for Stripe's
+	// envStripeAPIKey hold the name of the environment variable for Stripe's
 	// API key. It's only required when integrating with Stripe.
-	envStripeApiKey = "STRIPE_API_KEY"
+	envStripeAPIKey = "STRIPE_API_KEY"
 )
 
 // loadDBCredentials creates a new DB connection based on credentials found in
@@ -81,6 +82,10 @@ func main() {
 	// Load the environment variables from the .env file.
 	// Existing variables take precedence and won't be overwritten.
 	_ = godotenv.Load()
+
+	// Initialise the global context and logger. These will be used throughout
+	// the service. Once the context is closed, all background threads will
+	// wind themselves down.
 	ctx := context.Background()
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
@@ -107,17 +112,25 @@ func main() {
 	if oaddr := os.Getenv(envOathkeeperAddr); oaddr != "" {
 		jwt.OathkeeperAddr = oaddr
 	}
-	if sk := os.Getenv(envStripeApiKey); sk != "" {
+	if sk := os.Getenv(envStripeAPIKey); sk != "" {
 		stripe.Key = sk
 		api.StripeTestMode = !strings.HasPrefix(stripe.Key, "sk_live_")
 	}
 	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
 		jwt.AccountsJWKSFile = jwks
 	}
-	if emailStr := os.Getenv(envEmailUri); emailStr != "" {
+	if emailStr := os.Getenv(envEmailURI); emailStr != "" {
 		email.ConnectionURI = emailStr
 	}
 
+	// Set up key components:
+
+	// Load the JWKS that we'll use to sign and validate JWTs.
+	err = jwt.LoadAccountsKeySet(logger)
+	if err != nil {
+		log.Fatal(errors.AddContext(err, fmt.Sprintf("failed to load JWKS file from %s", jwt.AccountsJWKSFile)))
+	}
+	// Connect to the database.
 	db, err := database.New(ctx, dbCreds, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
@@ -125,8 +138,10 @@ func main() {
 	mailer := email.New(db)
 	// Start the mail sender background thread.
 	email.NewSender(ctx, db, logger).Start()
-	// Start the metadata fetcher background thread.
+	// The meta fetcher will fetch metadata for all skylinks. This is needed, so
+	// we can determine their size.
 	mf := metafetcher.New(ctx, db, portal, logger)
+	// Start the HTTP server.
 	server, err := api.New(db, mf, logger, mailer)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))

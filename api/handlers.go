@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strconv"
 	"time"
@@ -17,7 +18,6 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -72,21 +72,25 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	err := req.ParseForm()
-	if err != nil {
-		api.staticLogger.Log(logrus.WarnLevel, "Error parsing POST form:", err)
-	}
+	// Since we don't want to have separate endpoints for logging in with
+	// credentials and token, we'll do both here.
+	//
+	// Check whether credentials are provided. Those trump the token because a
+	// user with a valid token might want to relog. No need to force them to
+	// log out first.
 	email := req.PostFormValue("email")
 	pw := req.PostFormValue("password")
 	if email != "" && pw != "" {
-		api.loginCredentials(w, req, email, pw)
+		api.loginPOSTCredentials(w, req, email, pw)
 		return
 	}
-	api.loginToken(w, req)
+	// In case credentials were not found try to log the user by detecting a
+	// token.
+	api.loginPOSTToken(w, req)
 }
 
-// loginCredentials is a helper that handles logins with credentials.
-func (api *API) loginCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
+// loginPOSTCredentials is a helper that handles logins with credentials.
+func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
 	// Fetch the user with that email, if they exist.
 	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
 	if err != nil {
@@ -95,7 +99,7 @@ func (api *API) loginCredentials(w http.ResponseWriter, req *http.Request, email
 		return
 	}
 	// Check if the password matches.
-	err = hash.Compare([]byte(password), []byte(u.PasswordHash))
+	err = hash.Compare(password, []byte(u.PasswordHash))
 	if err != nil {
 		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
 		return
@@ -105,7 +109,9 @@ func (api *API) loginCredentials(w http.ResponseWriter, req *http.Request, email
 
 // loginToken is a helper that handles logins via a token attached to the
 // request.
-func (api *API) loginToken(w http.ResponseWriter, req *http.Request) {
+func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
+	// Fetch a JWT token from the request. This token will tell us who the user
+	// is and until when their current session is going to stay valid.
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Traceln("Error fetching token from request:", err)
@@ -118,11 +124,16 @@ func (api *API) loginToken(w http.ResponseWriter, req *http.Request) {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
+	// We fetch the expiration time of the token, so we can set the expiration
+	// time of the cookie to match it.
 	exp := token.Expiration()
-	if time.Now().UTC().After(exp) {
+	if time.Now().UTC().After(exp.UTC()) {
 		api.WriteError(w, errors.New("token has expired"), http.StatusUnauthorized)
 		return
 	}
+	// Write a secure cookie containing the JWT token of the user. This allows
+	// us to verify the user's identity and permissions (i.e. tier) without
+	// requesting their credentials or accessing the DB.
 	err = writeCookie(w, tokenStr, exp.UTC().Unix())
 	if err != nil {
 		api.staticLogger.Traceln("Error writing cookie:", err)
@@ -136,7 +147,7 @@ func (api *API) loginToken(w http.ResponseWriter, req *http.Request) {
 // login cookie.
 func (api *API) loginUser(w http.ResponseWriter, u *database.User) {
 	// Generate a JWT.
-	tk, tkBytes, err := jwt.TokenForUser(api.staticLogger, u.Email, u.Sub)
+	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
 	if err != nil {
 		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
 		err = errors.AddContext(err, "failed to create a token for user")
@@ -237,19 +248,13 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	err := req.ParseForm()
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
 	email := req.PostFormValue("email")
-	// TODO Validation
-	if email == "" {
-		api.WriteError(w, errors.New("email is required"), http.StatusBadRequest)
+	_, err := mail.ParseAddress(email)
+	if err != nil {
+		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
 	pw := req.PostFormValue("password")
-	// TODO Validation (basic complexity)
 	if pw == "" {
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
@@ -329,7 +334,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		return
 	}
 	// Check if this user already has this ID assigned to them.
-	if payload.StripeID == u.StripeId {
+	if payload.StripeID == u.StripeID {
 		// Nothing to do.
 		api.WriteJSON(w, u)
 		return
@@ -346,20 +351,20 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		return
 	}
 	// Check if this user already has a Stripe customer ID.
-	if u.StripeId != "" {
-		err = errors.New("This user already has a Stripe customer id.")
+	if u.StripeID != "" {
+		err = errors.New("this user already has a Stripe customer id")
 		api.WriteError(w, err, http.StatusUnprocessableEntity)
 		return
 	}
 	// Save the changed Stripe ID to the DB.
-	err = api.staticDB.UserSetStripeId(req.Context(), u, payload.StripeID)
+	err = api.staticDB.UserSetStripeID(req.Context(), u, payload.StripeID)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	// We set this for the purpose of returning the updated value without
 	// reading from the DB.
-	u.StripeId = payload.StripeID
+	u.StripeID = payload.StripeID
 	api.WriteJSON(w, u)
 }
 
@@ -590,7 +595,7 @@ func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ http
 		api.WriteError(w, errors.New("no such user"), http.StatusBadRequest)
 		return
 	}
-	passHash, err := hash.Generate([]byte(password))
+	passHash, err := hash.Generate(password)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to hash password"), http.StatusInternalServerError)
 		return
@@ -661,7 +666,11 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 		return
 	}
 
-	_ = req.ParseForm()
+	err = req.ParseForm()
+	if err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
 	downloadedBytes, err := strconv.ParseInt(req.Form.Get("bytes"), 10, 64)
 	if err != nil {
 		downloadedBytes = 0
@@ -821,12 +830,7 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 // wellKnownJwksGET returns our public JWKS, so people can use that to verify
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	k, err := jwt.AccountsPublicKeySet(api.staticLogger)
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to get the public JWKS"), http.StatusInternalServerError)
-		return
-	}
-	api.WriteJSON(w, k)
+	api.WriteJSON(w, jwt.AccountsPublicJWKS)
 }
 
 // fetchOffset extracts the offset from the params and validates its value.

@@ -48,11 +48,11 @@ func (db *DB) EmailCreate(ctx context.Context, m EmailMessage) error {
 // EmailLockAndFetch locks up to batchSize records with the given lockId and
 // returns up to batchSize locked entries. Some of the returned entries might
 // not have been locked during the current execution.
-func (db *DB) EmailLockAndFetch(ctx context.Context, lockId string, batchSize int64) ([]EmailMessage, error) {
+func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize int64) ([]EmailMessage, error) {
 	// Find out how many entries are already locked by this id. Maybe we don't
 	// need to lock any additional ones.
 	filter := bson.M{
-		"locked_by": lockId,
+		"locked_by": lockID,
 		"failed":    bson.M{"$ne": true},
 		"sent_at":   nil,
 	}
@@ -69,12 +69,12 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockId string, batchSize in
 		if err != nil {
 			return nil, errors.AddContext(err, "failed to fetch message ids to lock")
 		}
-		err = db.lockMessages(ctx, lockId, ids)
+		err = db.lockMessages(ctx, lockID, ids)
 		if err != nil {
 			return nil, errors.AddContext(err, "failed to lock messages")
 		}
 	}
-	// Fetch up to batchSize messages already locked with lockId.
+	// Fetch up to batchSize messages already locked with lockID.
 	opts := options.Find()
 	opts.SetLimit(batchSize)
 	c, err := db.staticEmails.Find(ctx, filter, opts)
@@ -128,12 +128,12 @@ func (db *DB) fetchUnlockedMessageIDs(ctx context.Context, num int64) ([]primiti
 }
 
 // lockMessages is a helper method that locks the messages with the given ids.
-func (db *DB) lockMessages(ctx context.Context, lockId string, ids []primitive.ObjectID) error {
+func (db *DB) lockMessages(ctx context.Context, lockID string, ids []primitive.ObjectID) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	filter := bson.M{"_id": bson.M{"$in": ids}}
-	update := bson.M{"$set": bson.M{"locked_by": lockId}}
+	update := bson.M{"$set": bson.M{"locked_by": lockID}}
 	_, err := db.staticEmails.UpdateMany(ctx, filter, update)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
