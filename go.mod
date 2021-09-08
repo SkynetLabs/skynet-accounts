@@ -12,6 +12,8 @@ require (
 	github.com/stripe/stripe-go/v71 v71.48.0
 	gitlab.com/NebulousLabs/errors v0.0.0-20200929122200-06c536cf6975
 	gitlab.com/NebulousLabs/fastrand v0.0.0-20181126182046-603482d69e40
+	gitlab.com/SkynetLabs/skyd v1.5.7-0.20210824172226-30eb347feac4
 	go.mongodb.org/mongo-driver v1.4.4
-	golang.org/x/crypto v0.0.0-20201217014255-9d1352758620
+	go.sia.tech/siad v1.5.7-0.20210804035623-852125e8bdf3
+	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
 )

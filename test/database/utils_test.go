@@ -1,27 +1,21 @@
-package test
+package database
 
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
+	"gitlab.com/SkynetLabs/skyd/skymodules"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.sia.tech/siad/crypto"
 )
 
 const (
 	// UserSubLen is string length of a user's `sub` field
 	UserSubLen = 36
-	// skylinkLen is the byte length of a skylink
-	skylinkLen = 46
-)
-
-var (
-	// skylinkCharset lists all character allowed in a skylink
-	skylinkCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
 )
 
 // DBTestCredentials sets the environment variables to what we have defined in Makefile.
@@ -61,11 +55,10 @@ func CreateTestUpload(ctx context.Context, db *database.DB, user *database.User,
 
 // RandomSkylink generates a random skylink
 func RandomSkylink() string {
-	sb := strings.Builder{}
-	for i := 0; i < skylinkLen; i++ {
-		_ = sb.WriteByte(skylinkCharset[fastrand.Intn(len(skylinkCharset))])
-	}
-	return sb.String()
+	var h crypto.Hash
+	fastrand.Read(h[:])
+	sl, _ := skymodules.NewSkylinkV1(h, 0, 0)
+	return sl.String()
 }
 
 // RegisterTestUpload registers an upload of the given skylink by the given user.

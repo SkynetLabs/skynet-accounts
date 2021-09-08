@@ -152,11 +152,7 @@ type (
 func (db *DB) UserByEmail(ctx context.Context, email string, create bool) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "email", email)
 	if create && errors.Contains(err, ErrUserNotFound) {
-		sub, err := generateSub()
-		if err != nil {
-			return nil, errors.AddContext(err, "failed to generate user sub")
-		}
-		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
+		u, err := db.UserCreate(ctx, email, "", "", TierFree)
 		// If we're successful or hit any error, other than a duplicate key we
 		// want to just return. Hitting a duplicate key error means we ran into
 		// a race condition and we can easily recover from that.
@@ -165,7 +161,7 @@ func (db *DB) UserByEmail(ctx context.Context, email string, create bool) (*User
 		}
 		// Recover from the race condition by fetching the existing user from
 		// the DB.
-		users, err = db.managedUsersByField(ctx, "sub", sub)
+		users, err = db.managedUsersByField(ctx, "email", email)
 	}
 	if err != nil {
 		return nil, err
@@ -232,7 +228,7 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 // UserBySub returns the user with the given sub. If `create` is `true` it will
 // create the user if it doesn't exist. The sub is the Kratos id of that user.
 func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
-	users, err := db.managedUsersByField(ctx, "sub", sub)
+	users, err := db.managedUsersBySub(ctx, sub)
 	if create && errors.Contains(err, ErrUserNotFound) {
 		_, email, err := jwt.UserDetailsFromJWT(ctx)
 		if err != nil {
@@ -248,7 +244,7 @@ func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, er
 		}
 		// Recover from the race condition by fetching the existing user from
 		// the DB.
-		users, err = db.managedUsersByField(ctx, "sub", sub)
+		users, err = db.managedUsersBySub(ctx, sub)
 	}
 	if err != nil {
 		return nil, err
@@ -274,7 +270,7 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 		}
 	}
 	// Check for an existing user with this sub.
-	users, err = db.managedUsersByField(ctx, "sub", sub)
+	users, err = db.managedUsersBySub(ctx, sub)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
@@ -412,6 +408,12 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 		return users, ErrUserNotFound
 	}
 	return users, nil
+}
+
+// managedUsersBySub fetches all users that have the given sub. This should
+// normally be up to one user.
+func (db *DB) managedUsersBySub(ctx context.Context, sub string) ([]*User, error) {
+	return db.managedUsersByField(ctx, "sub", sub)
 }
 
 // userStats reports statistical information about the user.
