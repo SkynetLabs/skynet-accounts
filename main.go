@@ -40,6 +40,9 @@ var (
 	envDBUser = "SKYNET_DB_USER"
 	// envDBPass holds the name of the environment variable for DB password.
 	envDBPass = "SKYNET_DB_PASS" // #nosec G101: Potential hardcoded credentials
+	// envEmailFrom holds the name of the environment variable that allows us to
+	// override the "from" address of our emails to users.
+	envEmailFrom = "ACCOUNTS_EMAIL_FROM"
 	// envEmailURI holds the name of the environment variable for email URI.
 	envEmailURI = "ACCOUNTS_EMAIL_URI"
 	// envLogLevel holds the name of the environment variable which defines the
@@ -117,6 +120,9 @@ func portal() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if p.Scheme == "" {
+		p.Scheme = "https"
+	}
 	return p.Scheme + "://" + p.Host, nil
 }
 
@@ -132,11 +138,12 @@ func main() {
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
 
-	var err error
-	jwt.JWTPortalName, err = portal()
+	portalAddr, err := portal()
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to parse portal name"))
 	}
+	email.PortalAddress = portalAddr
+	jwt.JWTPortalName = portalAddr
 	email.ServerDomain = os.Getenv(envServerDomain)
 	if email.ServerDomain == "" {
 		email.ServerDomain = jwt.JWTPortalName
@@ -159,7 +166,20 @@ func main() {
 		jwt.AccountsJWKSFile = jwks
 	}
 	if emailStr := os.Getenv(envEmailURI); emailStr != "" {
+		// Validate the given URI.
+		uri, err := url.Parse(emailStr)
+		if err != nil {
+			log.Fatal(errors.AddContext(err, "invalid email URI"))
+		}
 		email.ConnectionURI = emailStr
+		// Set the FROM address to outgoing emails. This can be overridden by
+		// the ACCOUNTS_EMAIL_FROM optional environment variable.
+		if uri.User != nil {
+			email.From = uri.User.String()
+		}
+	}
+	if emailFrom := os.Getenv(envEmailFrom); emailFrom != "" {
+		email.From = emailFrom
 	}
 
 	// Set up key components:

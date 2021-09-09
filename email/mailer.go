@@ -39,13 +39,19 @@ unlock it, so it can be retried later. If a message fails to get sent more than
 const (
 	// emailBatchSize defines the largest batch of emails we will try to send.
 	emailBatchSize = 10
-
-	from = "noreply@siasky.net" // TODO this needs to come from a config, I guess?
 )
 
 var (
 	// ConnectionURI is the connection string used for sending emails.
 	ConnectionURI = "smtps://test:test@mailslurper:1025/?skip_ssl_verify=true"
+
+	// From is the address we send emails from. It defaults to the user
+	// from ConnectionURI but can be overridden by the ACCOUNTS_EMAIL_FROM
+	// environment variable.
+	From = "noreply@siasky.net"
+
+	// PortalAddress defines the URI where we can access our portal.
+	PortalAddress = "https://siasky.net"
 
 	// matchPattern extracts all relevant configuration values from an email
 	// connection URI
@@ -83,7 +89,7 @@ func (em Mailer) Send(ctx context.Context, m database.EmailMessage) error {
 // SendAddressConfirmationEmail sends a new email to the given email address
 // with a link to confirm the ownership of the address.
 func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email, token string) error {
-	m, err := confirmEmailEmail(email, confirmEmailData{token})
+	m, err := confirmEmailEmail(email, token)
 	if err != nil {
 		return errors.AddContext(err, "failed to generate email template")
 	}
@@ -93,7 +99,7 @@ func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email, token 
 // SendRecoverAccountEmail sends a new email to the given email address
 // with a link to recover the account.
 func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email, token string) error {
-	m, err := recoverAccountEmail(email, recoverAccountData{token})
+	m, err := recoverAccountEmail(email, token)
 	if err != nil {
 		return errors.AddContext(err, "failed to generate email template")
 	}

@@ -7,11 +7,6 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/database"
 )
 
-/**
-TODO
- - fix the links here
-*/
-
 const (
 	confirmEmailSubject = "Please verify your email address"
 	confirmEmailMime    = "multipart/alternative; boundary=e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a"
@@ -22,7 +17,7 @@ Content-Type: text/plain; charset=UTF-8
 
 Hi, please verify your account by clicking the following link:
 
-<a href="https://siasky.net/confirmEmail?code={{.Token}}">https://siasky.net/confirmEmail?code={{.Token}}</a>
+<a href="{{ConfirmEndpoint}}?token={{.Token}}">{{ConfirmEndpoint}}?token={{.Token}}</a>
 
 --e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a
 Content-Transfer-Encoding: quoted-printable
@@ -30,7 +25,7 @@ Content-Type: text/html; charset=UTF-8
 
 Hi, please verify your account by clicking the following link:
 
-<a href="https://siasky.net/confirmEmail?code={{.Token}}">https://siasky.net/confirmEmail?code={{.Token}}</a>
+<a href="{{ConfirmEndpoint}}?token={{.Token}}">{{ConfirmEndpoint}}?token={{.Token}}</a>
 
 --e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a
 `
@@ -46,7 +41,7 @@ Hi,
 
 please recover access to your account by clicking the following link:
 
-<a href="https://siasky.net/recoverAccount?code={{.Token}}">https://siasky.net/recoverAccount?code={{.Token}}</a>
+<a href="{{RecoverEndpoint}}?token={{.Token}}">{{RecoverEndpoint}}?token={{.Token}}</a>
 
 --9f0f6cc6978acbf34b218925c8b6be77292fcc0ec91a086b04045aafa8ca
 Content-Transfer-Encoding: quoted-printable
@@ -56,7 +51,7 @@ Hi,
 
 please recover access to your account by clicking the following link:
 
-<a href="https://siasky.net/recoverAccount?code={{.Token}}">https://siasky.net/recoverAccount?code={{.Token}}</a>
+<a href="{{RecoverEndpoint}}?token={{.Token}}">{{RecoverEndpoint}}?token={{.Token}}</a>
 
 --9f0f6cc6978acbf34b218925c8b6be77292fcc0ec91a086b04045aafa8ca--
 `
@@ -102,19 +97,25 @@ If this was not you, please ignore this email.
 
 type (
 	confirmEmailData struct {
-		Token string
+		ConfirmEndpoint string
+		Token           string
 	}
 	recoverAccountData struct {
-		Token string
+		RecoverEndpoint string
+		Token           string
 	}
 )
 
 // confirmEmailEmail generates an email for confirming that the user owns the
 // given email address.
-func confirmEmailEmail(to string, data confirmEmailData) (*database.EmailMessage, error) {
+func confirmEmailEmail(to string, token string) (*database.EmailMessage, error) {
 	t, err := template.New("confirmEmail").Parse(confirmEmailTempl)
 	if err != nil {
 		return nil, err
+	}
+	data := confirmEmailData{
+		ConfirmEndpoint: PortalAddress + "/user/confirm",
+		Token:           token,
 	}
 	var bodyBuilder strings.Builder
 	err = t.Execute(&bodyBuilder, data)
@@ -122,7 +123,7 @@ func confirmEmailEmail(to string, data confirmEmailData) (*database.EmailMessage
 		return nil, err
 	}
 	return &database.EmailMessage{
-		From:     from,
+		From:     From,
 		To:       to,
 		Subject:  confirmEmailSubject,
 		Body:     bodyBuilder.String(),
@@ -131,10 +132,14 @@ func confirmEmailEmail(to string, data confirmEmailData) (*database.EmailMessage
 }
 
 // recoverAccountEmail generates an email for recovering an account.
-func recoverAccountEmail(to string, data recoverAccountData) (*database.EmailMessage, error) {
+func recoverAccountEmail(to string, token string) (*database.EmailMessage, error) {
 	t, err := template.New("recoverAccount").Parse(recoverAccountTempl)
 	if err != nil {
 		return nil, err
+	}
+	data := recoverAccountData{
+		RecoverEndpoint: PortalAddress + "/user/recover",
+		Token:           token,
 	}
 	var bodyBuilder strings.Builder
 	err = t.Execute(&bodyBuilder, data)
@@ -142,7 +147,7 @@ func recoverAccountEmail(to string, data recoverAccountData) (*database.EmailMes
 		return nil, err
 	}
 	return &database.EmailMessage{
-		From:     from,
+		From:     From,
 		To:       to,
 		Subject:  recoverAccountSubject,
 		Body:     bodyBuilder.String(),
@@ -165,7 +170,7 @@ func accountAccessAttemptedEmail(to string) (*database.EmailMessage, error) {
 		return nil, err
 	}
 	return &database.EmailMessage{
-		From:     from,
+		From:     From,
 		To:       to,
 		Subject:  accountAccessAttemptedSubject,
 		Body:     bodyBuilder.String(),

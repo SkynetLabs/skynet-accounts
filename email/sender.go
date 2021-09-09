@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson/primitive"

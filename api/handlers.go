@@ -369,7 +369,11 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	var changedEmail bool
 	if payload.Email != "" {
 		u.Email = payload.Email
-		u.EmailConfirmationToken = lib.GenerateUUID()
+		u.EmailConfirmationToken, err = lib.GenerateUUID()
+		if err != nil {
+			api.WriteError(w, errors.AddContext(err, "failed to generate a token"), http.StatusInternalServerError)
+			return
+		}
 		changedEmail = true
 	}
 
@@ -531,7 +535,11 @@ func (api *API) userReconfirmGET(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u.EmailConfirmationToken = lib.GenerateUUID()
+	u.EmailConfirmationToken, err = lib.GenerateUUID()
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to generate a token"), http.StatusInternalServerError)
+		return
+	}
 	err = api.staticDB.UserSave(req.Context(), u)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to generate a new confirmation token"), http.StatusInternalServerError)
@@ -581,7 +589,11 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 		return
 	}
 	// Generate a new recovery token and add it to the user's account.
-	u.RecoveryToken = lib.GenerateUUID()
+	u.RecoveryToken, err = lib.GenerateUUID()
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to generate a token"), http.StatusInternalServerError)
+		return
+	}
 	err = api.staticDB.UserSave(req.Context(), u)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to create a token"), http.StatusInternalServerError)
