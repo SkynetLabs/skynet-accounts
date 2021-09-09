@@ -17,7 +17,7 @@ Content-Type: text/plain; charset=UTF-8
 
 Hi, please verify your account by clicking the following link:
 
-<a href="{{ConfirmEndpoint}}?token={{.Token}}">{{ConfirmEndpoint}}?token={{.Token}}</a>
+<a href="{{.ConfirmEndpoint}}?token={{.Token}}">{{.ConfirmEndpoint}}?token={{.Token}}</a>
 
 --e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a
 Content-Transfer-Encoding: quoted-printable
@@ -25,7 +25,7 @@ Content-Type: text/html; charset=UTF-8
 
 Hi, please verify your account by clicking the following link:
 
-<a href="{{ConfirmEndpoint}}?token={{.Token}}">{{ConfirmEndpoint}}?token={{.Token}}</a>
+<a href="{{.ConfirmEndpoint}}?token={{.Token}}">{{.ConfirmEndpoint}}?token={{.Token}}</a>
 
 --e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a
 `
@@ -41,7 +41,7 @@ Hi,
 
 please recover access to your account by clicking the following link:
 
-<a href="{{RecoverEndpoint}}?token={{.Token}}">{{RecoverEndpoint}}?token={{.Token}}</a>
+<a href="{{.RecoverEndpoint}}?token={{.Token}}">{{.RecoverEndpoint}}?token={{.Token}}</a>
 
 --9f0f6cc6978acbf34b218925c8b6be77292fcc0ec91a086b04045aafa8ca
 Content-Transfer-Encoding: quoted-printable
@@ -51,7 +51,7 @@ Hi,
 
 please recover access to your account by clicking the following link:
 
-<a href="{{RecoverEndpoint}}?token={{.Token}}">{{RecoverEndpoint}}?token={{.Token}}</a>
+<a href="{{.RecoverEndpoint}}?token={{.Token}}">{{.RecoverEndpoint}}?token={{.Token}}</a>
 
 --9f0f6cc6978acbf34b218925c8b6be77292fcc0ec91a086b04045aafa8ca--
 `

@@ -3,7 +3,6 @@ package email
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -150,10 +149,7 @@ func sendMultiple(m ...*mail.Message) error {
 		InsecureSkipVerify: c.InsecureSkipVerify,
 		ServerName:         c.Server,
 	}
-	// send!
-	fmt.Println("SENDING!", m) // TODO DEBUG
-	return nil
-	// return d.DialAndSend(m...)
+	return d.DialAndSend(m...)
 }
 
 // config parses the ConnectionURI variable and extracts the configuration

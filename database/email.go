@@ -196,6 +196,5 @@ func (db *DB) MarkAsFailed(ctx context.Context, msgs []*EmailMessage) error {
 		update = bson.M{"$set": bson.M{"failed": True}}
 		_, errFailed = db.staticEmails.UpdateMany(ctx, filter, update)
 	}
-
 	return errors.Compose(errInc, errFailed)
 }
