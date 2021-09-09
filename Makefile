@@ -18,7 +18,7 @@ count = 1
 pkgs = ./ ./api ./build ./database ./lib ./jwt
 
 # integration-pkgs defines the packages which contain integration tests
-integration-pkgs = ./test
+integration-pkgs = ./test/database
 
 # fmt calls go fmt on all packages.
 fmt:
@@ -41,6 +41,7 @@ markdown-spellcheck:
 lint: markdown-spellcheck lint-analyze
 	golint ./...
 	golangci-lint run -c .golangci.yml
+	go mod tidy
 
 # lint-ci runs golint.
 lint-ci:
@@ -49,6 +50,7 @@ ifneq ("$(OS)","Windows_NT")
 # Linux
 	go get golang.org/x/lint/golint
 	golint -min_confidence=1.0 -set_exit_status $(pkgs)
+	go mod tidy
 endif
 
 # lint-analyze runs the custom analyzers.
@@ -100,10 +102,9 @@ check:
 test:
 	go test -short -tags='debug testing netgo' -timeout=5s $(pkgs) -run=. -count=$(count)
 
-test-long: clean fmt vet lint-ci
+test-long: clean fmt vet lint lint-ci
 	@mkdir -p cover
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
-	go mod tidy
 
 # test-int always returns a zero exit value! Only use it manually!
 test-int: test-long start-mongo

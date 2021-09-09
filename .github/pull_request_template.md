@@ -13,7 +13,7 @@ Review and complete the checklist to ensure that the PR is complete before assig
  - [ ] All new methods or updated methods have clear docstrings
  - [ ] Testing added or updated for new methods
  - [ ] Verify if any changes impact the WebPortal Health Checks
- - [ ] Approriate documentation updated
+ - [ ] Appropriate documentation updated
  - [ ] Changelog file created
 
 ## Issues Closed

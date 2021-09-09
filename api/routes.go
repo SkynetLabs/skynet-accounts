@@ -25,6 +25,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/track/registry/read", api.validate(api.trackRegistryReadPOST))
 	api.staticRouter.POST("/track/registry/write", api.validate(api.trackRegistryWritePOST))
 
+	api.staticRouter.POST("/user", api.noValidate(api.userPOST))
 	api.staticRouter.GET("/user", api.validate(api.userGET))
 	api.staticRouter.PUT("/user", api.validate(api.userPUT))
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
@@ -67,7 +68,7 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 			return
 		}
 		// Embed the verified token in the context of the request.
-		ctx := jwt.ContextWithToken(req.Context(), &token)
+		ctx := jwt.ContextWithToken(req.Context(), token)
 		h(w, req.WithContext(ctx), ps)
 	}
 }

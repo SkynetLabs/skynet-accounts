@@ -40,7 +40,7 @@ var (
 	// stripePlansTest maps Stripe plans to specific tiers.
 	// DO NOT USE THESE DIRECTLY! Use stripePlans() instead.
 	stripePlansTest = map[string]int{
-		//"prod_J2FBsxvEl4VoUK": database.TierFree,
+		// "prod_J2FBsxvEl4VoUK": database.TierFree,
 		"prod_J3m6xMfDiz2LGE": database.TierPremium5,
 		"prod_J3m6ioQg90kZj5": database.TierPremium20,
 		"prod_J3m6IuVyh3XOc5": database.TierPremium80,
@@ -48,7 +48,7 @@ var (
 	// stripePricesTest maps Stripe plan prices to specific tiers.
 	// DO NOT USE THESE DIRECTLY! Use stripePrices() instead.
 	stripePricesTest = map[string]int{
-		//"price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
+		// "price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
 		"price_1IReXpIzjULiPWN66PvsxHL4": database.TierPremium5,
 		"price_1IReY5IzjULiPWN6AxPytHEG": database.TierPremium20,
 		"price_1IReYFIzjULiPWN6DqN2DwjN": database.TierPremium80,
@@ -271,7 +271,7 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 	cp := &stripe.CustomerParams{
 		Plan: &plan,
 	}
-	_, err := customer.Update(u.StripeId, cp)
+	_, err := customer.Update(u.StripeID, cp)
 	if err != nil {
 		return errors.AddContext(err, "failed to update customer on Stripe")
 	}
@@ -283,7 +283,7 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 		cp = &stripe.CustomerParams{
 			Plan: &plan,
 		}
-		_, err2 := customer.Update(u.StripeId, cp)
+		_, err2 := customer.Update(u.StripeID, cp)
 		if err2 != nil {
 			err2 = errors.AddContext(err2, "failed to revert the change on Stripe")
 		}
