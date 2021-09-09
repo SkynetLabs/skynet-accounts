@@ -7,7 +7,6 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/skynet"
-	"github.com/NebulousLabs/skynet-accounts/test"
 
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
@@ -18,7 +17,7 @@ import (
 // This method also tests UserCreate.
 func TestUserByEmail(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +57,7 @@ func TestUserByEmail(t *testing.T) {
 // TestUserByID ensures UserByID works as expected.
 func TestUserByID(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +95,7 @@ func TestUserByID(t *testing.T) {
 // This method also tests UserCreate and UserSetStripeID.
 func TestUserByStripeID(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +138,7 @@ func TestUserByStripeID(t *testing.T) {
 // This method also tests UserCreate.
 func TestUserBySub(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +178,7 @@ func TestUserBySub(t *testing.T) {
 // TestUserCreate ensures UserCreate works as expected.
 func TestUserCreate(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +227,7 @@ func TestUserCreate(t *testing.T) {
 // TestUserDelete ensures UserDelete works as expected.
 func TestUserDelete(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +264,7 @@ func TestUserDelete(t *testing.T) {
 // TestUserSave ensures that UserSave works as expected.
 func TestUserSave(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +309,7 @@ func TestUserSave(t *testing.T) {
 // TestUserSetStripeID ensures that UserSetStripeID works as expected.
 func TestUserSetStripeID(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +339,7 @@ func TestUserSetStripeID(t *testing.T) {
 // TestUserSetTier ensures that UserSetTier works as expected.
 func TestUserSetTier(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,13 +367,13 @@ func TestUserSetTier(t *testing.T) {
 // TestUserStats ensures we report accurate statistics for users.
 func TestUserStats(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	db, err := database.New(ctx, DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add a test user.
-	sub := string(fastrand.Bytes(test.UserSubLen))
+	sub := string(fastrand.Bytes(UserSubLen))
 	u, err := db.UserCreate(ctx, "user@example.com", "", sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
@@ -389,7 +388,7 @@ func TestUserStats(t *testing.T) {
 	expectedDownloadBandwidth := int64(0)
 
 	// Create a small upload.
-	skylinkSmall, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeSmall)
+	skylinkSmall, _, err := CreateTestUpload(ctx, db, u, testUploadSizeSmall)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +408,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Create a big upload.
-	skylinkBig, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeBig)
+	skylinkBig, _, err := CreateTestUpload(ctx, db, u, testUploadSizeBig)
 	if err != nil {
 		t.Fatal(err)
 	}

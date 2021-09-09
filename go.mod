@@ -17,7 +17,9 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	gitlab.com/NebulousLabs/errors v0.0.0-20200929122200-06c536cf6975
 	gitlab.com/NebulousLabs/fastrand v0.0.0-20181126182046-603482d69e40
+	gitlab.com/SkynetLabs/skyd v1.5.7-0.20210824172226-30eb347feac4
 	go.mongodb.org/mongo-driver v1.7.2
+	go.sia.tech/siad v1.5.7-0.20210804035623-852125e8bdf3
 	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
