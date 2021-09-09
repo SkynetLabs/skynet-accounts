@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -78,6 +79,47 @@ func loadDBCredentials() (database.DBCredentials, error) {
 	return cds, nil
 }
 
+// logLevel returns the desires log level.
+func logLevel() logrus.Level {
+	switch debugEnv, _ := os.LookupEnv(envLogLevel); debugEnv {
+	case "panic":
+		return logrus.PanicLevel
+	case "fatal":
+		return logrus.FatalLevel
+	case "error":
+		return logrus.ErrorLevel
+	case "warn":
+		return logrus.WarnLevel
+	case "info":
+		return logrus.InfoLevel
+	case "debug":
+		return logrus.DebugLevel
+	case "trace":
+		return logrus.TraceLevel
+	}
+	if build.DEBUG {
+		return logrus.TraceLevel
+	}
+	if build.Release == "testing" || build.Release == "dev" {
+		return logrus.DebugLevel
+	}
+	return logrus.InfoLevel
+}
+
+// portal is a helper that fetches the portal name and scheme from the config
+// or takes the default value. It then validates it and returns a usable value.
+func portal() (string, error) {
+	pVal, ok := os.LookupEnv(envPortal)
+	if !ok {
+		pVal = defaultPortal
+	}
+	p, err := url.Parse(pVal)
+	if err != nil {
+		return "", err
+	}
+	return p.Scheme + "://" + p.Host, nil
+}
+
 func main() {
 	// Load the environment variables from the .env file.
 	// Existing variables take precedence and won't be overwritten.
@@ -90,14 +132,11 @@ func main() {
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
 
-	portal, ok := os.LookupEnv(envPortal)
-	if !ok {
-		portal = defaultPortal
+	var err error
+	jwt.JWTPortalName, err = portal()
+	if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to parse portal name"))
 	}
-	if !strings.HasPrefix(portal, "https://") && !strings.HasPrefix(portal, "http://") {
-		portal = "https://" + portal
-	}
-	jwt.JWTPortalName = portal
 	email.ServerDomain = os.Getenv(envServerDomain)
 	if email.ServerDomain == "" {
 		email.ServerDomain = jwt.JWTPortalName
@@ -140,7 +179,7 @@ func main() {
 	email.NewSender(ctx, db, logger).Start()
 	// The meta fetcher will fetch metadata for all skylinks. This is needed, so
 	// we can determine their size.
-	mf := metafetcher.New(ctx, db, portal, logger)
+	mf := metafetcher.New(ctx, db, logger)
 	// Start the HTTP server.
 	server, err := api.New(db, mf, logger, mailer)
 	if err != nil {
@@ -148,31 +187,4 @@ func main() {
 	}
 	logger.Info("Listening on port 3000")
 	logger.Fatal(http.ListenAndServe(":3000", server.Router()))
-}
-
-// logLevel returns the desires log level.
-func logLevel() logrus.Level {
-	switch debugEnv, _ := os.LookupEnv(envLogLevel); debugEnv {
-	case "panic":
-		return logrus.PanicLevel
-	case "fatal":
-		return logrus.FatalLevel
-	case "error":
-		return logrus.ErrorLevel
-	case "warn":
-		return logrus.WarnLevel
-	case "info":
-		return logrus.InfoLevel
-	case "debug":
-		return logrus.DebugLevel
-	case "trace":
-		return logrus.TraceLevel
-	}
-	if build.DEBUG {
-		return logrus.TraceLevel
-	}
-	if build.Release == "testing" || build.Release == "dev" {
-		return logrus.DebugLevel
-	}
-	return logrus.InfoLevel
 }

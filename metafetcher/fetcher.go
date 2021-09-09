@@ -29,22 +29,19 @@ type Message struct {
 // MetaFetcher is a background task that listens for messages on its queue and
 // then processes them.
 type MetaFetcher struct {
-	Queue chan Message
-
+	Queue  chan Message
 	db     *database.DB
-	portal string
 	logger *logrus.Logger
 }
 
 // New returns a new MetaFetcher instance and starts its internal queue watcher.
-func New(ctx context.Context, db *database.DB, portal string, logger *logrus.Logger) *MetaFetcher {
+func New(ctx context.Context, db *database.DB, logger *logrus.Logger) *MetaFetcher {
 	if logger == nil {
 		logger = logrus.New()
 	}
 	mf := MetaFetcher{
 		Queue:  make(chan Message, 1000),
 		db:     db,
-		portal: portal,
 		logger: logger,
 	}
 

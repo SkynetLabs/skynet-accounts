@@ -44,7 +44,7 @@ var (
 	OathkeeperAddr = "oathkeeper:4456"
 
 	// JWTPortalName is the issuing service we are using for our JWTs. This
-	// value can be overwritten by main.go is PORTAL_NAME is set.
+	// value can be overwritten by main.go is PORTAL_DOMAIN is set.
 	JWTPortalName = "https://siasky.net"
 
 	// JWTTTL defines the lifetime of the JWT token in seconds.
