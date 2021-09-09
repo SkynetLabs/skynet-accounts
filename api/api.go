@@ -6,6 +6,7 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/email"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
@@ -13,16 +14,24 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-// API is ...
-type API struct {
-	staticDB     *database.DB
-	staticMF     *metafetcher.MetaFetcher
-	staticRouter *httprouter.Router
-	staticLogger *logrus.Logger
-}
+type (
+	// API is the central struct which gives us access to all subsystems.
+	API struct {
+		staticDB     *database.DB
+		staticMF     *metafetcher.MetaFetcher
+		staticRouter *httprouter.Router
+		staticLogger *logrus.Logger
+		staticMailer *email.Mailer
+	}
+
+	// errorWrap is a helper type for converting an `error` struct to JSON.
+	errorWrap struct {
+		Message string `json:"message"`
+	}
+)
 
 // New returns a new initialised API.
-func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger) (*API, error) {
+func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
 	}
@@ -37,6 +46,7 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger) (*
 		staticMF:     mf,
 		staticRouter: router,
 		staticLogger: logger,
+		staticMailer: mailer,
 	}
 	api.buildHTTPRoutes()
 	return api, nil
@@ -52,7 +62,7 @@ func (api *API) WriteError(w http.ResponseWriter, err error, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	api.staticLogger.Debugln(code, err)
-	encodingErr := json.NewEncoder(w).Encode(err)
+	encodingErr := json.NewEncoder(w).Encode(errorWrap{Message: err.Error()})
 	if _, isJSONErr := encodingErr.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.
 		// Specifically, only non-marshallable types should cause an error here.
@@ -65,7 +75,7 @@ func (api *API) WriteError(w http.ResponseWriter, err error, code int) {
 // accordingly.
 func (api *API) WriteJSON(w http.ResponseWriter, obj interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	api.staticLogger.Debugln(http.StatusOK)
+	api.staticLogger.Traceln(http.StatusOK)
 	err := json.NewEncoder(w).Encode(obj)
 	if err != nil {
 		api.staticLogger.Debugln(err)

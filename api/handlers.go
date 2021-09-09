@@ -102,22 +102,7 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
 		return
 	}
-	// Generate a JWT.
-	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
-	if err != nil {
-		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
-		err = errors.AddContext(err, "failed to create a token for user")
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	// Write the JWT to an encrypted cookie.
-	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
-	if err != nil {
-		api.staticLogger.Traceln("Error writing cookie:", err)
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	api.WriteSuccess(w)
+	api.loginUser(w, u)
 }
 
 // loginPOSTToken is a helper that handles logins via a token attached to the
@@ -148,6 +133,27 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	// us to verify the user's identity and permissions (i.e. tier) without
 	// requesting their credentials or accessing the DB.
 	err = writeCookie(w, tokenStr, exp.UTC().Unix())
+	if err != nil {
+		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
+// loginUser is a helper method that generates a JWT for the user and writes the
+// login cookie.
+func (api *API) loginUser(w http.ResponseWriter, u *database.User) {
+	// Generate a JWT.
+	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
+	if err != nil {
+		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
+		err = errors.AddContext(err, "failed to create a token for user")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Write the JWT to an encrypted cookie.
+	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
 	if err != nil {
 		api.staticLogger.Traceln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -241,17 +247,19 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	email := req.PostFormValue("email")
-	_, err := mail.ParseAddress(email)
+	// Validate the email address.
+	a, err := mail.ParseAddress(email)
 	if err != nil {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
+	// Strip any names from the email and leave just the address.
+	email = a.Address
 	pw := req.PostFormValue("password")
 	if pw == "" {
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
 	}
-
 	u, err := api.staticDB.UserCreate(req.Context(), email, pw, "", database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)

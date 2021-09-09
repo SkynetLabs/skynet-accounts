@@ -35,6 +35,9 @@ var (
 	// dbRegistryWritesCollection defines the name of the "registry_writes"
 	// collection within skynet's database.
 	dbRegistryWritesCollection = "registry_writes"
+	// dbEmails defines the name of the "emails" collection within skynet's
+	// database.
+	dbEmails = "emails"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -77,6 +80,7 @@ type (
 		staticDownloads      *mongo.Collection
 		staticRegistryReads  *mongo.Collection
 		staticRegistryWrites *mongo.Collection
+		staticEmails         *mongo.Collection
 		staticDep            lib.Dependencies
 		staticLogger         *logrus.Logger
 	}
@@ -118,6 +122,7 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 		staticDownloads:      database.Collection(dbDownloadsCollection),
 		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
 		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
+		staticEmails:         database.Collection(dbEmails),
 		staticLogger:         logger,
 	}
 	return db, nil
@@ -201,6 +206,12 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("user_id"),
 			},
 		},
+		dbEmails: {
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("user_id"),
+			},
+		},
 	}
 	for collName, models := range schema {
 		coll, err := ensureCollection(ctx, db, collName)
@@ -266,7 +277,7 @@ func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipe
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
-			{"localField", "skylink_id"}, // field in the downloads collection
+			{"localField", "skylink_id"}, // field in the uploads collection
 			{"foreignField", "_id"},      // field in the skylinks collection
 			{"as", "fromSkylinks"},
 		}},
@@ -309,7 +320,7 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 		}},
 	}
 	// This stage checks if the download has a non-zero `bytes` field and if so,
-	// it takes it as the download's size. Otherwise it reports the full
+	// it takes it as the download's size, otherwise it reports the full
 	// skylink's size as download's size.
 	projectStage := bson.D{{"$project", bson.D{
 		{"skylink", 1},

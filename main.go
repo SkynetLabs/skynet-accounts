@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
 	"github.com/NebulousLabs/skynet-accounts/api"
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/email"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 
@@ -38,15 +40,20 @@ var (
 	envDBUser = "SKYNET_DB_USER"
 	// envDBPass holds the name of the environment variable for DB password.
 	envDBPass = "SKYNET_DB_PASS" // #nosec G101: Potential hardcoded credentials
+	// envEmailFrom holds the name of the environment variable that allows us to
+	// override the "from" address of our emails to users.
+	envEmailFrom = "ACCOUNTS_EMAIL_FROM"
+	// envEmailURI holds the name of the environment variable for email URI.
+	envEmailURI = "ACCOUNTS_EMAIL_URI"
 	// envLogLevel holds the name of the environment variable which defines the
 	// desired log level.
 	envLogLevel = "SKYNET_ACCOUNTS_LOG_LEVEL"
 	// envPortal holds the name of the environment variable for the portal to
-	// use to fetch skylinks.
-	envPortal = "PORTAL_URL"
-	// envKratosAddr hold the name of the environment variable for Kratos's
-	// address. Defaults to "kratos:4433".
-	envKratosAddr = "KRATOS_ADDR"
+	// use to fetch skylinks and sign JWT tokens.
+	envPortal = "PORTAL_DOMAIN"
+	// envServerDomain holds the name of the environment variable for the
+	// identity of this server. Example: eu-ger-1.siasky.net
+	envServerDomain = "SERVER_DOMAIN"
 	// envOathkeeperAddr hold the name of the environment variable for
 	// Oathkeeper's address. Defaults to "oathkeeper:4456".
 	envOathkeeperAddr = "OATHKEEPER_ADDR"
@@ -75,61 +82,6 @@ func loadDBCredentials() (database.DBCredentials, error) {
 	return cds, nil
 }
 
-func main() {
-	// Load the environment variables from the .env file.
-	// Existing variables take precedence and won't be overwritten.
-	_ = godotenv.Load()
-	portal, ok := os.LookupEnv(envPortal)
-	if !ok {
-		portal = defaultPortal
-		jwt.JWTPortalName = portal
-	}
-	dbCreds, err := loadDBCredentials()
-	if err != nil {
-		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
-	}
-	if oaddr := os.Getenv(envOathkeeperAddr); oaddr != "" {
-		jwt.OathkeeperAddr = oaddr
-	}
-	if sk := os.Getenv(envStripeAPIKey); sk != "" {
-		stripe.Key = sk
-		api.StripeTestMode = !strings.HasPrefix(stripe.Key, "sk_live_")
-	}
-	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
-		jwt.AccountsJWKSFile = jwks
-	}
-
-	// Initialise the global context and logger. These will be used throughout
-	// the service. Once the context is closed, all background threads will
-	// wind themselves down.
-	ctx := context.Background()
-	logger := logrus.New()
-	logger.SetLevel(logLevel())
-
-	// Set up key components:
-
-	// Load the JWKS that we'll use to sign and validate JWTs.
-	err = jwt.LoadAccountsKeySet(logger)
-	if err != nil {
-		log.Fatal(errors.AddContext(err, fmt.Sprintf("failed to load JWKS file from %s", jwt.AccountsJWKSFile)))
-	}
-	// Connect to the database.
-	db, err := database.New(ctx, dbCreds, logger)
-	if err != nil {
-		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
-	}
-	// The meta fetcher will fetch metadata for all skylinks. This is needed, so
-	// we can determine their size.
-	mf := metafetcher.New(ctx, db, portal, logger)
-	// Start the HTTP server.
-	server, err := api.New(db, mf, logger)
-	if err != nil {
-		log.Fatal(errors.AddContext(err, "failed to build the API"))
-	}
-	logger.Info("Listening on port 3000")
-	logger.Fatal(http.ListenAndServe(":3000", server.Router()))
-}
-
 // logLevel returns the desires log level.
 func logLevel() logrus.Level {
 	switch debugEnv, _ := os.LookupEnv(envLogLevel); debugEnv {
@@ -155,4 +107,104 @@ func logLevel() logrus.Level {
 		return logrus.DebugLevel
 	}
 	return logrus.InfoLevel
+}
+
+// portal is a helper that fetches the portal name and scheme from the config
+// or takes the default value. It then validates it and returns a usable value.
+func portal() (string, error) {
+	pVal, ok := os.LookupEnv(envPortal)
+	if !ok {
+		pVal = defaultPortal
+	}
+	p, err := url.Parse(pVal)
+	if err != nil {
+		return "", err
+	}
+	if p.Scheme == "" {
+		p.Scheme = "https"
+	}
+	return p.Scheme + "://" + p.Host, nil
+}
+
+func main() {
+	// Load the environment variables from the .env file.
+	// Existing variables take precedence and won't be overwritten.
+	_ = godotenv.Load()
+
+	// Initialise the global context and logger. These will be used throughout
+	// the service. Once the context is closed, all background threads will
+	// wind themselves down.
+	ctx := context.Background()
+	logger := logrus.New()
+	logger.SetLevel(logLevel())
+
+	portalAddr, err := portal()
+	if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to parse portal name"))
+	}
+	email.PortalAddress = portalAddr
+	jwt.JWTPortalName = portalAddr
+	email.ServerDomain = os.Getenv(envServerDomain)
+	if email.ServerDomain == "" {
+		email.ServerDomain = jwt.JWTPortalName
+		logger.Warningf(`Environment variable %s is missing! This server's identity 
+			is set to the default '%s' value. That is OK only if this server is running on its own 
+			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerDomain)
+	}
+	dbCreds, err := loadDBCredentials()
+	if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
+	}
+	if oaddr := os.Getenv(envOathkeeperAddr); oaddr != "" {
+		jwt.OathkeeperAddr = oaddr
+	}
+	if sk := os.Getenv(envStripeAPIKey); sk != "" {
+		stripe.Key = sk
+		api.StripeTestMode = !strings.HasPrefix(stripe.Key, "sk_live_")
+	}
+	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
+		jwt.AccountsJWKSFile = jwks
+	}
+	if emailStr := os.Getenv(envEmailURI); emailStr != "" {
+		// Validate the given URI.
+		uri, err := url.Parse(emailStr)
+		if err != nil {
+			log.Fatal(errors.AddContext(err, "invalid email URI"))
+		}
+		email.ConnectionURI = emailStr
+		// Set the FROM address to outgoing emails. This can be overridden by
+		// the ACCOUNTS_EMAIL_FROM optional environment variable.
+		if uri.User != nil {
+			email.From = uri.User.String()
+		}
+	}
+	if emailFrom := os.Getenv(envEmailFrom); emailFrom != "" {
+		email.From = emailFrom
+	}
+
+	// Set up key components:
+
+	// Load the JWKS that we'll use to sign and validate JWTs.
+	err = jwt.LoadAccountsKeySet(logger)
+	if err != nil {
+		log.Fatal(errors.AddContext(err, fmt.Sprintf("failed to load JWKS file from %s", jwt.AccountsJWKSFile)))
+	}
+	// Connect to the database.
+	db, err := database.New(ctx, dbCreds, logger)
+	if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
+	}
+	mailer := email.New(db)
+	// Start the mail sender background thread.
+	email.NewSender(ctx, db, logger).Start()
+	// The meta fetcher will fetch metadata for all skylinks. This is needed, so
+	// we can determine their size.
+	mf := metafetcher.New(ctx, db, logger)
+	// Start the HTTP server.
+	server, err := api.New(db, mf, logger, mailer)
+	if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to build the API"))
+	}
+	logger.Info("Listening on port 3000")
+	logger.Fatal(http.ListenAndServe(":3000", server.Router()))
 }
