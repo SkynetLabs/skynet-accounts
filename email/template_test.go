@@ -1,22 +1,70 @@
 package email
 
-import "testing"
+import (
+	"strings"
+	"testing"
 
-// TODO this isn't an actual test. maybe write one? does it make sense?
-func TestConfirmEmail(t *testing.T) {
-	e, err := confirmEmailEmail("inovakov@gmail.com", "somecode")
+	"github.com/NebulousLabs/skynet-accounts/lib"
+)
+
+// TestConfirmEmailEmail ensures that the email we send to the user contains
+// the correct confirmation link.
+func TestConfirmEmailEmail(t *testing.T) {
+	to := "user@siasky.net"
+	token, err := lib.GenerateUUID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("message: %+v\n", e)
-	e, err = recoverAccountEmail("inovakov@gmail.com", "somecode")
+	em, err := confirmEmailEmail(to, token)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("message: %+v\n", e)
-	e, err = accountAccessAttemptedEmail("inovakov@gmail.com")
+	if em.To != to {
+		t.Fatalf("Expected the email to go to %s, got %s", to, em.To)
+	}
+	if em.From != From {
+		t.Fatalf("Expected the email to go from %s, got %s", From, em.From)
+	}
+	if !strings.Contains(em.Body, "https://siasky.net/user/confirm?token="+token) {
+		t.Fatal("Invalid confirmation link.")
+	}
+}
+
+// TestRecoverAccountEmail ensures that the email we send to the user contains
+// the correct recovery link.
+func TestRecoverAccountEmail(t *testing.T) {
+	to := "user@siasky.net"
+	token, err := lib.GenerateUUID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("message: %+v\n", e)
+	em, err := recoverAccountEmail(to, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if em.To != to {
+		t.Fatalf("Expected the email to go to %s, got %s", to, em.To)
+	}
+	if em.From != From {
+		t.Fatalf("Expected the email to go from %s, got %s", From, em.From)
+	}
+	if !strings.Contains(em.Body, "https://siasky.net/user/recover?token="+token) {
+		t.Fatal("Invalid confirmation link.")
+	}
+}
+
+// TestAccountAccessAttemptedEmail ensures that the email we send to the user
+// is going to the correct email.
+func TestAccountAccessAttemptedEmail(t *testing.T) {
+	to := "user@siasky.net"
+	em, err := accountAccessAttemptedEmail(to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if em.To != to {
+		t.Fatalf("Expected the email to go to %s, got %s", to, em.To)
+	}
+	if em.From != From {
+		t.Fatalf("Expected the email to go from %s, got %s", From, em.From)
+	}
 }
