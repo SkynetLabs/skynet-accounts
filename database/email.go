@@ -48,7 +48,7 @@ func (db *DB) EmailCreate(ctx context.Context, m EmailMessage) error {
 // EmailLockAndFetch locks up to batchSize records with the given lockId and
 // returns up to batchSize locked entries. Some of the returned entries might
 // not have been locked during the current execution.
-func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize int64) ([]EmailMessage, error) {
+func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize int64) (msgs []EmailMessage, err error) {
 	// Find out how many entries are already locked by this id. Maybe we don't
 	// need to lock any additional ones.
 	filter := bson.M{
@@ -65,7 +65,8 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize in
 		// As MongoDB doesn't have an "update up to N entries" operation, what
 		// we do here is fetch the ids of the desired number of entries to
 		// lock and then lock them by ids.
-		ids, err := db.fetchUnlockedMessageIDs(ctx, batchSize-count)
+		var ids []primitive.ObjectID
+		ids, err = db.fetchUnlockedMessageIDs(ctx, batchSize-count)
 		if err != nil {
 			return nil, errors.AddContext(err, "failed to fetch message ids to lock")
 		}
@@ -83,10 +84,9 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize in
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			err = errors.Compose(err, errors.AddContext(errDef, "error on closing DB cursor"))
 		}
 	}()
-	var msgs []EmailMessage
 	for c.Next(ctx) {
 		var m EmailMessage
 		if err = c.Decode(&m); err != nil {
@@ -99,7 +99,7 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize in
 
 // fetchUnlockedMessageIDs is a helper method that fetches the ids of up to num
 // unlocked email messages waiting to be sent.
-func (db *DB) fetchUnlockedMessageIDs(ctx context.Context, num int64) ([]primitive.ObjectID, error) {
+func (db *DB) fetchUnlockedMessageIDs(ctx context.Context, num int64) (ids []primitive.ObjectID, err error) {
 	filter := bson.M{
 		"locked_by": "",
 		"failed":    bson.M{"$ne": true},
@@ -113,10 +113,9 @@ func (db *DB) fetchUnlockedMessageIDs(ctx context.Context, num int64) ([]primiti
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			err = errors.Compose(err, errors.AddContext(errDef, "error on closing DB cursor"))
 		}
 	}()
-	var ids []primitive.ObjectID
 	for c.Next(ctx) {
 		var m EmailMessage
 		if err = c.Decode(&m); err != nil {
