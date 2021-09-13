@@ -144,12 +144,12 @@ func main() {
 	}
 	email.PortalAddress = portalAddr
 	jwt.JWTPortalName = portalAddr
-	email.ServerDomain = os.Getenv(envServerDomain)
-	if email.ServerDomain == "" {
-		email.ServerDomain = jwt.JWTPortalName
+	email.ServerLockID = os.Getenv(envServerDomain)
+	if email.ServerLockID == "" {
+		email.ServerLockID = jwt.JWTPortalName
 		logger.Warningf(`Environment variable %s is missing! This server's identity 
 			is set to the default '%s' value. That is OK only if this server is running on its own 
-			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerDomain)
+			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
 	}
 	dbCreds, err := loadDBCredentials()
 	if err != nil {

@@ -41,7 +41,8 @@ const (
 )
 
 var (
-	// ConnectionURI is the connection string used for sending emails.
+	// ConnectionURI is the connection string used for sending emails. Its
+	// value is controlled by the ACCOUNTS_EMAIL_URI environment variable.
 	ConnectionURI = "smtps://test:test@mailslurper:1025/?skip_ssl_verify=true"
 
 	// From is the address we send emails from. It defaults to the user
@@ -49,7 +50,9 @@ var (
 	// environment variable.
 	From = "noreply@siasky.net"
 
-	// PortalAddress defines the URI where we can access our portal.
+	// PortalAddress defines the URI where we can access our portal. Its value
+	// comes from the PORTAL_DOMAIN environment variable, preceded by the
+	// appropriate schema.
 	PortalAddress = "https://siasky.net"
 
 	// matchPattern extracts all relevant configuration values from an email

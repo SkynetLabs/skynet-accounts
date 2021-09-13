@@ -18,8 +18,11 @@ const (
 )
 
 var (
-	// ServerDomain holds the name of the name of this particular server.
-	ServerDomain = "siasky.net"
+	// ServerLockID holds the name of the name of this particular server. Its
+	// value is controlled by the SERVER_DOMAIN entry in the .env file. If the
+	// SERVER_DOMAIN entry is empty or missing, the PORTAL_DOMAIN (preceded by
+	// schema) will be used instead.
+	ServerLockID string
 )
 
 type (
@@ -63,7 +66,7 @@ func (s Sender) Start() {
 // We lock the messages before sending them and update their SentAt field after
 // sending them. We also don't lock more than emailBatchSize messages.
 func (s Sender) scanAndSend() {
-	msgs, err := s.staticDB.EmailLockAndFetch(s.staticCtx, ServerDomain, emailBatchSize)
+	msgs, err := s.staticDB.EmailLockAndFetch(s.staticCtx, ServerLockID, emailBatchSize)
 	if err != nil {
 		s.staticLogger.Warningln(errors.AddContext(err, "failed to send email batch"))
 		return
