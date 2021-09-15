@@ -27,7 +27,13 @@ var (
 	AccountsPublicJWKS jwk.Set = nil
 
 	// AccountsJWKSFile defines where to look for the JWKS file.
-	AccountsJWKSFile = "/accounts/conf/jwks.json"
+	AccountsJWKSFile = build.Select(
+		build.Var{
+			Dev:      "jwks.json",
+			Testing:  "fixtures/jwks.json",
+			Standard: "/accounts/conf/jwks.json",
+		},
+	).(string)
 
 	// oathkeeperPubKeys is the public RS key set exposed by Oathkeeper for JWT
 	// validation. It's available at oathkeeperPubKeyURL.
@@ -264,17 +270,18 @@ func ValidateToken(logger *logrus.Logger, t string) (jwt.Token, error) {
 	if err == nil {
 		return token, nil
 	}
+	return nil, err
 
-	// try to parse the token as an oathkeeper token
-	keySet, err := oathkeeperPublicKeys(logger)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to fetch Oathkeeper's JWKS")
-	}
-	token, err = jwt.Parse([]byte(t), jwt.WithKeySet(keySet))
-	if err != nil {
-		return nil, err
-	}
-	return token, nil
+	// // try to parse the token as an oathkeeper token
+	// keySet, err := oathkeeperPublicKeys(logger)
+	// if err != nil {
+	// 	return nil, errors.AddContext(err, "failed to fetch Oathkeeper's JWKS")
+	// }
+	// token, err = jwt.Parse([]byte(t), jwt.WithKeySet(keySet))
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return token, nil
 }
 
 // LoadAccountsKeySet loads the JSON Web Key Set that we use for signing and

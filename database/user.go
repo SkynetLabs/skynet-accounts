@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -11,8 +10,8 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
+	"github.com/NebulousLabs/skynet-accounts/lib"
 	"github.com/NebulousLabs/skynet-accounts/skynet"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/uuid"
 
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -101,6 +100,10 @@ var (
 			Storage:           20 * skynet.TiB,
 		},
 	}
+
+	// ErrInvalidToken is returned when the token is found to be invalid for any
+	// reason, including expiration.
+	ErrInvalidToken = errors.New("invalid token")
 )
 
 type (
@@ -110,7 +113,9 @@ type (
 		// its ID.Hex() form.
 		ID                            primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Email                         string             `bson:"email" json:"email"`
-		PasswordHash                  string             `bson:"password_hash" json:"password_hash"`
+		EmailConfirmationToken        string             `bson:"email_confirmation_token,omitempty" json:"-"`
+		PasswordHash                  string             `bson:"password_hash" json:"-"`
+		RecoveryToken                 string             `bson:"recovery_token,omitempty" json:"-"`
 		Sub                           string             `bson:"sub" json:"sub"`
 		Tier                          int                `bson:"tier" json:"tier"`
 		SubscribedUntil               time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
@@ -197,6 +202,15 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	return &u, nil
 }
 
+// UserByRecoveryToken returns the user with the given recovery token.
+func (db *DB) UserByRecoveryToken(ctx context.Context, token string) (*User, error) {
+	users, err := db.managedUsersByField(ctx, "recovery_token", token)
+	if err != nil {
+		return nil, err
+	}
+	return users[0], nil
+}
+
 // UserByStripeID finds a user by their Stripe customer id.
 func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	filter := bson.D{{"stripe_id", id}}
@@ -252,7 +266,36 @@ func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, er
 	return users[0], nil
 }
 
+// UserConfirmEmail confirms that the email to which the passed confirmation
+// token belongs actually belongs to its user.
+func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error) {
+	if token == "" {
+		return nil, errors.AddContext(ErrInvalidToken, "token cannot be empty")
+	}
+	users, err := db.managedUsersByField(ctx, "email_confirmation_token", token)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to read users from DB")
+	}
+	if len(users) == 0 {
+		return nil, errors.AddContext(ErrInvalidToken, "no user has this token")
+	}
+	if len(users) > 1 {
+		build.Critical("multiple users found for the same confirmation token", token)
+		return nil, errors.AddContext(ErrInvalidToken, "please request a new token")
+	}
+	u := users[0]
+	u.EmailConfirmationToken = ""
+	err = db.UserSave(ctx, u)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to update user")
+	}
+	return u, nil
+}
+
 // UserCreate creates a new user in the DB.
+//
+// The new user is created as "unconfirmed" and a confirmation email is sent to
+// the address they provided.
 func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int) (*User, error) {
 	// TODO Once we remove Kratos we should start validating emails here.
 	// Check for an existing user with this email.
@@ -264,7 +307,7 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 		return nil, ErrUserAlreadyExists
 	}
 	if sub == "" {
-		sub, err = generateSub()
+		sub, err = lib.GenerateUUID()
 		if err != nil {
 			return nil, errors.AddContext(err, "failed to generate user sub")
 		}
@@ -288,12 +331,17 @@ func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int)
 			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
 		}
 	}
+	emailConfToken, err := lib.GenerateUUID()
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to generate an emil confirmation token")
+	}
 	u := &User{
-		ID:           primitive.ObjectID{},
-		Email:        email,
-		PasswordHash: string(passHash),
-		Sub:          sub,
-		Tier:         tier,
+		ID:                     primitive.ObjectID{},
+		Email:                  email,
+		EmailConfirmationToken: emailConfToken,
+		PasswordHash:           string(passHash),
+		Sub:                    sub,
+		Tier:                   tier,
 	}
 	// Insert the user.
 	fields, err := bson.Marshal(u)
@@ -340,9 +388,7 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 // UserSetStripeID changes the user's stripe id in the DB.
 func (db *DB) UserSetStripeID(ctx context.Context, u *User, stripeID string) error {
 	filter := bson.M{"_id": u.ID}
-	update := bson.M{"$set": bson.M{
-		"stripe_id": stripeID,
-	}}
+	update := bson.M{"$set": bson.M{"stripe_id": stripeID}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
@@ -357,9 +403,7 @@ func (db *DB) UserSetTier(ctx context.Context, u *User, t int) error {
 		return errors.New("invalid tier value")
 	}
 	filter := bson.M{"_id": u.ID}
-	update := bson.M{"$set": bson.M{
-		"tier": t,
-	}}
+	update := bson.M{"$set": bson.M{"tier": t}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
@@ -492,9 +536,7 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 // userUploadStats reports on the user's uploads - count, total size and total
 // bandwidth used. It uses the total size of the uploaded skyfiles as basis.
 func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, rawStorageUsed int64, totalBandwidth int64, err error) {
-	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", id},
-	}}}
+	matchStage := bson.D{{"$match", bson.D{{"user_id", id}}}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
@@ -686,14 +728,4 @@ func monthStart(subscribedUntil time.Time) time.Time {
 	}
 	d := now.AddDate(0, monthsDelta, daysDelta)
 	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
-}
-
-// generateSub is a helper method that generates a UUID and encodes it in hex.
-func generateSub() (string, error) {
-	uid, err := uuid.New()
-	if err != nil {
-		build.Critical("Error during UUID creation:", err)
-		return "", err
-	}
-	return hex.EncodeToString(uid[:]), nil
 }
