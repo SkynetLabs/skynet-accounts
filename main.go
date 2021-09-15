@@ -15,6 +15,7 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/email"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -165,23 +166,26 @@ func main() {
 	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
 		jwt.AccountsJWKSFile = jwks
 	}
-	if emailStr := os.Getenv(envEmailURI); emailStr != "" {
-		// Validate the given URI.
-		uri, err := url.Parse(emailStr)
-		if err != nil {
-			log.Fatal(errors.AddContext(err, "invalid email URI"))
+	// Fetch configuration data for sending emails.
+	emailURI := os.Getenv(envEmailURI)
+	{
+		if emailURI == "" {
+			log.Fatal(errors.AddContext(err, envEmailURI+" is empty"))
 		}
-		email.ConnectionURI = emailStr
+		// Validate the given URI.
+		uri, err := url.Parse(emailURI)
+		if err != nil {
+			log.Fatal(errors.AddContext(err, "invalid email URI given in "+envEmailURI))
+		}
 		// Set the FROM address to outgoing emails. This can be overridden by
 		// the ACCOUNTS_EMAIL_FROM optional environment variable.
 		if uri.User != nil {
 			email.From = uri.User.String()
 		}
+		if emailFrom := os.Getenv(envEmailFrom); emailFrom != "" {
+			email.From = emailFrom
+		}
 	}
-	if emailFrom := os.Getenv(envEmailFrom); emailFrom != "" {
-		email.From = emailFrom
-	}
-
 	// Set up key components:
 
 	// Load the JWKS that we'll use to sign and validate JWTs.
@@ -196,7 +200,11 @@ func main() {
 	}
 	mailer := email.New(db)
 	// Start the mail sender background thread.
-	email.NewSender(ctx, db, logger).Start()
+	sender, err := email.NewSender(ctx, db, logger, &skymodules.SkynetDependencies{}, emailURI)
+	if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to create an email sender"))
+	}
+	sender.Start()
 	// The meta fetcher will fetch metadata for all skylinks. This is needed, so
 	// we can determine their size.
 	mf := metafetcher.New(ctx, db, logger)

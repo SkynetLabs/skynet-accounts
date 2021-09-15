@@ -18,7 +18,7 @@ count = 1
 pkgs = ./ ./api ./build ./database ./lib ./jwt
 
 # integration-pkgs defines the packages which contain integration tests
-integration-pkgs = ./test/database
+integration-pkgs = ./test/database ./test/email
 
 # fmt calls go fmt on all packages.
 fmt:

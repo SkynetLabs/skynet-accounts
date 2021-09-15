@@ -2,15 +2,10 @@ package email
 
 import (
 	"context"
-	"crypto/tls"
-	"net/url"
-	"regexp"
-	"strconv"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 
 	"gitlab.com/NebulousLabs/errors"
-	"gopkg.in/mail.v2"
 )
 
 /**
@@ -35,47 +30,10 @@ unlock it, so it can be retried later. If a message fails to get sent more than
 `maxAttemptsToSend` times it is marked as `Failed`.
 */
 
-const (
-	// emailBatchSize defines the largest batch of emails we will try to send.
-	emailBatchSize = 10
-)
-
-var (
-	// ConnectionURI is the connection string used for sending emails. Its
-	// value is controlled by the ACCOUNTS_EMAIL_URI environment variable.
-	ConnectionURI = "smtps://test:test@mailslurper:1025/?skip_ssl_verify=true"
-
-	// From is the address we send emails from. It defaults to the user
-	// from ConnectionURI but can be overridden by the ACCOUNTS_EMAIL_FROM
-	// environment variable.
-	From = "noreply@siasky.net"
-
-	// PortalAddress defines the URI where we can access our portal. Its value
-	// comes from the PORTAL_DOMAIN environment variable, preceded by the
-	// appropriate schema.
-	PortalAddress = "https://siasky.net"
-
-	// matchPattern extracts all relevant configuration values from an email
-	// connection URI
-	matchPattern = regexp.MustCompile("smtps://(?P<user>.*):(?P<password>.*)@(?P<server>.*):(?P<port>\\d*)(/\\??skip_ssl_verify=(?P<skip_ssl_verify>\\w*))?")
-)
-
-type (
-	// Mailer is the struct that takes care of sending of emails.
-	Mailer struct {
-		staticDB *database.DB
-	}
-
-	// emailConfig contains all configuration options we need in order to send
-	// an email
-	emailConfig struct {
-		User               string
-		Pass               string
-		Server             string
-		Port               int
-		InsecureSkipVerify bool
-	}
-)
+// Mailer prepares messages for sending by adding them to the email queue.
+type Mailer struct {
+	staticDB *database.DB
+}
 
 // New creates a new instance of Mailer.
 func New(db *database.DB) *Mailer {
@@ -119,75 +77,4 @@ func (em Mailer) SendAccountAccessAttemptedEmail(ctx context.Context, email stri
 		return errors.AddContext(err, "failed to generate email template")
 	}
 	return em.Send(ctx, *m)
-}
-
-// send an email message.
-//
-// This function will not be called by Mailer but rather by Sender.
-//
-// bodyMime should be either "text/plain" or "text/html"
-func send(from, to, subject, body, bodyMime string) error {
-	m := mail.NewMessage()
-	m.SetHeader("From", from)
-	m.SetHeader("To", to)
-	m.SetHeader("Subject", subject)
-	m.SetBody(bodyMime, body)
-
-	return sendMultiple(m)
-}
-
-// send one or more email messages.
-//
-// This function will not be called by Mailer but rather by Sender.
-func sendMultiple(m ...*mail.Message) error {
-	c, err := config(ConnectionURI)
-	if err != nil {
-		return errors.AddContext(err, "failed to parse email config")
-	}
-	d := mail.NewDialer(c.Server, c.Port, c.User, c.Pass)
-	// This is only needed when SSL/TLS certificate is not valid on server.
-	// In production this should be set to false.
-	/* #nosec */
-	d.TLSConfig = &tls.Config{
-		InsecureSkipVerify: c.InsecureSkipVerify,
-		ServerName:         c.Server,
-	}
-	return d.DialAndSend(m...)
-}
-
-// config parses the ConnectionURI variable and extracts the configuration
-// values from it.
-func config(connURI string) (emailConfig, error) {
-	match := matchPattern.FindStringSubmatch(connURI)
-	result := make(map[string]string)
-	for i, name := range matchPattern.SubexpNames() {
-		if i != 0 && name != "" {
-			result[name] = match[i]
-		}
-	}
-	server, e1 := result["server"]
-	portStr, e2 := result["port"]
-	user, e3 := result["user"]
-	password, e4 := result["password"]
-
-	// These fields are obligatory, so we return an error if any of them are
-	// missing.
-	if !(e1 && e2 && e3 && e4) {
-		return emailConfig{}, errors.New("missing obligatory email configuration field. One of server, port, user, or password is missing")
-	}
-	user, err1 := url.QueryUnescape(user)
-	password, err2 := url.QueryUnescape(password)
-	port, err3 := strconv.Atoi(portStr)
-	err := errors.Compose(err1, err2, err3)
-	if err != nil {
-		return emailConfig{}, errors.AddContext(err, "invalid value for username, password, or port in email connection string")
-	}
-	skip := result["skip_ssl_verify"]
-	return emailConfig{
-		User:               user,
-		Pass:               password,
-		Server:             server,
-		Port:               port,
-		InsecureSkipVerify: skip == "true",
-	}, nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/skynet"
+	"github.com/NebulousLabs/skynet-accounts/test"
 
 	"gitlab.com/NebulousLabs/fastrand"
 )
@@ -14,7 +15,7 @@ import (
 // in the correct order, with the correct sized and so on.
 func TestUploadsByUser(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, DBTestCredentials(), nil)
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +174,7 @@ func TestUploadsByUser(t *testing.T) {
 // skylink by this user without affecting uploads by other users.
 func TestUnpinUploads(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, DBTestCredentials(), nil)
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

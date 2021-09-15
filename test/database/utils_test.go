@@ -18,16 +18,6 @@ const (
 	UserSubLen = 36
 )
 
-// DBTestCredentials sets the environment variables to what we have defined in Makefile.
-func DBTestCredentials() database.DBCredentials {
-	return database.DBCredentials{
-		User:     "admin",
-		Password: "aO4tV5tC1oU3oQ7u",
-		Host:     "localhost",
-		Port:     "17017",
-	}
-}
-
 // CreateTestUpload creates a new skyfile and uploads it under the given user's
 // account. Returns the skylink, the upload's id and error.
 func CreateTestUpload(ctx context.Context, db *database.DB, user *database.User, size int64) (*database.Skylink, primitive.ObjectID, error) {
