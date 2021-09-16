@@ -9,17 +9,24 @@ import (
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
-	"gitlab.com/SkynetLabs/skyd/skymodules"
-	"gopkg.in/mail.v2"
 
 	"github.com/sirupsen/logrus"
+	lock "github.com/square/mongo-lock"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/SkynetLabs/skyd/skymodules"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"gopkg.in/mail.v2"
 )
 
 const (
-	// emailBatchSize defines the largest batch of emails we will try to send.
-	emailBatchSize = 10
+	// batchSize defines the largest batch of emails we will try to send.
+	batchSize = 10
+
+	// lockTTL defines the TTL (in seconds) of the lock on the emails waiting to
+	// be sent.
+	lockTTL = 30
 
 	// sleepBetweenScans defines how long the sender should sleep between its
 	// sweeps of the DB.
@@ -89,28 +96,68 @@ func NewSender(ctx context.Context, db *database.DB, logger *logrus.Logger, deps
 // sent and sending them.
 func (s Sender) Start() {
 	go func() {
+		s.scanAndSend()
 		for {
 			select {
 			case <-s.staticCtx.Done():
 				return
 			case <-time.After(sleepBetweenScans):
+				s.purgeExpiredLocks()
 				s.scanAndSend()
 			}
 		}
 	}()
 }
 
+// purgeExpiredLocks scans the DB for locks that have exceeded their TTL and
+// removes them.
+func (s Sender) purgeExpiredLocks() {
+	purger := lock.NewPurger(s.staticDB.LockClient)
+	ls, err := purger.Purge(s.staticCtx)
+	if err != nil {
+		if err != nil {
+			s.staticLogger.Warningf("Failed to purge expired locks. Error %s. Lock status: %+v\n", err.Error(), ls)
+		}
+	}
+}
+
 // scanAndSend scans the database for email messages waiting to be sent and
 // sends them.
 //
 // We lock the messages before sending them and update their SentAt field after
-// sending them. We also don't lock more than emailBatchSize messages.
+// sending them. We also don't lock more than batchSize messages.
 func (s Sender) scanAndSend() {
-	msgs, err := s.staticDB.EmailLockAndFetch(s.staticCtx, ServerLockID, emailBatchSize)
-	if err != nil {
-		s.staticLogger.Warningln(errors.AddContext(err, "failed to send email batch"))
-		return
+	// Fetch a batch of email messages, waiting to be sent.
+	filter := bson.M{
+		"failed":  bson.M{"$ne": true},
+		"sent_at": nil,
 	}
+	opts := options.Find()
+	opts.SetLimit(batchSize)
+	_, msgsToLock, err := s.staticDB.FindEmails(s.staticCtx, filter, opts)
+	// Lock them.
+	var msgs []database.EmailMessage
+	ld := lock.LockDetails{
+		Owner: ServerLockID,
+		TTL:   lockTTL,
+	}
+	for _, m := range msgsToLock {
+		err = s.staticDB.LockClient.XLock(s.staticCtx, m.ID.Hex(), ServerLockID, ld)
+		if err != nil {
+			continue
+		}
+		// Collect only the successfully locked messages.
+		msgs = append(msgs, m)
+	}
+	// Make sure we try to unlock them at the end.
+	defer func() {
+		ls, err := s.staticDB.LockClient.Unlock(s.staticCtx, ServerLockID)
+		if err != nil {
+			s.staticLogger.Warningf("Failed to unlock locked emails. Error %s. Locked status: %+v\n", err.Error(), ls)
+		}
+	}()
+
+	// Send them.
 	if len(msgs) == 0 {
 		return
 	}

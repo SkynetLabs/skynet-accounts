@@ -17,17 +17,6 @@ A sender wants to send a message. In order to do that they use an instance of
 but queues it up in the database for future processing. A background thread
 running `Sender` is looping over the DB on a timer and taking care to send the
 messages waiting there.
-
-Since the DB is shared between all nodes in the portal cluster, the process of
-sending a message can be initiated by any node, regardless of the origin of the
-message. The way this works is that whenever `Sender` is triggered, it scans the
-DB for waiting messages, locks up a batch of them by writing its identity in the
-`LockedBy` field of each, waits for a short time, and then retrieves all
-messages locked by its id. Then it proceeds to attempt to send them. Should it
-succeed, the `SentAt` timestamp is set on each successfully sent message, thus
-marking it as processed. Should it fail to send the message, `Sender` will
-unlock it, so it can be retried later. If a message fails to get sent more than
-`maxAttemptsToSend` times it is marked as `Failed`.
 */
 
 // Mailer prepares messages for sending by adding them to the email queue.

@@ -8,6 +8,7 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/lib"
 
 	"github.com/sirupsen/logrus"
+	lock "github.com/square/mongo-lock"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -38,6 +39,9 @@ var (
 	// dbEmails defines the name of the "emails" collection within skynet's
 	// database.
 	dbEmails = "emails"
+	// dbLocks defines the name of the "locks" collection within skynet's
+	// database.
+	dbLocks = "locks"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -73,6 +77,7 @@ var (
 type (
 	// DB represents a MongoDB database connection.
 	DB struct {
+		LockClient           *lock.Client
 		staticDB             *mongo.Database
 		staticUsers          *mongo.Collection
 		staticSkylinks       *mongo.Collection
@@ -81,7 +86,8 @@ type (
 		staticRegistryReads  *mongo.Collection
 		staticRegistryWrites *mongo.Collection
 		staticEmails         *mongo.Collection
-		staticDep            lib.Dependencies
+		staticLocks          *mongo.Collection
+		staticDeps           lib.Dependencies
 		staticLogger         *logrus.Logger
 	}
 
@@ -123,7 +129,13 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
 		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
 		staticEmails:         database.Collection(dbEmails),
+		staticLocks:          database.Collection(dbLocks),
 		staticLogger:         logger,
+	}
+	db.LockClient = lock.NewClient(db.staticLocks)
+	err = db.LockClient.CreateIndexes(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return db, nil
 }
@@ -208,11 +220,12 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 		},
 		dbEmails: {
 			{
-				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("user_id"),
+				Keys:    bson.D{{"sent_at", 1}},
+				Options: options.Index().SetName("sent_at"),
 			},
 		},
 	}
+
 	for collName, models := range schema {
 		coll, err := ensureCollection(ctx, db, collName)
 		if err != nil {
