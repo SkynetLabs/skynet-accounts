@@ -34,11 +34,7 @@ type (
 
 // EmailCreate creates an email message in the DB which is waiting to be sent.
 func (db *DB) EmailCreate(ctx context.Context, m EmailMessage) error {
-	fields, err := bson.Marshal(m)
-	if err != nil {
-		return err
-	}
-	_, err = db.staticEmails.InsertOne(ctx, fields)
+	_, err := db.staticEmails.InsertOne(ctx, m)
 	if err != nil {
 		return errors.AddContext(err, "failed to Insert")
 	}
@@ -78,22 +74,7 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize in
 	// Fetch up to batchSize messages already locked with lockID.
 	opts := options.Find()
 	opts.SetLimit(batchSize)
-	c, err := db.staticEmails.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to fetch emails")
-	}
-	defer func() {
-		if errDef := c.Close(ctx); errDef != nil {
-			err = errors.Compose(err, errors.AddContext(errDef, "error on closing DB cursor"))
-		}
-	}()
-	for c.Next(ctx) {
-		var m EmailMessage
-		if err = c.Decode(&m); err != nil {
-			return nil, errors.AddContext(err, "failed to parse value from DB")
-		}
-		msgs = append(msgs, m)
-	}
+	_, msgs, err = db.findEmails(ctx, filter, opts)
 	return msgs, nil
 }
 
@@ -107,23 +88,8 @@ func (db *DB) fetchUnlockedMessageIDs(ctx context.Context, num int64) (ids []pri
 	}
 	opts := options.Find()
 	opts.SetLimit(num)
-	c, err := db.staticEmails.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to fetch ids")
-	}
-	defer func() {
-		if errDef := c.Close(ctx); errDef != nil {
-			err = errors.Compose(err, errors.AddContext(errDef, "error on closing DB cursor"))
-		}
-	}()
-	for c.Next(ctx) {
-		var m EmailMessage
-		if err = c.Decode(&m); err != nil {
-			return nil, errors.AddContext(err, "failed to parse value from DB")
-		}
-		ids = append(ids, m.ID)
-	}
-	return ids, nil
+	ids, _, err = db.findEmails(ctx, filter, opts)
+	return ids, err
 }
 
 // lockMessages is a helper method that locks the messages with the given ids.
@@ -196,4 +162,29 @@ func (db *DB) MarkAsFailed(ctx context.Context, msgs []*EmailMessage) error {
 		_, errFailed = db.staticEmails.UpdateMany(ctx, filter, update)
 	}
 	return errors.Compose(errInc, errFailed)
+}
+
+// findEmails is a helper method that fetches emails and their ids from the
+// database.
+func (db *DB) findEmails(ctx context.Context, filter bson.M, opts *options.FindOptions) ([]primitive.ObjectID, []EmailMessage, error) {
+	c, err := db.staticEmails.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, nil, errors.AddContext(err, "failed to fetch ids")
+	}
+	defer func() {
+		if errDef := c.Close(ctx); errDef != nil {
+			err = errors.Compose(err, errors.AddContext(errDef, "error on closing DB cursor"))
+		}
+	}()
+	var ids []primitive.ObjectID
+	var msgs []EmailMessage
+	for c.Next(ctx) {
+		var m EmailMessage
+		if err = c.Decode(&m); err != nil {
+			return nil, nil, errors.AddContext(err, "failed to parse value from DB")
+		}
+		msgs = append(msgs, m)
+		ids = append(ids, m.ID)
+	}
+	return ids, msgs, nil
 }

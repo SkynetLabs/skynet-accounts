@@ -93,10 +93,9 @@ func (s Sender) Start() {
 			select {
 			case <-s.staticCtx.Done():
 				return
-			default:
+			case <-time.After(sleepBetweenScans):
+				s.scanAndSend()
 			}
-			s.scanAndSend()
-			time.Sleep(sleepBetweenScans)
 		}
 	}()
 }
