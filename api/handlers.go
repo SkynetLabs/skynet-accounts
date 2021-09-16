@@ -17,6 +17,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type (
@@ -187,8 +188,15 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	sctx, err := startTxn(req.Context())
 	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserBySub(sctx, sub, true)
+	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -196,17 +204,18 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// We only do it here, instead of baking this into UserBySub because we only
 	// care about this information being correct when we're going to present it
 	// to the user, e.g. on the Dashboard.
-	_, email, err := jwt.UserDetailsFromJWT(req.Context())
+	_, email, err := jwt.UserDetailsFromJWT(sctx)
 	if err != nil {
 		api.staticLogger.Debugln("Failed to get user details from JWT:", err)
 	}
 	if err == nil && email != u.Email {
 		u.Email = email
-		err = api.staticDB.UserSave(req.Context(), u)
+		err = api.staticDB.UserSave(sctx, u)
 		if err != nil {
 			api.staticLogger.Debugln("Failed to update user in DB:", err)
 		}
 	}
+	api.commitTxn(sctx)
 	api.WriteJSON(w, u)
 }
 
@@ -227,20 +236,30 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	sctx, err := startTxn(req.Context())
+	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserBySub(sctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	us, err := api.staticDB.UserStats(req.Context(), *u)
+	us, err := api.staticDB.UserStats(sctx, *u)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	api.commitTxn(sctx)
 	api.WriteJSON(w, us)
 }
 
@@ -260,15 +279,23 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserCreate(req.Context(), email, pw, "", database.TierFree)
+	sctx, err := startTxn(req.Context())
+	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserCreate(sctx, email, pw, "", database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	api.commitTxn(sctx)
 	api.WriteJSON(w, u)
 }
 
@@ -279,18 +306,27 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	sctx, err := startTxn(req.Context())
+	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserBySub(sctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	// Read body.
 	bodyBytes, err := ioutil.ReadAll(req.Body)
 	if err != nil {
+		api.abortTxn(sctx)
 		err = errors.AddContext(err, "failed to read request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -301,47 +337,55 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}{}
 	err = json.Unmarshal(bodyBytes, &payload)
 	if err != nil {
+		api.abortTxn(sctx)
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if payload.StripeID == "" {
+		api.abortTxn(sctx)
 		err = errors.AddContext(err, "empty stripe id")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	// Check if this user already has this ID assigned to them.
 	if payload.StripeID == u.StripeID {
+		api.commitTxn(sctx)
 		// Nothing to do.
 		api.WriteJSON(w, u)
 		return
 	}
 	// Check if a user already has this customer id.
-	eu, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
+	eu, err := api.staticDB.UserByStripeID(sctx, payload.StripeID)
 	if err != nil && err != database.ErrUserNotFound {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if err == nil && eu.ID.Hex() != u.ID.Hex() {
+		api.abortTxn(sctx)
 		err = errors.New("this stripe customer id belongs to another user")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	// Check if this user already has a Stripe customer ID.
 	if u.StripeID != "" {
+		api.abortTxn(sctx)
 		err = errors.New("this user already has a Stripe customer id")
 		api.WriteError(w, err, http.StatusUnprocessableEntity)
 		return
 	}
 	// Save the changed Stripe ID to the DB.
-	err = api.staticDB.UserSetStripeID(req.Context(), u, payload.StripeID)
+	err = api.staticDB.UserSetStripeID(sctx, u, payload.StripeID)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	// We set this for the purpose of returning the updated value without
 	// reading from the DB.
 	u.StripeID = payload.StripeID
+	api.commitTxn(sctx)
 	api.WriteJSON(w, u)
 }
 
@@ -352,23 +396,33 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	sctx, err := startTxn(req.Context())
 	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserBySub(sctx, sub, true)
+	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if err = req.ParseForm(); err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize)
+	ups, total, err := api.staticDB.UploadsByUser(sctx, *u, offset, pageSize)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -378,6 +432,7 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 		PageSize: pageSize,
 		Count:    total,
 	}
+	api.commitTxn(sctx)
 	api.WriteJSON(w, response)
 }
 
@@ -388,21 +443,31 @@ func (api *API) userUploadDELETE(w http.ResponseWriter, req *http.Request, ps ht
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	sctx, err := startTxn(req.Context())
+	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserBySub(sctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	uid := ps.ByName("uploadId")
-	_, err = api.staticDB.UnpinUpload(req.Context(), uid, *u)
+	_, err = api.staticDB.UnpinUpload(sctx, uid, *u)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	api.commitTxn(sctx)
 	api.WriteSuccess(w)
 	// Now that we've returned results to the caller, we can take care of some
 	// administrative details, such as user's quotas check.
@@ -418,23 +483,33 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	sctx, err := startTxn(req.Context())
 	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserBySub(sctx, sub, true)
+	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if err = req.ParseForm(); err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	downs, total, err := api.staticDB.DownloadsByUser(req.Context(), *u, offset, pageSize)
+	downs, total, err := api.staticDB.DownloadsByUser(sctx, *u, offset, pageSize)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -459,22 +534,32 @@ func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps htt
 		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
 		return
 	}
-	skylink, err := api.staticDB.Skylink(req.Context(), sl)
+	sctx, err := startTxn(req.Context())
+	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	skylink, err := api.staticDB.Skylink(sctx, sl)
 	if errors.Contains(err, database.ErrInvalidSkylink) {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.UploadCreate(req.Context(), *u, *skylink)
+	_, err = api.staticDB.UploadCreate(sctx, *u, *skylink)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -487,6 +572,7 @@ func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps htt
 			}
 		}()
 	}
+	api.commitTxn(sctx)
 	api.WriteSuccess(w)
 	// Now that we've returned results to the caller, we can take care of some
 	// administrative details, such as user's quotas check.
@@ -502,7 +588,6 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-
 	err = req.ParseForm()
 	if err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -529,23 +614,33 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
 		return
 	}
-	skylink, err := api.staticDB.Skylink(req.Context(), sl)
+	sctx, err := startTxn(req.Context())
+	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	skylink, err := api.staticDB.Skylink(sctx, sl)
 	if errors.Contains(err, database.ErrInvalidSkylink) {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
+	err = api.staticDB.DownloadCreate(sctx, *u, *skylink, downloadedBytes)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -560,6 +655,7 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 			}
 		}()
 	}
+	api.commitTxn(sctx)
 	api.WriteSuccess(w)
 }
 
@@ -570,16 +666,25 @@ func (api *API) trackRegistryReadPOST(w http.ResponseWriter, req *http.Request, 
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	sctx, err := startTxn(req.Context())
 	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.RegistryReadCreate(req.Context(), *u)
+	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	_, err = api.staticDB.RegistryReadCreate(sctx, *u)
+	if err != nil {
+		api.abortTxn(sctx)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.commitTxn(sctx)
 	api.WriteSuccess(w)
 }
 
@@ -590,16 +695,25 @@ func (api *API) trackRegistryWritePOST(w http.ResponseWriter, req *http.Request,
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
+	sctx, err := startTxn(req.Context())
 	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.RegistryWriteCreate(req.Context(), *u)
+	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	_, err = api.staticDB.RegistryWriteCreate(sctx, *u)
+	if err != nil {
+		api.abortTxn(sctx)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.commitTxn(sctx)
 	api.WriteSuccess(w)
 }
 
@@ -610,33 +724,47 @@ func (api *API) skylinkDELETE(w http.ResponseWriter, req *http.Request, ps httpr
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	sctx, err := startTxn(req.Context())
+	if err != nil {
+		err = errors.AddContext(err, "unable to start a db transaction")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserBySub(sctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	sl := ps.ByName("skylink")
 	if !database.ValidSkylinkHash(sl) {
+		api.abortTxn(sctx)
 		api.WriteError(w, errors.New("invalid skylink"), http.StatusBadRequest)
+		return
 	}
-	skylink, err := api.staticDB.Skylink(req.Context(), sl)
+	skylink, err := api.staticDB.Skylink(sctx, sl)
 	if errors.Contains(err, database.ErrInvalidSkylink) {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.UnpinUploads(req.Context(), *skylink, *u)
+	_, err = api.staticDB.UnpinUploads(sctx, *skylink, *u)
 	if err != nil {
+		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	api.commitTxn(sctx)
 	api.WriteSuccess(w)
 	// Now that we've returned results to the caller, we can take care of some
 	// administrative details, such as user's quotas check.
@@ -668,6 +796,36 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	api.WriteJSON(w, jwt.AccountsPublicJWKS)
+}
+
+// abortTxn is a helper method that aborts a transaction and logs a warning if
+// it fails to do it.
+func (api *API) abortTxn(sctx mongo.SessionContext) {
+	err := sctx.AbortTransaction(sctx)
+	if err != nil {
+		api.staticLogger.Warningln("Failed to abort transaction. Error:", err.Error())
+	}
+}
+
+// commitTxn is a helper method that commits a transaction and logs a warning if
+// it fails to do it.
+func (api *API) commitTxn(sctx mongo.SessionContext) {
+	err := sctx.CommitTransaction(sctx)
+	if err != nil {
+		api.staticLogger.Warningln("Failed to commit transaction. Error:", err.Error())
+	}
+}
+
+// startTxn is a helper method which starts a Mongo Session and then starts a
+// new transaction with it.
+func startTxn(ctx context.Context) (mongo.SessionContext, error) {
+	sess := mongo.SessionFromContext(ctx)
+	sctx := mongo.NewSessionContext(ctx, sess)
+	err := sctx.StartTransaction()
+	if err != nil {
+		return nil, err
+	}
+	return sctx, nil
 }
 
 // fetchOffset extracts the offset from the params and validates its value.
