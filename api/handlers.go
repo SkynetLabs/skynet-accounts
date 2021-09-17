@@ -14,6 +14,7 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+	"go.mongodb.org/mongo-driver/x/mongo/driver/session"
 
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
@@ -194,9 +195,9 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -242,20 +243,18 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserBySub(sctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	us, err := api.staticDB.UserStats(sctx, *u)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -285,13 +284,13 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserCreate(sctx, email, pw, "", database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -312,21 +311,19 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserBySub(sctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	// Read body.
 	bodyBytes, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		api.abortTxn(sctx)
 		err = errors.AddContext(err, "failed to read request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -337,13 +334,11 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}{}
 	err = json.Unmarshal(bodyBytes, &payload)
 	if err != nil {
-		api.abortTxn(sctx)
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if payload.StripeID == "" {
-		api.abortTxn(sctx)
 		err = errors.AddContext(err, "empty stripe id")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -358,19 +353,16 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// Check if a user already has this customer id.
 	eu, err := api.staticDB.UserByStripeID(sctx, payload.StripeID)
 	if err != nil && err != database.ErrUserNotFound {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if err == nil && eu.ID.Hex() != u.ID.Hex() {
-		api.abortTxn(sctx)
 		err = errors.New("this stripe customer id belongs to another user")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	// Check if this user already has a Stripe customer ID.
 	if u.StripeID != "" {
-		api.abortTxn(sctx)
 		err = errors.New("this user already has a Stripe customer id")
 		api.WriteError(w, err, http.StatusUnprocessableEntity)
 		return
@@ -378,7 +370,6 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// Save the changed Stripe ID to the DB.
 	err = api.staticDB.UserSetStripeID(sctx, u, payload.StripeID)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -402,27 +393,24 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if err = req.ParseForm(); err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	ups, total, err := api.staticDB.UploadsByUser(sctx, *u, offset, pageSize)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -449,21 +437,19 @@ func (api *API) userUploadDELETE(w http.ResponseWriter, req *http.Request, ps ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserBySub(sctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	uid := ps.ByName("uploadId")
 	_, err = api.staticDB.UnpinUpload(sctx, uid, *u)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -489,27 +475,24 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if err = req.ParseForm(); err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	offset, err1 := fetchOffset(req.Form)
 	pageSize, err2 := fetchPageSize(req.Form)
 	if err = errors.Compose(err1, err2); err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	downs, total, err := api.staticDB.DownloadsByUser(sctx, *u, offset, pageSize)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -519,6 +502,7 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 		PageSize: pageSize,
 		Count:    total,
 	}
+	api.commitTxn(sctx)
 	api.WriteJSON(w, response)
 }
 
@@ -540,26 +524,23 @@ func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	skylink, err := api.staticDB.Skylink(sctx, sl)
 	if errors.Contains(err, database.ErrInvalidSkylink) {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	_, err = api.staticDB.UploadCreate(sctx, *u, *skylink)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -620,27 +601,24 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	skylink, err := api.staticDB.Skylink(sctx, sl)
 	if errors.Contains(err, database.ErrInvalidSkylink) {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	err = api.staticDB.DownloadCreate(sctx, *u, *skylink, downloadedBytes)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -672,15 +650,14 @@ func (api *API) trackRegistryReadPOST(w http.ResponseWriter, req *http.Request, 
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	_, err = api.staticDB.RegistryReadCreate(sctx, *u)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -701,15 +678,14 @@ func (api *API) trackRegistryWritePOST(w http.ResponseWriter, req *http.Request,
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserBySub(sctx, sub, true)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	_, err = api.staticDB.RegistryWriteCreate(sctx, *u)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -730,37 +706,32 @@ func (api *API) skylinkDELETE(w http.ResponseWriter, req *http.Request, ps httpr
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	defer func() { api.abortTxn(sctx) }()
 	u, err := api.staticDB.UserBySub(sctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	sl := ps.ByName("skylink")
 	if !database.ValidSkylinkHash(sl) {
-		api.abortTxn(sctx)
 		api.WriteError(w, errors.New("invalid skylink"), http.StatusBadRequest)
 		return
 	}
 	skylink, err := api.staticDB.Skylink(sctx, sl)
 	if errors.Contains(err, database.ErrInvalidSkylink) {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	_, err = api.staticDB.UnpinUploads(sctx, *skylink, *u)
 	if err != nil {
-		api.abortTxn(sctx)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -799,12 +770,17 @@ func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httpr
 }
 
 // abortTxn is a helper method that aborts a transaction and logs a warning if
-// it fails to do it.
+// it fails to do it. Safe to call after commitTxn.
 func (api *API) abortTxn(sctx mongo.SessionContext) {
+	// We call Abort here without checking whether the txn is committed because
+	// the Session in SessionContext doesn't allow us to inspect the state.
+	// But the very first thing the implementation does is check if the txn is
+	// committed and return ErrAbortAfterCommit if that's the case.
 	err := sctx.AbortTransaction(sctx)
-	if err != nil {
+	if err != nil && err != session.ErrAbortAfterCommit {
 		api.staticLogger.Warningln("Failed to abort transaction. Error:", err.Error())
 	}
+	sctx.EndSession(sctx)
 }
 
 // commitTxn is a helper method that commits a transaction and logs a warning if
@@ -814,6 +790,7 @@ func (api *API) commitTxn(sctx mongo.SessionContext) {
 	if err != nil {
 		api.staticLogger.Warningln("Failed to commit transaction. Error:", err.Error())
 	}
+	sctx.EndSession(sctx)
 }
 
 // startTxn is a helper method which starts a Mongo Session and then starts a
