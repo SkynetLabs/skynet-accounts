@@ -311,7 +311,6 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}
 	// Check if this user already has this ID assigned to them.
 	if payload.StripeID == u.StripeID {
-
 		// Nothing to do.
 		api.WriteJSON(w, u)
 		return
