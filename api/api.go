@@ -12,6 +12,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type (
@@ -55,6 +56,36 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 // Router exposed the internal httprouter struct.
 func (api *API) Router() *httprouter.Router {
 	return api.staticRouter
+}
+
+// WithDBSession injects a session context into the request context of the handler.
+func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
+	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		// Create a new db session
+		sess, err := api.staticDB.NewSession()
+		if err != nil {
+			api.WriteError(w, errors.AddContext(err, "failed to start a new mongo session"), http.StatusInternalServerError)
+			return
+		}
+		// Close session after the handler is done.
+		defer sess.EndSession(req.Context())
+
+		// Create session context.
+		sctx := mongo.NewSessionContext(req.Context(), sess)
+
+		// Get the special response writer.
+		mw, err := newMongoWriter(w, sctx, api.staticLogger)
+		if err != nil {
+			api.WriteError(w, errors.AddContext(err, "failed to start a new transaction"), http.StatusInternalServerError)
+			return
+		}
+
+		// Create a new request with our session context.
+		req = req.WithContext(sctx)
+
+		// Forward the new response writer and request to the handler.
+		h(&mw, req, ps)
+	}
 }
 
 // WriteError an error to the API caller.

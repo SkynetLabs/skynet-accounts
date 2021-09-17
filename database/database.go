@@ -145,6 +145,11 @@ func (db *DB) Disconnect(ctx context.Context) error {
 	return db.staticDB.Client().Disconnect(ctx)
 }
 
+// NewSession starts a new Mongo session.
+func (db *DB) NewSession() (mongo.Session, error) {
+	return db.staticDB.Client().StartSession()
+}
+
 // connectionString is a helper that returns a valid MongoDB connection string
 // based on the passed credentials and a set of constants. The connection string
 // is using the standalone approach because the service is supposed to talk to
