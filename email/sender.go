@@ -143,7 +143,11 @@ func (s Sender) scanAndSend() {
 	}
 	for _, m := range msgsToLock {
 		err = s.staticDB.LockClient.XLock(s.staticCtx, m.ID.Hex(), ServerLockID, ld)
+		if err == lock.ErrAlreadyLocked {
+			continue
+		}
 		if err != nil {
+			s.staticLogger.Debugf("Error while locking an email record: %s\n", err.Error())
 			continue
 		}
 		// Collect only the successfully locked messages.
