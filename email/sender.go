@@ -30,7 +30,13 @@ const (
 
 	// sleepBetweenScans defines how long the sender should sleep between its
 	// sweeps of the DB.
-	sleepBetweenScans = 10 * time.Second
+	sleepBetweenScans = 3 * time.Second
+)
+
+const (
+	// maxAttemptsToSend defines the maximum number of attempts we will make to
+	// send a given email message before giving up.
+	maxAttemptsToSend = 3
 )
 
 var (
@@ -129,8 +135,8 @@ func (s Sender) purgeExpiredLocks() {
 func (s Sender) scanAndSend() {
 	// Fetch a batch of email messages, waiting to be sent.
 	filter := bson.M{
-		"failed":  bson.M{"$ne": true},
-		"sent_at": nil,
+		"failed_attempts": bson.M{"$lt": maxAttemptsToSend},
+		"sent_at":         nil,
 	}
 	opts := options.Find()
 	opts.SetLimit(batchSize)
@@ -211,7 +217,7 @@ func (s Sender) send(from, to, subject, body, bodyMime string) error {
 	return s.sendMultiple(m)
 }
 
-// send one or more email messages.
+// sendMultiple one or more email messages.
 //
 // This function will not be called by Mailer but rather by Sender.
 func (s Sender) sendMultiple(m ...*mail.Message) error {

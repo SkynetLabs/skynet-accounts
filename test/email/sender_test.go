@@ -52,7 +52,7 @@ func TestSender(t *testing.T) {
 	if len(emails) != 1 {
 		t.Fatalf("Expected 1 email in the DB, got %d\n", len(emails))
 	}
-	if emails[0].Failed || emails[0].FailedAttemptsToSend > 0 || !emails[0].SentAt.IsZero() {
+	if emails[0].FailedAttempts > 0 || !emails[0].SentAt.IsZero() {
 		t.Fatal("The email has been picked up already.")
 	}
 	// Start the sender and wait for a second.
