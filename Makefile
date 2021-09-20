@@ -18,7 +18,7 @@ count = 1
 pkgs = ./ ./api ./build ./database ./lib ./jwt
 
 # integration-pkgs defines the packages which contain integration tests
-integration-pkgs = ./test/database ./test/email
+integration-pkgs = ./test/database ./test/email ./test/api
 
 # fmt calls go fmt on all packages.
 fmt:
@@ -66,13 +66,17 @@ start-mongo:
      --rm \
      --detach \
      --name skynet-accounts-mongo-test-db \
-     -p 127.0.0.1:17017:27017 \
+     -p 17017:17017 \
      -e MONGO_INITDB_ROOT_USERNAME=admin \
      -e MONGO_INITDB_ROOT_PASSWORD=aO4tV5tC1oU3oQ7u \
-     mongo
+     -v $(shell pwd)/test/fixtures/mongo_keyfile:/data/mgkey \
+	mongo:4.4.1 mongod --port=17017 --replSet=skynet --keyFile=/data/mgkey
+	sleep 3 # wait for mongo to start before we try to configure it
+	# Initialise a single node replica set.
+	docker exec skynet-accounts-mongo-test-db mongo -u admin -p aO4tV5tC1oU3oQ7u --port 17017 --eval "rs.initiate({_id: \"skynet\", members: [{ _id: 0, host: \"localhost:17017\" }]})"
 
 stop-mongo:
-	docker stop skynet-accounts-mongo-test-db
+	-docker stop skynet-accounts-mongo-test-db
 
 # debug builds and installs debug binaries. This will also install the utils.
 debug:
@@ -107,6 +111,9 @@ test-long: clean fmt vet lint lint-ci
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
 
 # test-int always returns a zero exit value! Only use it manually!
+# These env var values are for testing only. They can be freely changed.
+test-int: export COOKIE_HASH_KEY="7eb32cfab5014d14394648dae1cf4e606727eee2267f6a50213cd842e61c5bce"
+test-int: export COOKIE_ENC_KEY="65d31d12b80fc57df16d84c02a9bb62e2bc3b633388b05e49ef8abfdf0d35cf3"
 test-int: test-long start-mongo
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
 	make stop-mongo

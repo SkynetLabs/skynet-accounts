@@ -52,7 +52,7 @@ var (
 	// mongoReadPreference defines the DB's read preference. The options are:
 	// primary, primaryPreferred, secondary, secondaryPreferred, nearest.
 	// See https://docs.mongodb.com/manual/core/read-preference/
-	mongoReadPreference = "nearest"
+	mongoReadPreference = "primary"
 	// mongoWriteConcern describes the level of acknowledgment requested from
 	// MongoDB.
 	mongoWriteConcern = "majority"
