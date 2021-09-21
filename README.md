@@ -1,7 +1,7 @@
 # skynet-accounts
 
 `skynet-accounts` is a service that stores [Skynet](https://siasky.net) user account data. It uses MongoDB for data
-storage. It uses ORY Kratos for the actual account management.
+storage.
 
 ## Setup steps
 

@@ -66,7 +66,7 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
-		token, err := jwt.ValidateToken(api.staticLogger, tokenStr)
+		token, err := jwt.ValidateToken(tokenStr)
 		if err != nil {
 			api.staticLogger.Traceln("Error validating token:", err)
 			api.WriteError(w, err, http.StatusUnauthorized)
@@ -118,7 +118,7 @@ func (api *API) userFromRequest(r *http.Request) *database.User {
 	if err != nil {
 		return nil
 	}
-	token, err := jwt.ValidateToken(api.staticLogger, t)
+	token, err := jwt.ValidateToken(t)
 	if err != nil {
 		return nil
 	}

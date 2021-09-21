@@ -188,7 +188,7 @@ func TestUserCreate(t *testing.T) {
 	pass := t.Name() + "pass"
 	sub := t.Name() + "sub"
 
-	// TODO We should uncomment this once we remove Kratos.
+	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
 	// // Try to create a user with an invalid email.
 	// _, err = db.UserCreate(ctx, "invalid email", pass, sub, database.TierFree)
 	// if err == nil {

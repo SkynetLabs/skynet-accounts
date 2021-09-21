@@ -117,23 +117,16 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	token, err := jwt.ValidateToken(api.staticLogger, tokenStr)
+	token, err := jwt.ValidateToken(tokenStr)
 	if err != nil {
 		api.staticLogger.Traceln("Error validating token:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	// We fetch the expiration time of the token, so we can set the expiration
-	// time of the cookie to match it.
-	exp := token.Expiration()
-	if time.Now().UTC().After(exp.UTC()) {
-		api.WriteError(w, errors.New("token has expired"), http.StatusUnauthorized)
-		return
-	}
 	// Write a secure cookie containing the JWT token of the user. This allows
 	// us to verify the user's identity and permissions (i.e. tier) without
 	// requesting their credentials or accessing the DB.
-	err = writeCookie(w, tokenStr, exp.UTC().Unix())
+	err = writeCookie(w, tokenStr, token.Expiration().UTC().Unix())
 	if err != nil {
 		api.staticLogger.Traceln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)

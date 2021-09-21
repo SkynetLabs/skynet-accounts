@@ -35,6 +35,10 @@ var (
 		},
 	).(string)
 
+	// ErrTokenExpired is returned when a user tries to authenticate with an
+	// expired token.
+	ErrTokenExpired = errors.New("token expired")
+
 	// oathkeeperPubKeys is the public RS key set exposed by Oathkeeper for JWT
 	// validation. It's available at oathkeeperPubKeyURL.
 	oathkeeperPubKeys jwk.Set = nil
@@ -265,23 +269,15 @@ func UserDetailsFromJWT(ctx context.Context) (sub, email string, err error) {
 //    },
 //  },
 // }
-func ValidateToken(logger *logrus.Logger, t string) (jwt.Token, error) {
+func ValidateToken(t string) (jwt.Token, error) {
 	token, err := jwt.Parse([]byte(t), jwt.WithKeySet(AccountsPublicJWKS))
-	if err == nil {
-		return token, nil
+	if err != nil {
+		return nil, err
 	}
-	return nil, err
-
-	// // try to parse the token as an oathkeeper token
-	// keySet, err := oathkeeperPublicKeys(logger)
-	// if err != nil {
-	// 	return nil, errors.AddContext(err, "failed to fetch Oathkeeper's JWKS")
-	// }
-	// token, err = jwt.Parse([]byte(t), jwt.WithKeySet(keySet))
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// return token, nil
+	if token.Expiration().UTC().Before(time.Now().UTC()) {
+		return nil, ErrTokenExpired
+	}
+	return token, nil
 }
 
 // LoadAccountsKeySet loads the JSON Web Key Set that we use for signing and
@@ -293,17 +289,7 @@ func ValidateToken(logger *logrus.Logger, t string) (jwt.Token, error) {
 // See http://self-issued.info/docs/draft-ietf-oauth-json-web-token.html
 // Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
 func LoadAccountsKeySet(logger *logrus.Logger) error {
-	var b []byte
-	var err error
-	// We read the key set from different sources in different cases.
-	switch build.Release {
-	case "dev":
-		b, err = ioutil.ReadFile("jwks.json")
-	case "testing":
-		b, err = ioutil.ReadFile("fixtures/jwks.json")
-	default:
-		b, err = ioutil.ReadFile(AccountsJWKSFile)
-	}
+	b, err := ioutil.ReadFile(AccountsJWKSFile)
 	if err != nil {
 		logger.Warningln("ERROR while reading accounts JWKS", err)
 		return err

@@ -297,7 +297,12 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, email, pass, sub string, tier int) (*User, error) {
-	// TODO Once we remove Kratos we should start validating emails here.
+	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
+	// e, err := mail.ParseAddress(email)
+	// if err != nil {
+	// 	return nil, errors.AddContext(err, "invalid email address")
+	// }
+	// email = e.Address
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", email)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
