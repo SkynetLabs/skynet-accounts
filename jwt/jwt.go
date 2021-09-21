@@ -3,13 +3,14 @@ package jwt
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"reflect"
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
-	jwt2 "github.com/golang-jwt/jwt/v4"
+
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
@@ -37,7 +38,7 @@ var (
 	OathkeeperAddr = "oathkeeper:4456"
 
 	// JWTPortalName is the issuing service we are using for our JWTs. This
-	// value can be overwritten by main.go is PORTAL_NAME is set.
+	// value can be overwritten by main.go is PORTAL_DOMAIN is set.
 	JWTPortalName = "https://siasky.net"
 
 	// JWTTTL defines the lifetime of the JWT token in seconds.
@@ -153,28 +154,37 @@ func TokenForUser(email, sub string) (jwt.Token, []byte, error) {
 //        ]
 //    ]
 // ]
-func TokenFromContext(ctx context.Context) (sub string, claims jwt2.MapClaims, token *jwt2.Token, err error) {
-	t, ok := ctx.Value(ctxValue("token")).(*jwt2.Token)
+func TokenFromContext(ctx context.Context) (sub string, email string, token jwt.Token, err error) {
+	defer func() {
+		// This handles a potential problem with the JWT token that would cause
+		// a panic during one of the type cases. It shouldn't happen with a
+		// properly formatted token and it's easier to read than constantly
+		// checking whether the conversion was successful.
+		if e := recover(); e != nil {
+			err = errors.New(fmt.Sprintf("failed to parse token from context. error: %v", e))
+			return
+		}
+	}()
+	t, ok := ctx.Value(ctxValue("token")).(jwt.Token)
 	if !ok {
-		err = errors.New("failed to get token")
+		err = errors.New(fmt.Sprintf("invalid token type: %s", reflect.TypeOf(ctx.Value(ctxValue("token"))).String()))
 		return
 	}
-	if reflect.ValueOf(t.Claims).Kind() != reflect.ValueOf(jwt2.MapClaims{}).Kind() {
-		err = errors.New("the token does not contain the claims we expect")
-		return
-	}
-	claims = t.Claims.(jwt2.MapClaims)
-	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
-		err = errors.New("the token does not contain the sub we expect")
-		return
-	}
-	subEntry, ok := claims["sub"]
+	s, ok := t.Get("sub")
 	if !ok {
-		claims = nil
-		err = errors.New("jwt claims don't contain a valid sub")
+		err = errors.New("sub field missing")
 		return
 	}
-	sub = subEntry.(string)
+	sess, ok := t.Get("session")
+	if !ok {
+		err = errors.New("session field missing")
+		return
+	}
+	session := sess.(map[string]interface{})
+	identity := session["identity"].(map[string]interface{})
+	traits := identity["traits"].(map[string]interface{})
+	email = traits["email"].(string)
+	sub = s.(string)
 	token = t
 	return
 }
@@ -186,37 +196,7 @@ func UserDetailsFromJWT(ctx context.Context) (sub, email string, err error) {
 		err = errors.New("Invalid context")
 		return
 	}
-	_, claims, _, err := TokenFromContext(ctx)
-	if err != nil {
-		return
-	}
-	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
-		err = errors.New("the token does not contain the sub we expect")
-		return
-	}
-	// Validate the chain of inset maps claims->session->identity->traits->name
-	// and then extract the data we need.
-	if reflect.ValueOf(claims["session"]).Kind() != reflect.Map {
-		err = errors.New("the token does not contain the sessions we expect")
-		return
-	}
-	session := claims["session"].(map[string]interface{})
-	if reflect.ValueOf(session["identity"]).Kind() != reflect.Map {
-		err = errors.New("the token does not contain the identity we expect")
-		return
-	}
-	id := session["identity"].(map[string]interface{})
-	if reflect.ValueOf(id["traits"]).Kind() != reflect.Map {
-		err = errors.New("the token does not contain the traits we expect")
-		return
-	}
-	tr := id["traits"].(map[string]interface{})
-	if reflect.ValueOf(tr["name"]).Kind() != reflect.Map {
-		err = errors.New("the token does not contain the names we expect")
-		return
-	}
-	sub = claims["sub"].(string)
-	email = tr["email"].(string)
+	sub, email, _, err = TokenFromContext(ctx)
 	return
 }
 
@@ -282,7 +262,6 @@ func UserDetailsFromJWT(ctx context.Context) (sub, email string, err error) {
 func ValidateToken(logger *logrus.Logger, t string) (jwt.Token, error) {
 	token, err := jwt.Parse([]byte(t), jwt.WithKeySet(AccountsPublicJWKS))
 	if err == nil {
-		// return nil, err
 		return token, nil
 	}
 

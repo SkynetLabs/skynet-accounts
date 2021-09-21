@@ -8,6 +8,7 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/lib"
 
 	"github.com/sirupsen/logrus"
+	lock "github.com/square/mongo-lock"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -35,6 +36,12 @@ var (
 	// dbRegistryWritesCollection defines the name of the "registry_writes"
 	// collection within skynet's database.
 	dbRegistryWritesCollection = "registry_writes"
+	// dbEmails defines the name of the "emails" collection within skynet's
+	// database.
+	dbEmails = "emails"
+	// dbLocks defines the name of the "locks" collection within skynet's
+	// database.
+	dbLocks = "locks"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -45,7 +52,7 @@ var (
 	// mongoReadPreference defines the DB's read preference. The options are:
 	// primary, primaryPreferred, secondary, secondaryPreferred, nearest.
 	// See https://docs.mongodb.com/manual/core/read-preference/
-	mongoReadPreference = "nearest"
+	mongoReadPreference = "primary"
 	// mongoWriteConcern describes the level of acknowledgment requested from
 	// MongoDB.
 	mongoWriteConcern = "majority"
@@ -70,6 +77,7 @@ var (
 type (
 	// DB represents a MongoDB database connection.
 	DB struct {
+		LockClient           *lock.Client
 		staticDB             *mongo.Database
 		staticUsers          *mongo.Collection
 		staticSkylinks       *mongo.Collection
@@ -77,7 +85,9 @@ type (
 		staticDownloads      *mongo.Collection
 		staticRegistryReads  *mongo.Collection
 		staticRegistryWrites *mongo.Collection
-		staticDep            lib.Dependencies
+		staticEmails         *mongo.Collection
+		staticLocks          *mongo.Collection
+		staticDeps           lib.Dependencies
 		staticLogger         *logrus.Logger
 	}
 
@@ -118,7 +128,14 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 		staticDownloads:      database.Collection(dbDownloadsCollection),
 		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
 		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
+		staticEmails:         database.Collection(dbEmails),
+		staticLocks:          database.Collection(dbLocks),
 		staticLogger:         logger,
+	}
+	db.LockClient = lock.NewClient(db.staticLocks)
+	err = db.LockClient.CreateIndexes(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return db, nil
 }
@@ -126,6 +143,11 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 // Disconnect closes the connection to the database in an orderly fashion.
 func (db *DB) Disconnect(ctx context.Context) error {
 	return db.staticDB.Client().Disconnect(ctx)
+}
+
+// NewSession starts a new Mongo session.
+func (db *DB) NewSession() (mongo.Session, error) {
+	return db.staticDB.Client().StartSession()
 }
 
 // connectionString is a helper that returns a valid MongoDB connection string
@@ -201,7 +223,18 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("user_id"),
 			},
 		},
+		dbEmails: {
+			{
+				Keys:    bson.D{{"sent_at", 1}},
+				Options: options.Index().SetName("sent_at"),
+			},
+			{
+				Keys:    bson.D{{"failed_attempts", 1}},
+				Options: options.Index().SetName("failed_attempts"),
+			},
+		},
 	}
+
 	for collName, models := range schema {
 		coll, err := ensureCollection(ctx, db, collName)
 		if err != nil {
@@ -266,7 +299,7 @@ func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipe
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
-			{"localField", "skylink_id"}, // field in the downloads collection
+			{"localField", "skylink_id"}, // field in the uploads collection
 			{"foreignField", "_id"},      // field in the skylinks collection
 			{"as", "fromSkylinks"},
 		}},
@@ -309,7 +342,7 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 		}},
 	}
 	// This stage checks if the download has a non-zero `bytes` field and if so,
-	// it takes it as the download's size. Otherwise it reports the full
+	// it takes it as the download's size, otherwise it reports the full
 	// skylink's size as download's size.
 	projectStage := bson.D{{"$project", bson.D{
 		{"skylink", 1},
