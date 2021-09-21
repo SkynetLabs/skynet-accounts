@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -27,10 +28,15 @@ const (
 var (
 	secureCookie = func() *securecookie.SecureCookie {
 		_ = godotenv.Load()
+		hashKeyStr := os.Getenv(envCookieHashKey)
+		encKeyStr := os.Getenv(envCookieEncKey)
+		if len(hashKeyStr) < 32 || len(encKeyStr) < 32 {
+			panic(fmt.Sprintf("Both %s and %s are required environment variables and need to contain at least 32 bytes of hex-encoded entropy. %s, %s", envCookieHashKey, envCookieEncKey, hashKeyStr, encKeyStr))
+		}
 		// These keys need to be *exactly* 16 or 32 bytes long.
-		var hashKey = []byte(os.Getenv(envCookieHashKey))[:32]
-		var blockKey = []byte(os.Getenv(envCookieEncKey))[:32]
-		return securecookie.New(hashKey, blockKey)
+		var hashKey = []byte(hashKeyStr)[:32]
+		var encKey = []byte(encKeyStr)[:32]
+		return securecookie.New(hashKey, encKey)
 	}()
 )
 
