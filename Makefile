@@ -56,10 +56,14 @@ lint-analyze:
 	analyze -lockcheck -- $(pkgs)
 
 # start-mongo starts a local mongoDB container with no persistence.
-# The first command stops any running testing container but if there is none the
-# error is ignored.
+# We first prepare for the start of the container by making sure the test
+# keyfile has the right permissions, then we clear any potential leftover
+# containers with the same name. After we start the container we initialise a
+# single node replica set.
 start-mongo:
+	chmod 400 $(shell pwd)/test/fixtures/mongo_keyfile
 	-docker stop skynet-accounts-mongo-test-db
+	-docker rm skynet-accounts-mongo-test-db
 	docker run \
      --rm \
      --detach \
