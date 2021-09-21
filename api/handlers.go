@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/email"
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/lib"
@@ -361,6 +362,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	var changedEmail bool
 	if payload.Email != "" {
 		u.Email = payload.Email
+		u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(email.EmailConfirmationTokenTTL)
 		u.EmailConfirmationToken, err = lib.GenerateUUID()
 		if err != nil {
 			api.WriteError(w, errors.AddContext(err, "failed to generate a token"), http.StatusInternalServerError)
@@ -527,6 +529,7 @@ func (api *API) userReconfirmGET(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(email.EmailConfirmationTokenTTL)
 	u.EmailConfirmationToken, err = lib.GenerateUUID()
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to generate a token"), http.StatusInternalServerError)

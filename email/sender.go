@@ -37,6 +37,11 @@ const (
 	// maxAttemptsToSend defines the maximum number of attempts we will make to
 	// send a given email message before giving up.
 	maxAttemptsToSend = 3
+
+	// EmailConfirmationTokenTTL defines the lifetime of an email confirmation
+	// token. After the token expires it can no longer be used and the user
+	// needs to request an email re-confirmation.
+	EmailConfirmationTokenTTL = 24 * time.Hour
 )
 
 var (
