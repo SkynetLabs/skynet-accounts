@@ -15,7 +15,6 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/lib"
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
-
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -703,7 +702,6 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-
 	err = req.ParseForm()
 	if err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -739,7 +737,6 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-
 	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -823,6 +820,7 @@ func (api *API) skylinkDELETE(w http.ResponseWriter, req *http.Request, ps httpr
 	sl := ps.ByName("skylink")
 	if !database.ValidSkylinkHash(sl) {
 		api.WriteError(w, errors.New("invalid skylink"), http.StatusBadRequest)
+		return
 	}
 	skylink, err := api.staticDB.Skylink(req.Context(), sl)
 	if errors.Contains(err, database.ErrInvalidSkylink) {
