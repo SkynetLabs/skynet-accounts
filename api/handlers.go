@@ -476,8 +476,8 @@ func (api *API) trackRegistryWritePOST(w http.ResponseWriter, req *http.Request,
 	api.WriteSuccess(w)
 }
 
-// uploadsDELETE unpins all uploads of a skylink uploaded by the user.
-func (api *API) uploadsDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+// userUploadsDELETE unpins all uploads of a skylink uploaded by the user.
+func (api *API) userUploadsDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
