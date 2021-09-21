@@ -31,10 +31,8 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsGET))
 	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsGET))
-	api.staticRouter.DELETE("/user/uploads/:uploadId", api.validate(api.userUploadDELETE))
+	api.staticRouter.DELETE("/user/uploads/:skylink", api.validate(api.uploadsDELETE))
 	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsGET))
-
-	api.staticRouter.DELETE("/skylink/:skylink", api.validate(api.skylinkDELETE))
 
 	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookPOST))
 	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesGET))
