@@ -91,7 +91,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	}
 	// Create a second upload for the same skylink. The user's used storage
 	// should stay the same but the upload bandwidth should increase.
-	_, uid, err := createUpload(ctx, db, u, sl)
+	_, _, err = RegisterTestUpload(ctx, db, u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
@@ -118,41 +118,6 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	}
 	if stats.NumUploads != uploadsCount {
 		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
-	}
-	// Delete the last upload. Expect the number of uploads to go down by 1 but
-	// expect the storage used to stay the same because duplicate uploads don't
-	// increase the user's used storage.
-	unpinned, err := db.UnpinUpload(ctx, uid.Hex(), *u)
-	if err != nil {
-		t.Fatal("Failed to unpin.", err)
-	}
-	if unpinned != 1 {
-		t.Fatalf("Expected to unpin 1 files, unpinned %d.", unpinned)
-	}
-	totalUploadSize -= 0 // total upload size stays the same
-	rawStorageUsed -= 0  // storage stays the same
-	uploadBandwidth -= 0 // upload bandwidth is already used, so it also stay the same
-	uploadsCount -= 1
-	// Fetch the user's uploads.
-	ups, n, err = db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
-	if err != nil {
-		t.Fatal("Failed to fetch uploads by user.", err)
-	}
-	if n != 1 {
-		t.Fatalf("Expected to have exactly %d upload(s), got %d.", 1, n)
-	}
-	// Refresh the user's record and make sure we report storage used accurately.
-	stats, err = db.UserStats(ctx, *u)
-	if err != nil {
-		t.Fatal("Failed to fetch user.", err)
-	}
-	if stats.RawStorageUsed != rawStorageUsed {
-		t.Fatalf("Expected raw storage used of %d (%d MiB), got %d (%d MiB).",
-			rawStorageUsed, rawStorageUsed, stats.RawStorageUsed, stats.RawStorageUsed/skynet.MiB)
-	}
-	if stats.TotalUploadsSize != totalUploadSize {
-		t.Fatalf("Expected total upload size of %d (%d MiB), got %d (%d MiB).",
-			totalUploadSize, totalUploadSize, stats.TotalUploadsSize, stats.TotalUploadsSize/skynet.MiB)
 	}
 	// Upload the same file again. Uploads go up, storage stays the same.
 	_, _, err = createUpload(ctx, db, u, sl)

@@ -288,36 +288,6 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 	api.WriteJSON(w, response)
 }
 
-// userUploadDELETE unpins a single upload by this user.
-func (api *API) userUploadDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	sub, _, _, err := jwt.TokenFromContext(req.Context())
-	if err != nil {
-		api.WriteError(w, err, http.StatusUnauthorized)
-		return
-	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
-	if errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, err, http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	uid := ps.ByName("uploadId")
-	_, err = api.staticDB.UnpinUpload(req.Context(), uid, *u)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	api.WriteSuccess(w)
-	// Now that we've returned results to the caller, we can take care of some
-	// administrative details, such as user's quotas check.
-	// Note that this call is not affected by the request's context, so we use
-	// a separate one.
-	go api.checkUserQuotas(context.Background(), u)
-}
-
 // userDownloadsGET returns all downloads made by the current user.
 func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
@@ -506,8 +476,8 @@ func (api *API) trackRegistryWritePOST(w http.ResponseWriter, req *http.Request,
 	api.WriteSuccess(w)
 }
 
-// skylinkDELETE unpins all uploads of a skylink uploaded by the user.
-func (api *API) skylinkDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+// uploadsDELETE unpins all uploads of a skylink uploaded by the user.
+func (api *API) uploadsDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
