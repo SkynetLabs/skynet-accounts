@@ -2,21 +2,6 @@
 
 ## General terms
 
-### ORY, Kratos, Oathkeeper, and JWx
-
-While `skynet-accounts` handles account information in the context of a Skynet portal, the baseline account management (
-account CRUD, email verification, password resets, etc.) is handled by [ORY](https://www.ory.sh/)
-([Kratos](https://www.ory.sh/kratos/) and [Oathkeeper](https://www.ory.sh/oathkeeper/))
-to which we often refer to as "Kratos". This also covers the login/logout process and the issuance of JTW tokens. When
-we talk about JWT (or JWK, or JWKS)
-we mean the tokens issued by ORY.
-
-The workflow of verification follows a simple pattern:
-
-* Oathkeeper exposes a public link on which it shares the public keys with which anyone can verify the validity of the
-  JWT tokens it issues.
-* `skynet-accounts` fetches those keys and uses them to validate the JWTs it receives in requests.
-
 ### User tiers
 
 The tiers communicated by the API are numeric. This is the mapping:

@@ -242,7 +242,7 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 }
 
 // UserBySub returns the user with the given sub. If `create` is `true` it will
-// create the user if it doesn't exist. The sub is the Kratos id of that user.
+// create the user if it doesn't exist.
 func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
 	users, err := db.managedUsersBySub(ctx, sub)
 	if create && errors.Contains(err, ErrUserNotFound) {
@@ -310,7 +310,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	// }
 	// emailAddr = e.Address
 	// Check for an existing user with this email.
-	users, err := db.managedUsersByField(ctx, "emailAddr", emailAddr)
+	users, err := db.managedUsersByField(ctx, "email", emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
@@ -331,6 +331,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	if len(users) > 0 {
 		return nil, ErrUserAlreadyExists
 	}
+	// TODO Review this when we fully migrate away from Kratos.
 	// Generate a password hash, if a password is provided. A password might not
 	// be provided if the user is generated externally, e.g. in Kratos. We can
 	// remove that option in the future when `accounts` is the only system

@@ -55,9 +55,6 @@ var (
 	// envServerDomain holds the name of the environment variable for the
 	// identity of this server. Example: eu-ger-1.siasky.net
 	envServerDomain = "SERVER_DOMAIN"
-	// envOathkeeperAddr hold the name of the environment variable for
-	// Oathkeeper's address. Defaults to "oathkeeper:4456".
-	envOathkeeperAddr = "OATHKEEPER_ADDR"
 	// envStripeAPIKey hold the name of the environment variable for Stripe's
 	// API key. It's only required when integrating with Stripe.
 	envStripeAPIKey = "STRIPE_API_KEY"
@@ -155,9 +152,6 @@ func main() {
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
-	}
-	if oaddr := os.Getenv(envOathkeeperAddr); oaddr != "" {
-		jwt.OathkeeperAddr = oaddr
 	}
 	if sk := os.Getenv(envStripeAPIKey); sk != "" {
 		stripe.Key = sk

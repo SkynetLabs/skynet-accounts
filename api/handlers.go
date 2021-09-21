@@ -106,7 +106,7 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 	api.loginUser(w, u)
 }
 
-// loginToken is a helper that handles logins via a token attached to the
+// loginPOSTToken is a helper that handles logins via a token attached to the
 // request.
 func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	// Fetch a JWT token from the request. This token will tell us who the user

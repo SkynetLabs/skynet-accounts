@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"reflect"
 	"time"
 
@@ -38,14 +37,6 @@ var (
 	// ErrTokenExpired is returned when a user tries to authenticate with an
 	// expired token.
 	ErrTokenExpired = errors.New("token expired")
-
-	// oathkeeperPubKeys is the public RS key set exposed by Oathkeeper for JWT
-	// validation. It's available at oathkeeperPubKeyURL.
-	oathkeeperPubKeys jwk.Set = nil
-
-	// OathkeeperAddr holds the domain + port on which we can find Oathkeeper.
-	// The point of this var is to be overridable via .env.
-	OathkeeperAddr = "oathkeeper:4456"
 
 	// JWTPortalName is the issuing service we are using for our JWTs. This
 	// value can be overwritten by main.go is PORTAL_DOMAIN is set.
@@ -116,7 +107,6 @@ func TokenForUser(email, sub string) (jwt.Token, []byte, error) {
 
 // TokenFromContext extracts the JWT token from the
 // context and returns the contained user sub, claims and the token itself.
-// The sub is the user id used in Kratos.
 //
 // Example claims structure:
 //
@@ -312,41 +302,6 @@ func LoadAccountsKeySet(logger *logrus.Logger) error {
 		return err
 	}
 	return nil
-}
-
-// oathkeeperPublicKeys checks whether we have the
-// needed public key cached and if we don't it fetches it and caches it for us.
-//
-// See https://tools.ietf.org/html/rfc7517
-// See https://auth0.com/blog/navigating-rs256-and-jwks/
-// See http://self-issued.info/docs/draft-ietf-oauth-json-web-token.html
-// Encoding RSA pub key: https://play.golang.org/p/mLpOxS-5Fy
-func oathkeeperPublicKeys(logger *logrus.Logger) (jwk.Set, error) {
-	if oathkeeperPubKeys == nil {
-		oathkeeperPubKeyURL := "http://" + OathkeeperAddr + "/.well-known/jwks.json"
-		logger.Traceln("fetching JWKS from oathkeeper:", oathkeeperPubKeyURL)
-		r, err := http.Get(oathkeeperPubKeyURL) // #nosec G107: Potential HTTP request made with variable url
-		if err != nil {
-			logger.Warningln("ERROR while fetching JWKS from oathkeeper", err)
-			return nil, err
-		}
-		defer func() { _ = r.Body.Close() }()
-		var b []byte
-		b, err = ioutil.ReadAll(r.Body)
-		if err != nil {
-			logger.Warningln("ERROR while reading JWKS from oathkeeper", err)
-			return nil, err
-		}
-		set := jwk.NewSet()
-		err = json.Unmarshal(b, set)
-		if err != nil {
-			logger.Warningln("ERROR while parsing JWKS from oathkeeper", err)
-			logger.Warningln("JWKS string:", string(b))
-			return nil, err
-		}
-		oathkeeperPubKeys = set
-	}
-	return oathkeeperPubKeys, nil
 }
 
 // tokenForUser is a helper method that puts together an unsigned token based
