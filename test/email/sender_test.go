@@ -13,14 +13,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const (
-	// FauxEmailURI is a valid URI for sending emails that points to a local
-	// mailslurper instance. That instance is most probably not running, so
-	// trying to send mails with it will fail, but it's useful for testing with
-	// the DependencySkipSendingEmails.
-	FauxEmailURI = "smtps://test:test1@mailslurper:1025/?skip_ssl_verify=true"
-)
-
 // TestSender goes through the standard Sender workflow and ensures that it
 // works correctly.
 func TestSender(t *testing.T) {
@@ -31,11 +23,11 @@ func TestSender(t *testing.T) {
 		t.Fatal(err)
 	}
 	logger := &logrus.Logger{}
-	sender, err := email.NewSender(ctx, db, logger, &test.DependencySkipSendingEmails{}, FauxEmailURI)
+	sender, err := email.NewSender(ctx, db, logger, &test.DependencySkipSendingEmails{}, test.FauxEmailURI)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mailer := email.New(db)
+	mailer := email.NewMailer(db)
 
 	// Send an email.
 	to := t.Name() + "@siasky.net"

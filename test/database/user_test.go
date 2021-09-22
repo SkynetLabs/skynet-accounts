@@ -88,7 +88,7 @@ func TestUserByID(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(u, u1) {
-		t.Fatalf("User not equal to original: %v vs %v", u, u1)
+		t.Fatalf("User not equal to original:\n %+v\n vs\n %+v", u, u1)
 	}
 }
 

@@ -10,6 +10,13 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+const (
+	// EmailConfirmationTokenTTL defines the lifetime of an email confirmation
+	// token. After the token expires it can no longer be used and the user
+	// needs to request an email re-confirmation.
+	EmailConfirmationTokenTTL = 24 * time.Hour
+)
+
 type (
 	// EmailMessage represents an email message waiting to be sent
 	EmailMessage struct {

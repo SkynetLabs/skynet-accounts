@@ -37,11 +37,6 @@ const (
 	// maxAttemptsToSend defines the maximum number of attempts we will make to
 	// send a given email message before giving up.
 	maxAttemptsToSend = 3
-
-	// EmailConfirmationTokenTTL defines the lifetime of an email confirmation
-	// token. After the token expires it can no longer be used and the user
-	// needs to request an email re-confirmation.
-	EmailConfirmationTokenTTL = 24 * time.Hour
 )
 
 var (
@@ -89,8 +84,8 @@ type (
 )
 
 // NewSender returns a new Sender instance.
-func NewSender(ctx context.Context, db *database.DB, logger *logrus.Logger, deps skymodules.SkydDependencies, connURI string) (Sender, error) {
-	c, err := config(connURI)
+func NewSender(ctx context.Context, db *database.DB, logger *logrus.Logger, deps skymodules.SkydDependencies, emailConnURI string) (Sender, error) {
+	c, err := config(emailConnURI)
 	if err != nil {
 		return Sender{}, errors.AddContext(err, "failed to parse email config")
 	}
@@ -107,14 +102,14 @@ func NewSender(ctx context.Context, db *database.DB, logger *logrus.Logger, deps
 // sent and sending them.
 func (s Sender) Start() {
 	go func() {
-		s.scanAndSend()
+		s.ScanAndSend(ServerLockID)
 		for {
 			select {
 			case <-s.staticCtx.Done():
 				return
 			case <-time.After(sleepBetweenScans):
 				s.purgeExpiredLocks()
-				s.scanAndSend()
+				s.ScanAndSend(ServerLockID)
 			}
 		}
 	}()
@@ -132,12 +127,12 @@ func (s Sender) purgeExpiredLocks() {
 	}
 }
 
-// scanAndSend scans the database for email messages waiting to be sent and
+// ScanAndSend scans the database for email messages waiting to be sent and
 // sends them.
 //
 // We lock the messages before sending them and update their SentAt field after
 // sending them. We also don't lock more than batchSize messages.
-func (s Sender) scanAndSend() {
+func (s Sender) ScanAndSend(lockID string) (int, int) {
 	// Fetch a batch of email messages, waiting to be sent.
 	filter := bson.M{
 		"failed_attempts": bson.M{"$lt": maxAttemptsToSend},
@@ -149,11 +144,11 @@ func (s Sender) scanAndSend() {
 	// Lock them.
 	var msgs []database.EmailMessage
 	ld := lock.LockDetails{
-		Owner: ServerLockID,
+		Owner: lockID,
 		TTL:   lockTTL,
 	}
 	for _, m := range msgsToLock {
-		err = s.staticDB.LockClient.XLock(s.staticCtx, m.ID.Hex(), ServerLockID, ld)
+		err = s.staticDB.LockClient.XLock(s.staticCtx, m.ID.Hex(), lockID, ld)
 		if err == lock.ErrAlreadyLocked {
 			continue
 		}
@@ -166,7 +161,7 @@ func (s Sender) scanAndSend() {
 	}
 	// Make sure we try to unlock them at the end.
 	defer func() {
-		ls, err := s.staticDB.LockClient.Unlock(s.staticCtx, ServerLockID)
+		ls, err := s.staticDB.LockClient.Unlock(s.staticCtx, lockID)
 		if err != nil {
 			s.staticLogger.Warningf("Failed to unlock locked emails. Error %s. Locked status: %+v\n", err.Error(), ls)
 		}
@@ -174,7 +169,7 @@ func (s Sender) scanAndSend() {
 
 	// Send them.
 	if len(msgs) == 0 {
-		return
+		return 0, 0
 	}
 	var sent []primitive.ObjectID
 	var failed []*database.EmailMessage
@@ -205,6 +200,7 @@ func (s Sender) scanAndSend() {
 		err = errors.AddContext(err, "failed to mark emails as failed. we might attempt to send them one extra time")
 		s.staticLogger.Debugln(err)
 	}
+	return len(sent), len(failed)
 }
 
 // send an email message.

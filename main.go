@@ -192,7 +192,7 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
-	mailer := email.New(db)
+	mailer := email.NewMailer(db)
 	// Start the mail sender background thread.
 	sender, err := email.NewSender(ctx, db, logger, &skymodules.SkynetDependencies{}, emailURI)
 	if err != nil {

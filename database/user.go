@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/build"
-	"github.com/NebulousLabs/skynet-accounts/email"
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
 	"github.com/NebulousLabs/skynet-accounts/lib"
@@ -287,6 +286,7 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 	}
 	u := users[0]
 	// Check if the token has expired.
+	// TODO Test expiration effectiveness.
 	if u.EmailConfirmationTokenExpiration.After(time.Now().UTC()) {
 		return nil, errors.AddContext(ErrInvalidToken, "token expired")
 	}
@@ -351,7 +351,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		ID:                               primitive.ObjectID{},
 		Email:                            emailAddr,
 		EmailConfirmationToken:           emailConfToken,
-		EmailConfirmationTokenExpiration: time.Now().UTC().Add(email.EmailConfirmationTokenTTL),
+		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
 		Sub:                              sub,
 		Tier:                             tier,

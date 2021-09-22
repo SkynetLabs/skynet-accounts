@@ -24,8 +24,8 @@ type Mailer struct {
 	staticDB *database.DB
 }
 
-// New creates a new instance of Mailer.
-func New(db *database.DB) *Mailer {
+// NewMailer creates a new instance of Mailer.
+func NewMailer(db *database.DB) *Mailer {
 	return &Mailer{db}
 }
 
