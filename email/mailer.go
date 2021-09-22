@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
-
-	"gitlab.com/NebulousLabs/errors"
 )
 
 /**
@@ -38,20 +36,14 @@ func (em Mailer) Send(ctx context.Context, m database.EmailMessage) error {
 // SendAddressConfirmationEmail sends a new email to the given email address
 // with a link to confirm the ownership of the address.
 func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email, token string) error {
-	m, err := confirmEmailEmail(email, token)
-	if err != nil {
-		return errors.AddContext(err, "failed to generate email template")
-	}
+	m := confirmEmailEmail(email, token)
 	return em.Send(ctx, *m)
 }
 
 // SendRecoverAccountEmail sends a new email to the given email address
 // with a link to recover the account.
 func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email, token string) error {
-	m, err := recoverAccountEmail(email, token)
-	if err != nil {
-		return errors.AddContext(err, "failed to generate email template")
-	}
+	m := recoverAccountEmail(email, token)
 	return em.Send(ctx, *m)
 }
 
@@ -61,9 +53,6 @@ func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email, token strin
 // reason to do that is because the user might have forgotten which email they
 // used for signing up.
 func (em Mailer) SendAccountAccessAttemptedEmail(ctx context.Context, email string) error {
-	m, err := accountAccessAttemptedEmail(email)
-	if err != nil {
-		return errors.AddContext(err, "failed to generate email template")
-	}
+	m := accountAccessAttemptedEmail(email)
 	return em.Send(ctx, *m)
 }

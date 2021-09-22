@@ -1,7 +1,6 @@
 package email
 
 import (
-	"html/template"
 	"strings"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
@@ -95,85 +94,43 @@ If this was not you, please ignore this email.
 `
 )
 
-type (
-	confirmEmailData struct {
-		ConfirmEndpoint string
-		Token           string
-	}
-	recoverAccountData struct {
-		RecoverEndpoint string
-		Token           string
-	}
-)
-
 // confirmEmailEmail generates an email for confirming that the user owns the
 // given email address.
-func confirmEmailEmail(to string, token string) (*database.EmailMessage, error) {
-	t, err := template.New("confirmEmail").Parse(confirmEmailTempl)
-	if err != nil {
-		return nil, err
-	}
-	data := confirmEmailData{
-		ConfirmEndpoint: PortalAddress + "/user/confirm",
-		Token:           token,
-	}
-	var bodyBuilder strings.Builder
-	err = t.Execute(&bodyBuilder, data)
-	if err != nil {
-		return nil, err
-	}
+func confirmEmailEmail(to string, token string) *database.EmailMessage {
+	body := strings.ReplaceAll(confirmEmailTempl, "{{.ConfirmEndpoint}}", PortalAddress+"/user/confirm")
+	body = strings.ReplaceAll(body, "{{.Token}}", token)
 	return &database.EmailMessage{
 		From:     From,
 		To:       to,
 		Subject:  confirmEmailSubject,
-		Body:     bodyBuilder.String(),
+		Body:     body,
 		BodyMime: confirmEmailMime,
-	}, nil
+	}
 }
 
 // recoverAccountEmail generates an email for recovering an account.
-func recoverAccountEmail(to string, token string) (*database.EmailMessage, error) {
-	t, err := template.New("recoverAccount").Parse(recoverAccountTempl)
-	if err != nil {
-		return nil, err
-	}
-	data := recoverAccountData{
-		RecoverEndpoint: PortalAddress + "/user/recover",
-		Token:           token,
-	}
-	var bodyBuilder strings.Builder
-	err = t.Execute(&bodyBuilder, data)
-	if err != nil {
-		return nil, err
-	}
+func recoverAccountEmail(to string, token string) *database.EmailMessage {
+	body := strings.ReplaceAll(recoverAccountTempl, "{{.RecoverEndpoint}}", PortalAddress+"/user/recover")
+	body = strings.ReplaceAll(body, "{{.Token}}", token)
 	return &database.EmailMessage{
 		From:     From,
 		To:       to,
 		Subject:  recoverAccountSubject,
-		Body:     bodyBuilder.String(),
+		Body:     body,
 		BodyMime: recoverAccountMime,
-	}, nil
+	}
 }
 
 // accountAccessAttemptedEmail generates an email for notifying a user that
 // someone tried to use their email for recovering a Skynet account but their
 // email is not in our system. The main reason to do that is because the user
 // might have forgotten which email they used for signing up.
-func accountAccessAttemptedEmail(to string) (*database.EmailMessage, error) {
-	t, err := template.New("accountAccessAttempted").Parse(accountAccessAttemptedTempl)
-	if err != nil {
-		return nil, err
-	}
-	var bodyBuilder strings.Builder
-	err = t.Execute(&bodyBuilder, nil)
-	if err != nil {
-		return nil, err
-	}
+func accountAccessAttemptedEmail(to string) *database.EmailMessage {
 	return &database.EmailMessage{
 		From:     From,
 		To:       to,
 		Subject:  accountAccessAttemptedSubject,
-		Body:     bodyBuilder.String(),
+		Body:     accountAccessAttemptedTempl,
 		BodyMime: accountAccessAttemptedMime,
-	}, nil
+	}
 }
