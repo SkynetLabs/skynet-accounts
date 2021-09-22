@@ -144,6 +144,7 @@ func (s Sender) ScanAndSend(lockID string) (int, int) {
 	// Lock them.
 	var msgs []database.EmailMessage
 	ld := lock.LockDetails{
+		Host:  PortalAddress,
 		Owner: lockID,
 		TTL:   lockTTL,
 	}
