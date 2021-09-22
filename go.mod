@@ -13,7 +13,6 @@ require (
 	github.com/klauspost/compress v1.13.5 // indirect
 	github.com/lestrrat-go/jwx v1.2.6
 	github.com/sirupsen/logrus v1.8.1
-	github.com/square/mongo-lock v0.0.0-20201208161834-4db518ed7fb2
 	github.com/stripe/stripe-go/v71 v71.48.0
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	gitlab.com/NebulousLabs/errors v0.0.0-20200929122200-06c536cf6975

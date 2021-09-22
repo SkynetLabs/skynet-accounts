@@ -10,7 +10,6 @@ import (
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/sirupsen/logrus"
-	lock "github.com/square/mongo-lock"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -95,23 +94,19 @@ func (s Sender) Start() {
 			case <-s.staticCtx.Done():
 				return
 			case <-time.After(sleepBetweenScans):
-				s.purgeExpiredLocks()
+				err := s.PurgeExpiredLocks()
+				if err != nil {
+					s.staticLogger.Debugln("Error while purging expired locks.", err)
+				}
 				s.ScanAndSend(ServerLockID)
 			}
 		}
 	}()
 }
 
-// purgeExpiredLocks scans the DB for locks that have exceeded their TTL and
-// removes them.
-func (s Sender) purgeExpiredLocks() {
-	purger := lock.NewPurger(s.staticDB.LockClient)
-	ls, err := purger.Purge(s.staticCtx)
-	if err != nil {
-		if err != nil {
-			s.staticLogger.Warningf("Failed to purge expired locks. Error %s. Lock status: %+v\n", err.Error(), ls)
-		}
-	}
+// PurgeExpiredLocks purges all expired locks.
+func (s Sender) PurgeExpiredLocks() error {
+	return s.staticDB.PurgeExpiredMailLocks(s.staticCtx)
 }
 
 // ScanAndSend scans the database for email messages waiting to be sent and

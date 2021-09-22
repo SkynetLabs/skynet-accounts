@@ -77,7 +77,7 @@ func TestContendingSenders(t *testing.T) {
 		t.Fatal(err)
 	}
 	targetAddr := t.Name() + "@siasky.net"
-	numMsgs := 500
+	numMsgs := 200
 	// count will hold the total number of messages sent.
 	var count int32
 	var wg sync.WaitGroup
@@ -111,7 +111,6 @@ func TestContendingSenders(t *testing.T) {
 		for {
 			success, failure := s.ScanAndSend(serverID)
 			sum := success + failure
-			println(sum)
 			atomic.AddInt32(&count, int32(sum))
 			if sum == 0 {
 				noneFetched++
@@ -119,7 +118,6 @@ func TestContendingSenders(t *testing.T) {
 				noneFetched = 0
 			}
 			if noneFetched > 10 {
-				println(serverID + " is done")
 				return
 			}
 		}

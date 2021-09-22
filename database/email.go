@@ -15,6 +15,11 @@ const (
 	// token. After the token expires it can no longer be used and the user
 	// needs to request an email re-confirmation.
 	EmailConfirmationTokenTTL = 24 * time.Hour
+
+	// emailLockTTL defines how long an email can stay locked for sending. Once
+	// the lock expires the record will be unlocked and free for other servers
+	// to lock and send.
+	emailLockTTL = 5 * time.Minute
 )
 
 type (
@@ -27,6 +32,7 @@ type (
 		Body           string             `bson:"body"`
 		BodyMime       string             `bson:"body_mime"`
 		LockedBy       string             `bson:"locked_by"`
+		LockedAt       time.Time          `bson:"locked_at,omitempty"`
 		SentAt         time.Time          `bson:"sent_at,omitempty"`
 		FailedAttempts int                `bson:"failed_attempts"`
 	}
@@ -98,7 +104,10 @@ func (db *DB) lockMessages(ctx context.Context, lockID string, ids []primitive.O
 		return nil
 	}
 	filter := bson.M{"_id": bson.M{"$in": ids}}
-	update := bson.M{"$set": bson.M{"locked_by": lockID}}
+	update := bson.M{"$set": bson.M{
+		"locked_by": lockID,
+		"locked_at": time.Now().UTC().Truncate(time.Millisecond),
+	}}
 	_, err := db.staticEmails.UpdateMany(ctx, filter, update)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
@@ -140,6 +149,7 @@ func (db *DB) MarkAsSent(ctx context.Context, ids []primitive.ObjectID) error {
 	update := bson.M{
 		"$set": bson.M{
 			"locked_by": "",
+			"locked_at": time.Time{},
 			"sent_at":   time.Now().UTC(),
 		},
 	}
@@ -164,7 +174,25 @@ func (db *DB) MarkAsFailed(ctx context.Context, msgs []*EmailMessage) error {
 	filter := bson.M{"_id": bson.M{"$in": ids}}
 	update := bson.M{
 		"$inc": bson.M{"failed_attempts": 1},
-		"$set": bson.M{"locked_by": ""},
+		"$set": bson.M{
+			"locked_by": "",
+			"locked_at": time.Time{},
+		},
+	}
+	_, err := db.staticEmails.UpdateMany(ctx, filter, update)
+	return err
+}
+
+// PurgeExpiredMailLocks purges all expired locks.
+func (db *DB) PurgeExpiredMailLocks(ctx context.Context) error {
+	// filter all messages that were locked for longer than emailLockTTL
+	filter := bson.M{"locked_at": bson.M{"$lt": time.Now().UTC().Add(-emailLockTTL)}}
+	update := bson.M{
+		"$inc": bson.M{"failed_attempts": 1},
+		"$set": bson.M{
+			"locked_by": "",
+			"locked_at": time.Time{},
+		},
 	}
 	_, err := db.staticEmails.UpdateMany(ctx, filter, update)
 	return err
