@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.sia.tech/siad/build"
 )
 
 const (
@@ -173,4 +174,18 @@ func (db *DB) PurgeExpiredMailLocks(ctx context.Context) error {
 	}
 	_, err := db.staticEmails.UpdateMany(ctx, filter, update)
 	return err
+}
+
+// PurgeEmailCollection is a helper method for testing purposes. It removes all
+// records from the email database collection.
+func (db *DB) PurgeEmailCollection(ctx context.Context) (int64, error) {
+	if build.Release != "testing" {
+		return 0, nil
+	}
+	filter := bson.M{}
+	dr, err := db.staticEmails.DeleteMany(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return dr.DeletedCount, nil
 }

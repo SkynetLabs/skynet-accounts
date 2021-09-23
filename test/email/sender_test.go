@@ -25,6 +25,14 @@ func TestSender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = db.PurgeEmailCollection(ctx); err != nil {
+		t.Fatal("Failed to purge email collection:", err)
+	}
+	defer func() {
+		if _, err = db.PurgeEmailCollection(ctx); err != nil {
+			t.Fatal("Failed to purge email collection:", err)
+		}
+	}()
 	logger := &logrus.Logger{}
 	sender, err := email.NewSender(ctx, db, logger, &test.DependencySkipSendingEmails{}, test.FauxEmailURI)
 	if err != nil {
@@ -77,6 +85,14 @@ func TestContendingSenders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = db.PurgeEmailCollection(ctx); err != nil {
+		t.Fatal("Failed to purge email collection:", err)
+	}
+	defer func() {
+		if _, err = db.PurgeEmailCollection(ctx); err != nil {
+			t.Fatal("Failed to purge email collection:", err)
+		}
+	}()
 	targetAddr := t.Name() + "@siasky.net"
 	numMsgs := 200
 	// count will hold the total number of messages sent.
