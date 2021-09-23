@@ -31,15 +31,13 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsGET))
 	api.staticRouter.GET("/user/uploads", api.WithDBSession(api.validate(api.userUploadsGET)))
-	api.staticRouter.DELETE("/user/uploads/:uploadId", api.WithDBSession(api.validate(api.userUploadDELETE)))
+	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.validate(api.userUploadsDELETE)))
 	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
 
 	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET)))
 	api.staticRouter.GET("/user/reconfirm", api.WithDBSession(api.validate(api.userReconfirmGET)))
 	api.staticRouter.GET("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverGET)))
 	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverPOST)))
-
-	api.staticRouter.DELETE("/skylink/:skylink", api.WithDBSession(api.validate(api.skylinkDELETE)))
 
 	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noValidate(api.stripeWebhookPOST)))
 	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesGET))
