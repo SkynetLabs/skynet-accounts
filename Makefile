@@ -62,6 +62,8 @@ lint-analyze:
 # error is ignored.
 start-mongo:
 	-docker stop skynet-accounts-mongo-test-db
+	-docker rm skynet-accounts-mongo-test-db
+	chmod 400 $(shell pwd)/test/fixtures/mongo_keyfile
 	docker run \
      --rm \
      --detach \

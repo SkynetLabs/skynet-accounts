@@ -77,7 +77,7 @@ func TestContendingSenders(t *testing.T) {
 		t.Fatal(err)
 	}
 	targetAddr := t.Name() + "@siasky.net"
-	numMsgs := 500
+	numMsgs := 200
 	// count will hold the total number of messages sent.
 	var count int32
 	var wg sync.WaitGroup
