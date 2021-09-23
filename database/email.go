@@ -7,6 +7,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -63,18 +64,25 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize in
 		return nil, errors.AddContext(err, "failed to count locked email messages")
 	}
 	// Lock some more entries in order to fill the batch.
-	if count < batchSize {
-		// As MongoDB doesn't have an "update up to N entries" operation, what
-		// we do here is fetch the ids of the desired number of entries to
-		// lock and then lock them by ids.
-		var ids []primitive.ObjectID
-		ids, err = db.fetchUnlockedMessageIDs(ctx, batchSize-count)
-		if err != nil {
-			return nil, errors.AddContext(err, "failed to fetch message ids to lock")
+	filterLock := bson.M{
+		"locked_by": "",
+		"failed":    bson.M{"$ne": true},
+		"sent_at":   nil,
+	}
+	updateLock := bson.M{"$set": bson.M{
+		"locked_by": lockID,
+		"locked_at": time.Now().UTC().Truncate(time.Millisecond),
+	}}
+	for i := int64(0); i < batchSize-count; i++ {
+		sr := db.staticEmails.FindOneAndUpdate(ctx, filterLock, updateLock)
+		if sr.Err() == mongo.ErrNoDocuments {
+			// No more records to lock. We can't fill the batch but we can send
+			// what we have.
+			break
 		}
-		err = db.lockMessages(ctx, lockID, ids)
-		if err != nil {
-			return nil, errors.AddContext(err, "failed to lock messages")
+		if sr.Err() != nil {
+			db.staticLogger.Debugln("Error while trying to lock a message:", err)
+			continue
 		}
 	}
 	// Fetch up to batchSize messages already locked with lockID.
@@ -82,37 +90,6 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize in
 	opts.SetLimit(batchSize)
 	_, msgs, err = db.FindEmails(ctx, filter, opts)
 	return msgs, nil
-}
-
-// fetchUnlockedMessageIDs is a helper method that fetches the ids of up to num
-// unlocked email messages waiting to be sent.
-func (db *DB) fetchUnlockedMessageIDs(ctx context.Context, num int64) (ids []primitive.ObjectID, err error) {
-	filter := bson.M{
-		"locked_by": "",
-		"failed":    bson.M{"$ne": true},
-		"sent_at":   nil,
-	}
-	opts := options.Find()
-	opts.SetLimit(num)
-	ids, _, err = db.FindEmails(ctx, filter, opts)
-	return ids, err
-}
-
-// lockMessages is a helper method that locks the messages with the given ids.
-func (db *DB) lockMessages(ctx context.Context, lockID string, ids []primitive.ObjectID) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	filter := bson.M{"_id": bson.M{"$in": ids}}
-	update := bson.M{"$set": bson.M{
-		"locked_by": lockID,
-		"locked_at": time.Now().UTC().Truncate(time.Millisecond),
-	}}
-	_, err := db.staticEmails.UpdateMany(ctx, filter, update)
-	if err != nil {
-		return errors.AddContext(err, "failed to update")
-	}
-	return nil
 }
 
 // FindEmails is a helper method that fetches emails and their ids from the

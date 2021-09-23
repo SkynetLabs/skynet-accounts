@@ -34,7 +34,8 @@ func TestSender(t *testing.T) {
 
 	// Send an email.
 	to := t.Name() + "@siasky.net"
-	err = mailer.SendAddressConfirmationEmail(ctx, to, t.Name())
+	token := t.Name()
+	err = mailer.SendAddressConfirmationEmail(ctx, to, token)
 	if err != nil {
 		t.Fatal(err, "Failed to queue message for sending.")
 	}
@@ -52,7 +53,7 @@ func TestSender(t *testing.T) {
 	}
 	// Start the sender and wait for a second.
 	sender.Start()
-	time.Sleep(time.Second)
+	time.Sleep(2 * time.Second)
 	// Check that the email has been sent.
 	_, emails, err = db.FindEmails(ctx, filterTo, &options.FindOptions{})
 	if err != nil {
@@ -123,7 +124,7 @@ func TestContendingSenders(t *testing.T) {
 		}
 	}
 	for i := 0; i < 10; i++ {
-		serverID := "sender" + strconv.Itoa(i)
+		serverID := t.Name() + strconv.Itoa(i)
 		wg.Add(1)
 		go sender(serverID)
 	}
