@@ -4,11 +4,12 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/lib"
 	"github.com/NebulousLabs/skynet-accounts/skynet"
 	"github.com/NebulousLabs/skynet-accounts/test"
-
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -174,6 +175,44 @@ func TestUserBySub(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u2)
+}
+
+// TestUserConfirmEmail ensures that email confirmation works as expected,
+// including resecting the expiration of tokens.
+func TestUserConfirmEmail(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal("Failed to connect to the DB:", err)
+	}
+	emailAddr := t.Name() + "@siasky.net"
+	// Create a user with this email.
+	u, err := db.UserCreate(ctx, emailAddr, "password", "sub", database.TierFree)
+	if err != nil {
+		t.Fatal("Failed to create a test user:", err)
+	}
+	// Confirm the email.
+	_, err = db.UserConfirmEmail(ctx, u.EmailConfirmationToken)
+	if err != nil {
+		t.Fatal("Failed to confirm email:", err)
+	}
+	// Generate a new confirmation token.
+	u.EmailConfirmationToken, err = lib.GenerateUUID()
+	if err != nil {
+		t.Fatal("Failed to generate a token.")
+	}
+	// Set the expiration of the token in the past.
+	u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(-time.Minute)
+	err = db.UserSave(ctx, u)
+	if err != nil {
+		t.Fatal("Failed to save the user:", err)
+	}
+	// Try to confirm the email, expecting to get an error because the token has
+	// expired.
+	_, err = db.UserConfirmEmail(ctx, u.EmailConfirmationToken)
+	if !errors.Contains(err, database.ErrInvalidToken) {
+		t.Fatalf("Expected error '%s', got '%s'\n", database.ErrInvalidToken.Error(), err.Error())
+	}
 }
 
 // TestUserCreate ensures UserCreate works as expected.

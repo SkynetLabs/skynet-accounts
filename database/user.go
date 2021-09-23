@@ -286,8 +286,7 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 	}
 	u := users[0]
 	// Check if the token has expired.
-	// TODO Test expiration effectiveness.
-	if u.EmailConfirmationTokenExpiration.After(time.Now().UTC()) {
+	if u.EmailConfirmationTokenExpiration.Before(time.Now().UTC()) {
 		return nil, errors.AddContext(ErrInvalidToken, "token expired")
 	}
 	u.EmailConfirmationToken = ""

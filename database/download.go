@@ -144,12 +144,9 @@ func (db *DB) DownloadRecent(ctx context.Context, skylinkID primitive.ObjectID) 
 		Sort: bson.D{{"updated_at", -1}},
 	}
 	sr := db.staticDownloads.FindOne(ctx, filter, &opts)
-	if err := sr.Err(); err != nil {
-		// This includes the "no documents found" case.
-		return nil, err
-	}
 	var d Download
 	if err := sr.Decode(&d); err != nil {
+		// This includes the "no documents found" case.
 		return nil, errors.AddContext(err, "failed to parse value from DB")
 	}
 	return &d, nil
