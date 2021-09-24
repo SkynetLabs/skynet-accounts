@@ -8,7 +8,7 @@ import (
 // TestMonthStart ensures we calculate the start of the subscription month
 // correctly.
 func TestMonthStart(t *testing.T) {
-	now := time.Now()
+	now := time.Now().UTC()
 	tests := []struct {
 		subUntil     time.Time
 		startOfMonth time.Time

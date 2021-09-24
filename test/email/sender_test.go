@@ -98,28 +98,22 @@ func TestContendingSenders(t *testing.T) {
 	// count will hold the total number of messages sent.
 	var count int32
 	var wg sync.WaitGroup
-	// The generator will run in a thread and it will generate a predetermined
+	// The generator will run in a thread. It will generate a predetermined
 	// number of messages.
 	generator := func(n int) {
-		defer wg.Done()
 		m := email.NewMailer(db)
 		for i := 0; i < n; i++ {
 			err1 := m.SendAddressConfirmationEmail(ctx, targetAddr, targetAddr)
 			if err1 != nil {
-				t.Fatal("Failed to send email.", err1)
+				t.Error("Failed to send email.", err1)
+				return
 			}
 		}
 	}
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go generator(numMsgs / 10)
-	}
-	wg.Wait()
 	// The sender function will run in a thread. It will continuously pull
 	// messages from the DB and "send" them. It will stop doing that when it
 	// reaches two executions that fail to send any messages.
 	sender := func(serverID string) {
-		defer wg.Done()
 		s, err := email.NewSender(ctx, db, logger, &test.DependencySkipSendingEmails{}, test.FauxEmailURI)
 		if err != nil {
 			t.Fatal(err)
@@ -139,12 +133,25 @@ func TestContendingSenders(t *testing.T) {
 			}
 		}
 	}
+	// Start some generators and some senders. Make sire the number of messages
+	// to be sent divides without remainder by the number of generators.
 	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			generator(numMsgs / 10)
+			wg.Done()
+		}()
 		serverID := t.Name() + strconv.Itoa(i)
 		wg.Add(1)
-		go sender(serverID)
+		go func() {
+			sender(serverID)
+			wg.Done()
+		}()
 	}
 	wg.Wait()
+	if t.Failed() {
+		return
+	}
 	if int(count) != numMsgs {
 		t.Fatalf("Expected %d messages to be sent, got %d.", numMsgs, count)
 	}

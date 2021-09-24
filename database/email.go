@@ -18,6 +18,12 @@ const (
 	// needs to request an email re-confirmation.
 	EmailConfirmationTokenTTL = 24 * time.Hour
 
+	// EmailMaxSendAttempts defines the maximum number of attempts we are going
+	// to make at sending a given email before giving up on it. This const is
+	// defined here and not in the email package because the database package
+	// cannot import the email package (loop).
+	EmailMaxSendAttempts = 3
+
 	// emailLockTTL defines how long an email can stay locked for sending. Once
 	// the lock expires the record will be unlocked and free for other servers
 	// to lock and send.
@@ -56,23 +62,28 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize in
 	// Find out how many entries are already locked by this id. Maybe we don't
 	// need to lock any additional ones.
 	filter := bson.M{
-		"locked_by": lockID,
-		"failed":    bson.M{"$ne": true},
-		"sent_at":   nil,
+		"locked_by":       lockID,
+		"failed_attempts": bson.M{"$lt": EmailMaxSendAttempts},
+		"sent_at":         nil,
 	}
 	count, err := db.staticEmails.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to count locked email messages")
 	}
 	// Lock some more entries in order to fill the batch.
+	// We select entries that haven't failed more times than the limit, aren't
+	// sent yet,
 	filterLock := bson.M{
-		"locked_by": "",
-		"failed":    bson.M{"$ne": true},
-		"sent_at":   nil,
+		"failed_attempts": bson.M{"$lt": EmailMaxSendAttempts},
+		"sent_at":         nil,
+		"$or": []interface{}{
+			bson.M{"locked_by": ""},
+			bson.M{"locked_at": bson.M{"$lt": time.Now().UTC().Add(-emailLockTTL)}},
+		},
 	}
 	updateLock := bson.M{"$set": bson.M{
 		"locked_by": lockID,
-		"locked_at": time.Now().UTC().Truncate(time.Millisecond),
+		"locked_at": time.Now().UTC(),
 	}}
 	for i := int64(0); i < batchSize-count; i++ {
 		sr := db.staticEmails.FindOneAndUpdate(ctx, filterLock, updateLock)
@@ -150,21 +161,6 @@ func (db *DB) MarkAsFailed(ctx context.Context, msgs []*EmailMessage) error {
 		ids = append(ids, m.ID)
 	}
 	filter := bson.M{"_id": bson.M{"$in": ids}}
-	update := bson.M{
-		"$inc": bson.M{"failed_attempts": 1},
-		"$set": bson.M{
-			"locked_by": "",
-			"locked_at": time.Time{},
-		},
-	}
-	_, err := db.staticEmails.UpdateMany(ctx, filter, update)
-	return err
-}
-
-// PurgeExpiredMailLocks purges all expired locks.
-func (db *DB) PurgeExpiredMailLocks(ctx context.Context) error {
-	// filter all messages that were locked for longer than emailLockTTL
-	filter := bson.M{"locked_at": bson.M{"$lt": time.Now().UTC().Add(-emailLockTTL)}}
 	update := bson.M{
 		"$inc": bson.M{"failed_attempts": 1},
 		"$set": bson.M{

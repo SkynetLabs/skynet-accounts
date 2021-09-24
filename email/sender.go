@@ -94,19 +94,10 @@ func (s Sender) Start() {
 			case <-s.staticCtx.Done():
 				return
 			case <-time.After(sleepBetweenScans):
-				err := s.PurgeExpiredLocks()
-				if err != nil {
-					s.staticLogger.Debugln("Error while purging expired locks.", err)
-				}
 				s.ScanAndSend(ServerLockID)
 			}
 		}
 	}()
-}
-
-// PurgeExpiredLocks purges all expired locks.
-func (s Sender) PurgeExpiredLocks() error {
-	return s.staticDB.PurgeExpiredMailLocks(s.staticCtx)
 }
 
 // ScanAndSend scans the database for email messages waiting to be sent and

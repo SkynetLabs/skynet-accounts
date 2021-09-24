@@ -36,6 +36,13 @@ type (
 		RegistryDelay     int    `json:"registryDelay"` // ms
 		Storage           int64  `json:"storageLimit"`
 	}
+
+	// userUpdateData defines the fields of the User record that can be changed
+	// externally, e.g. by calling `PUT /user`.
+	userUpdateData struct {
+		Email    string `json:"email,omitempty"`
+		StripeID string `json:"stripeCustomerId,omitempty"`
+	}
 )
 
 // healthGET returns the status of the service
@@ -286,10 +293,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		return
 	}
 	defer func() { _ = req.Body.Close() }()
-	payload := struct {
-		Email    string `json:"email,omitempty"`
-		StripeID string `json:"stripeCustomerId,omitempty"`
-	}{}
+	var payload userUpdateData
 	err = json.Unmarshal(bodyBytes, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
@@ -301,8 +305,26 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteSuccess(w)
 		return
 	}
-	// Verify that no other user owns this StripeID.
+
+	// Fetch the user from the DB.
+	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+
 	if payload.StripeID != "" {
+		// Check if this user already has a Stripe customer ID.
+		if u.StripeID != "" {
+			err = errors.New("this user already has a Stripe customer id")
+			api.WriteError(w, err, http.StatusUnprocessableEntity)
+			return
+		}
+		// Verify that no other user owns this StripeID.
 		su, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
 		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
 			api.WriteError(w, err, http.StatusInternalServerError)
@@ -313,8 +335,11 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 			api.WriteError(w, err, http.StatusBadRequest)
 			return
 		}
+		// Set the StripeID.
+		u.StripeID = payload.StripeID
 	}
-	// Validate the email and verify that no other user owns it.
+
+	var changedEmail bool
 	if payload.Email != "" {
 		// Validate the new email.
 		a, err := mail.ParseAddress(payload.Email)
@@ -335,31 +360,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 			api.WriteError(w, err, http.StatusBadRequest)
 			return
 		}
-	}
-
-	// Fetch the user from the DB.
-	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
-	if errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, err, http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	// Update the user's data.
-	if payload.StripeID != "" {
-		// Check if this user already has a Stripe customer ID.
-		if u.StripeID != "" {
-			err = errors.New("this user already has a Stripe customer id")
-			api.WriteError(w, err, http.StatusUnprocessableEntity)
-			return
-		}
-		u.StripeID = payload.StripeID
-	}
-	var changedEmail bool
-	if payload.Email != "" {
+		// Set the new email and set it up for a confirmation.
 		u.Email = payload.Email
 		u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(database.EmailConfirmationTokenTTL).Truncate(time.Millisecond)
 		u.EmailConfirmationToken, err = lib.GenerateUUID()
@@ -484,10 +485,10 @@ func (api *API) userConfirmGET(w http.ResponseWriter, req *http.Request, _ httpr
 	api.loginUser(w, u)
 }
 
-// userReconfirmGET allows the user to request a new email address confirmation
+// userReconfirmPOST allows the user to request a new email address confirmation
 // email, in case the previous one didn't arrive for some reason.
 // The user needs to be logged in.
-func (api *API) userReconfirmGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
