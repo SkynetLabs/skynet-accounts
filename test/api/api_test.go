@@ -39,6 +39,8 @@ func (w TestResponseWriter) WriteHeader(statusCode int) {
 // TestWithDBSession ensures that database transactions are started, committed,
 // and aborted properly.
 func TestWithDBSession(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	db, err := database.New(ctx, test.DBTestCredentials(), logrus.New())
 	if err != nil {
