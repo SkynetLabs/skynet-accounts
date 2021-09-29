@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -21,16 +22,20 @@ import (
 var (
 	testPortalAddr = "http://127.0.0.1"
 	testPortalPort = "6000"
+	pathToJWKSFile = "../../jwt/fixtures/jwks.json"
 )
 
 type (
 	// AccountsTester is a simple testing kit for accounts. It starts a testing
 	// instance of the service and provides simplified ways to call the handlers.
 	AccountsTester struct {
-		cancel context.CancelFunc
 		Ctx    context.Context
 		DB     *database.DB
 		Logger *logrus.Logger
+		// If set, this cookie will be attached to all requests.
+		Cookie *http.Cookie
+
+		cancel context.CancelFunc
 	}
 )
 
@@ -38,7 +43,7 @@ type (
 // response, so we can use it with future requests while testing.
 func ExtractCookie(r *http.Response) *http.Cookie {
 	for _, c := range r.Cookies() {
-		if strings.HasPrefix(api.CookieName, c.String()) {
+		if c.Name == api.CookieName {
 			return c
 		}
 	}
@@ -55,7 +60,7 @@ func NewAccountsTester() (*AccountsTester, error) {
 	email.ServerLockID = "siasky.test"
 	email.PortalAddress = testPortalAddr
 	jwt.JWTPortalName = testPortalAddr
-	jwt.AccountsJWKSFile = "../../jwt/fixtures/jwks.json" // TODO Const, better file, etc.
+	jwt.AccountsJWKSFile = pathToJWKSFile
 	err := jwt.LoadAccountsKeySet(logger)
 	if err != nil {
 		cancel()
@@ -95,46 +100,31 @@ func NewAccountsTester() (*AccountsTester, error) {
 		Handler: server.Router(),
 	}
 	go func() {
-		println("*** Test server listening on port " + testPortalPort) // TODO DEBUG
 		_ = srv.ListenAndServe()
 	}()
 	go func() {
 		select {
 		case <-ctx.Done():
-			println("*** Shutting down test server") // TODO DEBUG
-			_ = srv.Shutdown(context.TODO())         // TODO I can't pass Ctx here, as it's closed now.
+			_ = srv.Shutdown(context.TODO())
 		}
 	}()
 
 	return &AccountsTester{
-		cancel: cancel,
 		Ctx:    ctx,
 		DB:     db,
-		logger: logger,
+		Logger: logger,
+		cancel: cancel,
 	}, nil
-}
-
-// Delete executes a DELETE request against the test service.
-func (at *AccountsTester) Delete(endpoint string, params map[string]string) (r *http.Response, body []byte, err error) {
-	req, err := http.NewRequest(http.MethodDelete, testPortalAddr+":"+testPortalPort+endpoint+"?"+encodeValues(params), bytes.NewBuffer([]byte{}))
-	if err != nil {
-		return
-	}
-	client := &http.Client{}
-	r, err = client.Do(req)
-	if err != nil {
-		return
-	}
-	return processResponse(r)
 }
 
 // Get executes a GET request against the test service.
 func (at *AccountsTester) Get(endpoint string, params map[string]string) (r *http.Response, body []byte, err error) {
-	r, err = http.Get(testPortalAddr + ":" + testPortalPort + endpoint + "?" + encodeValues(params))
-	if err != nil {
-		return
-	}
-	return processResponse(r)
+	return at.executeRequest(http.MethodGet, endpoint, params, nil)
+}
+
+// Delete executes a DELETE request against the test service.
+func (at *AccountsTester) Delete(endpoint string, params map[string]string) (r *http.Response, body []byte, err error) {
+	return at.executeRequest(http.MethodDelete, endpoint, params, nil)
 }
 
 // Post executes a POST request against the test service.
@@ -143,16 +133,54 @@ func (at *AccountsTester) Post(endpoint string, params map[string]string, postPa
 	for k, v := range postParams {
 		vals[k] = append(vals[k], v)
 	}
-	r, err = http.PostForm(testPortalAddr+":"+testPortalPort+endpoint+"?"+encodeValues(params), vals)
+	serviceUrl := testPortalAddr + ":" + testPortalPort + endpoint + "?" + encodeValues(params)
+	req, err := http.NewRequest(http.MethodPost, serviceUrl, strings.NewReader(vals.Encode()))
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if at.Cookie != nil {
+		req.Header.Set("Cookie", at.Cookie.String())
+	}
+	c := http.Client{}
+	r, err = c.Do(req)
 	if err != nil {
 		return
 	}
 	return processResponse(r)
 }
 
+// Put executes a PUT request against the test service.
+func (at *AccountsTester) Put(endpoint string, params map[string]string, putParams map[string]string) (r *http.Response, body []byte, err error) {
+	return at.executeRequest(http.MethodPut, endpoint, params, putParams)
+}
+
 // Shutdown performs a graceful shutdown of the AccountsTester service.
 func (at *AccountsTester) Shutdown() {
 	at.cancel()
+}
+
+// executeRequest is a helper method that puts together and executes an HTTP
+// request. It attaches the current cookie, if one exists.
+func (at *AccountsTester) executeRequest(method string, endpoint string, queryParams map[string]string, bodyParams map[string]string) (*http.Response, []byte, error) {
+	b, err := json.Marshal(bodyParams)
+	if err != nil {
+		return nil, nil, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	serviceUrl := testPortalAddr + ":" + testPortalPort + endpoint + "?" + encodeValues(queryParams)
+	req, err := http.NewRequest(method, serviceUrl, bytes.NewBuffer(b))
+	if err != nil {
+		return nil, nil, err
+	}
+	if at.Cookie != nil {
+		req.Header.Set("Cookie", at.Cookie.String())
+	}
+	client := http.Client{}
+	r, err := client.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	return processResponse(r)
 }
 
 // encodeValues URL-encodes a values map.

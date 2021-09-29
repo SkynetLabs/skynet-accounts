@@ -109,7 +109,7 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
 		return
 	}
-	api.loginUser(w, u)
+	api.loginUser(w, u, false)
 }
 
 // loginPOSTToken is a helper that handles logins via a token attached to the
@@ -143,7 +143,7 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 
 // loginUser is a helper method that generates a JWT for the user and writes the
 // login cookie.
-func (api *API) loginUser(w http.ResponseWriter, u *database.User) {
+func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bool) {
 	// Generate a JWT.
 	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
 	if err != nil {
@@ -159,7 +159,11 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User) {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteSuccess(w)
+	if returnUser {
+		api.WriteJSON(w, u)
+	} else {
+		api.WriteSuccess(w)
+	}
 }
 
 // logoutPOST ends a user session by removing a cookie
@@ -192,6 +196,7 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	// TODO Remove this when we remove Kratos.
 	// Check if the user's details have changed and update them if necessary.
 	// We only do it here, instead of baking this into UserBySub because we only
 	// care about this information being correct when we're going to present it
@@ -384,7 +389,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 			api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 		}
 	}
-	api.WriteJSON(w, u)
+	api.loginUser(w, u, true)
 }
 
 // userUploadsGET returns all uploads made by the current user.
@@ -482,7 +487,7 @@ func (api *API) userConfirmGET(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.loginUser(w, u)
+	api.loginUser(w, u, false)
 }
 
 // userReconfirmPOST allows the user to request a new email address confirmation
@@ -617,7 +622,7 @@ func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ http
 		api.WriteError(w, errors.AddContext(err, "failed to save password"), http.StatusInternalServerError)
 		return
 	}
-	api.loginUser(w, u)
+	api.loginUser(w, u, false)
 }
 
 // trackUploadPOST registers a new upload in the system.

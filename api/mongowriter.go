@@ -36,7 +36,6 @@ func (mw *MongoWriter) Write(bytes []byte) (int, error) {
 
 // WriteHeader writes the header and finalises the transaction.
 func (mw *MongoWriter) WriteHeader(statusCode int) {
-	mw.w.WriteHeader(statusCode)
 	if statusCode < 200 || statusCode > 299 {
 		err := mw.sctx.AbortTransaction(mw.sctx)
 		if err != nil {
@@ -48,4 +47,5 @@ func (mw *MongoWriter) WriteHeader(statusCode int) {
 			mw.logger.Warningln("Failed to commit transaction:", err)
 		}
 	}
+	mw.w.WriteHeader(statusCode)
 }
