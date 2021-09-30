@@ -321,7 +321,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		// Check if this user already has a Stripe customer ID.
 		if u.StripeID != "" {
 			err = errors.New("this user already has a Stripe customer id")
-			api.WriteError(w, err, http.StatusUnprocessableEntity)
+			api.WriteError(w, err, http.StatusConflict)
 			return
 		}
 		// Verify that no other user owns this StripeID.
@@ -541,7 +541,11 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 		if errSend != nil {
 			api.staticLogger.Warningln(errors.AddContext(err, "failed to send an email"))
 		}
-		api.WriteError(w, errors.AddContext(err, "no user with this email"), http.StatusBadRequest)
+		// We don't want to give a potential attacker information about the
+		// emails in our database, so we will respond that we've sent the email.
+		// If they used the wrong email, they will get an email that indicates
+		// that, otherwise they will get nothing.
+		api.WriteSuccess(w)
 		return
 	}
 	if err != nil {

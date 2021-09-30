@@ -71,8 +71,10 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize in
 		return nil, errors.AddContext(err, "failed to count locked email messages")
 	}
 	// Lock some more entries in order to fill the batch.
-	// We select entries that haven't failed more times than the limit, aren't
-	// sent yet,
+	// We select entries which:
+	//  - haven't failed more times than the limit
+	//  - aren't sent, yet
+	//  - are either unlocked or their lock has expired
 	filterLock := bson.M{
 		"failed_attempts": bson.M{"$lt": EmailMaxSendAttempts},
 		"sent_at":         nil,
