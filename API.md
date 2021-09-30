@@ -34,6 +34,7 @@ Returns the health of the service
 Sets the `skynet-jwt` cookie.
 
 * Requires valid JWT: `true`
+* POST params: `email`, `password`
 * Returns:
   - 204
   - 400
@@ -58,6 +59,7 @@ Removes the `skynet-jwt` cookie.
 Creates a new user.
 
 * Requires a valid JWT: `false`
+* POST params: `email`, `password`
 * Returns:
   - 200 JSON object - the user object
   - 400 (invalid email, missing password, email already used)
@@ -212,10 +214,10 @@ confirmed for the action to be performed.
 
 ### POST `/user/recover`
 
-Allows the user to change their password without being logged in.
+Changes the user's password without them being logged in.
 
 * Requires a valid JWT token: `false`
-* POST params: `token`
+* POST params: `token`, `password`, `confirmPassword`
 * Returns:
 - 200
 - 400
