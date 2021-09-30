@@ -164,7 +164,7 @@ func main() {
 	emailURI := os.Getenv(envEmailURI)
 	{
 		if emailURI == "" {
-			log.Fatal(errors.AddContext(err, envEmailURI+" is empty"))
+			log.Fatal(envEmailURI + " is empty")
 		}
 		// Validate the given URI.
 		uri, err := url.Parse(emailURI)
@@ -180,6 +180,7 @@ func main() {
 			email.From = emailFrom
 		}
 	}
+
 	// Set up key components:
 
 	// Load the JWKS that we'll use to sign and validate JWTs.
