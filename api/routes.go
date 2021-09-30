@@ -28,11 +28,16 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/user", api.WithDBSession(api.noValidate(api.userPOST)))
 	api.staticRouter.GET("/user", api.WithDBSession(api.validate(api.userGET)))
 	api.staticRouter.PUT("/user", api.WithDBSession(api.validate(api.userPUT)))
-	api.staticRouter.GET("/user/limits", api.WithDBSession(api.noValidate(api.userLimitsGET)))
-	api.staticRouter.GET("/user/stats", api.WithDBSession(api.validate(api.userStatsGET)))
+	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
+	api.staticRouter.GET("/user/stats", api.validate(api.userStatsGET))
 	api.staticRouter.GET("/user/uploads", api.WithDBSession(api.validate(api.userUploadsGET)))
 	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.validate(api.userUploadsDELETE)))
 	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
+
+	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET)))
+	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.validate(api.userReconfirmPOST)))
+	api.staticRouter.GET("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverGET)))
+	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverPOST)))
 
 	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noValidate(api.stripeWebhookPOST)))
 	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesGET))
@@ -59,7 +64,7 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
-		token, err := jwt.ValidateToken(api.staticLogger, tokenStr)
+		token, err := jwt.ValidateToken(tokenStr)
 		if err != nil {
 			api.staticLogger.Traceln("Error validating token:", err)
 			api.WriteError(w, err, http.StatusUnauthorized)
@@ -111,7 +116,7 @@ func (api *API) userFromRequest(r *http.Request) *database.User {
 	if err != nil {
 		return nil
 	}
-	token, err := jwt.ValidateToken(api.staticLogger, t)
+	token, err := jwt.ValidateToken(t)
 	if err != nil {
 		return nil
 	}

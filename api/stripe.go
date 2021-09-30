@@ -232,9 +232,9 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		// It seems weird that the Plan.ID is actually a price id but this
 		// is what we get from Stripe.
 		u.Tier = stripePrices()[mostRecentSub.Plan.ID]
-		u.SubscribedUntil = time.Unix(mostRecentSub.CurrentPeriodEnd, 0).UTC()
+		u.SubscribedUntil = time.Unix(mostRecentSub.CurrentPeriodEnd, 0).UTC().Truncate(time.Millisecond)
 		u.SubscriptionStatus = string(mostRecentSub.Status)
-		u.SubscriptionCancelAt = time.Unix(mostRecentSub.CancelAt, 0)
+		u.SubscriptionCancelAt = time.Unix(mostRecentSub.CancelAt, 0).UTC().Truncate(time.Millisecond)
 		u.SubscriptionCancelAtPeriodEnd = mostRecentSub.CancelAtPeriodEnd
 	}
 	// Cancel all subs aside from the latest one.

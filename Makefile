@@ -15,10 +15,10 @@ all: release
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./ ./api ./build ./database ./lib ./jwt
+pkgs = ./ ./api ./build ./database ./email ./hash ./jwt ./lib ./metafetcher ./skynet
 
 # integration-pkgs defines the packages which contain integration tests
-integration-pkgs = ./test/database ./test/email ./test/api
+integration-pkgs = ./test ./test/api ./test/database ./test/email
 
 # fmt calls go fmt on all packages.
 fmt:
@@ -63,9 +63,9 @@ lint-analyze:
 # containers with the same name. After we start the container we initialise a
 # single node replica set.
 start-mongo:
-	chmod 400 $(shell pwd)/test/fixtures/mongo_keyfile
 	-docker stop skynet-accounts-mongo-test-db
 	-docker rm skynet-accounts-mongo-test-db
+	chmod 400 $(shell pwd)/test/fixtures/mongo_keyfile
 	docker run \
      --rm \
      --detach \
@@ -106,6 +106,9 @@ release-util:
 # without actually running the tests.
 check:
 	go test --exec=true ./...
+
+bench: clean fmt
+	go test -tags='debug testing netgo' -timeout=500s -run=XXX -bench=. $(pkgs) -count=$(count)
 
 test:
 	go test -short -tags='debug testing netgo' -timeout=5s $(pkgs) -run=. -count=$(count)

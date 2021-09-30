@@ -50,6 +50,7 @@ func TestWithDBSession(t *testing.T) {
 	}
 
 	emailSuccess := t.Name() + "success@siasky.net"
+	emailSuccessJSON := t.Name() + "success_json@siasky.net"
 	emailFailure := t.Name() + "failure@siasky.net"
 
 	// This handler successfully creates a user in the DB and exits with
@@ -70,6 +71,26 @@ func TestWithDBSession(t *testing.T) {
 			t.Fatalf("Expected email %s, got %s.", emailSuccess, u.Email)
 		}
 		testAPI.WriteSuccess(w)
+	}
+
+	// This handler successfully creates a user in the DB and exits with
+	// a success status code and a JSON response. We expect the user to exist
+	// in the DB after the handler exits and the txn is committed.
+	successHandlerJSON := func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		sctx := r.Context()
+		_, err = db.UserCreate(sctx, emailSuccessJSON, "pass", "success json sub", database.TierFree)
+		if err != nil {
+			t.Fatal("Failed to create user.", err)
+		}
+		// Make sure the user exists while we're still in the txn.
+		u, err := db.UserByEmail(sctx, emailSuccessJSON, false)
+		if err != nil {
+			t.Fatal("Failed to fetch user from DB.", err)
+		}
+		if u.Email != emailSuccessJSON {
+			t.Fatalf("Expected email %s, got %s.", emailSuccessJSON, u.Email)
+		}
+		testAPI.WriteJSON(w, u)
 	}
 
 	// This handler successfully creates a user in the DB but exits with
@@ -107,6 +128,17 @@ func TestWithDBSession(t *testing.T) {
 	}
 	if u.Email != emailSuccess {
 		t.Fatalf("Expected email %s, got %s.", emailSuccess, u.Email)
+	}
+
+	// Call the success JSON handler.
+	testAPI.WithDBSession(successHandlerJSON)(rw, req, ps)
+	// Make sure the success user exists after the handler has returned.
+	u, err = db.UserByEmail(ctx, emailSuccessJSON, false)
+	if err != nil {
+		t.Fatal("Failed to fetch user from DB.", err)
+	}
+	if u.Email != emailSuccessJSON {
+		t.Fatalf("Expected email %s, got %s.", emailSuccessJSON, u.Email)
 	}
 
 	// Call the failure handler.

@@ -81,8 +81,8 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 		UserID:    user.ID,
 		SkylinkID: skylink.ID,
 		Bytes:     bytes,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
+		UpdatedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
 	_, err = db.staticDownloads.InsertOne(ctx, down)
 	return err
@@ -144,12 +144,9 @@ func (db *DB) DownloadRecent(ctx context.Context, skylinkID primitive.ObjectID) 
 		Sort: bson.D{{"updated_at", -1}},
 	}
 	sr := db.staticDownloads.FindOne(ctx, filter, &opts)
-	if err := sr.Err(); err != nil {
-		// This includes the "no documents found" case.
-		return nil, err
-	}
 	var d Download
 	if err := sr.Decode(&d); err != nil {
+		// This includes the "no documents found" case.
 		return nil, errors.AddContext(err, "failed to parse value from DB")
 	}
 	return &d, nil

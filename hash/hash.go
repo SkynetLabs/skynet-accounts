@@ -24,8 +24,6 @@ var (
 	ErrMismatchedHashAndPassword = errors.New("passwords do not match")
 
 	// config is the configuration of the argon2id hasher.
-	// For the moment we'll use the setup we had with Kratos. Later on we can
-	// move this to a configuration file, if needed.
 	config = argon2Config{
 		SaltLength:  16,
 		Iterations:  1,

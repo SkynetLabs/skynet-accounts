@@ -15,10 +15,7 @@ func TestConfirmEmailEmail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	em, err := confirmEmailEmail(to, token)
-	if err != nil {
-		t.Fatal(err)
-	}
+	em := confirmEmailEmail(to, token)
 	if em.To != to {
 		t.Fatalf("Expected the email to go to %s, got %s", to, em.To)
 	}
@@ -38,10 +35,7 @@ func TestRecoverAccountEmail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	em, err := recoverAccountEmail(to, token)
-	if err != nil {
-		t.Fatal(err)
-	}
+	em := recoverAccountEmail(to, token)
 	if em.To != to {
 		t.Fatalf("Expected the email to go to %s, got %s", to, em.To)
 	}
@@ -57,10 +51,7 @@ func TestRecoverAccountEmail(t *testing.T) {
 // is going to the correct email.
 func TestAccountAccessAttemptedEmail(t *testing.T) {
 	to := "user@siasky.net"
-	em, err := accountAccessAttemptedEmail(to)
-	if err != nil {
-		t.Fatal(err)
-	}
+	em := accountAccessAttemptedEmail(to)
 	if em.To != to {
 		t.Fatalf("Expected the email to go to %s, got %s", to, em.To)
 	}
