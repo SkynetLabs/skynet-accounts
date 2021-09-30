@@ -170,7 +170,7 @@ func main() {
 	emailURI := os.Getenv(envEmailURI)
 	{
 		if emailURI == "" {
-			log.Fatal(errors.New(envEmailURI + " is empty"))
+			log.Fatal(envEmailURI + " is empty")
 		}
 		// Validate the given URI.
 		uri, err := url.Parse(emailURI)
