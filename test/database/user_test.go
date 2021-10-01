@@ -413,7 +413,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Add a test user.
-	sub := string(fastrand.Bytes(UserSubLen))
+	sub := string(fastrand.Bytes(test.UserSubLen))
 	u, err := db.UserCreate(ctx, "user@example.com", "", sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
@@ -428,7 +428,7 @@ func TestUserStats(t *testing.T) {
 	expectedDownloadBandwidth := int64(0)
 
 	// Create a small upload.
-	skylinkSmall, _, err := CreateTestUpload(ctx, db, u, testUploadSizeSmall)
+	skylinkSmall, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeSmall)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +448,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Create a big upload.
-	skylinkBig, _, err := CreateTestUpload(ctx, db, u, testUploadSizeBig)
+	skylinkBig, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeBig)
 	if err != nil {
 		t.Fatal(err)
 	}

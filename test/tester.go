@@ -185,11 +185,11 @@ func (at *AccountsTester) executeRequest(method string, endpoint string, queryPa
 
 // encodeValues URL-encodes a values map.
 func encodeValues(values map[string]string) string {
-	v := url.Values{}
-	for _, key := range values {
-		v[key] = append(v[key], values[key])
+	vals := url.Values{}
+	for k, v := range values {
+		vals[k] = append(vals[k], v)
 	}
-	return v.Encode()
+	return vals.Encode()
 }
 
 // processResponse is a helper method which extracts the body from the response

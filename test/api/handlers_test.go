@@ -3,13 +3,26 @@ package api
 import (
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/skynet"
 	"github.com/NebulousLabs/skynet-accounts/test"
-	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
+	"gitlab.com/SkynetLabs/skyd/skymodules"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.sia.tech/siad/crypto"
+)
+
+const (
+	// Helper consts for checking the returned errors.
+	badRequest   = "400 Bad Request"
+	unauthorized = "401 Unauthorized"
 )
 
 type subtest struct {
@@ -32,21 +45,24 @@ func TestHandlers(t *testing.T) {
 		{Name: "health", Test: testHandlerHealthGET},
 		// POST /user, POST /login
 		{Name: "userCreate", Test: testHandlerUserPOST},
-		{Name: "login", Test: testHandlerLoginPOST},
-		// {Name: "trackUpload", Test: nil}, // + /user/uploads
-		// {Name: "trackDownload", Test: nil}, // + /user/downloads
-		// {Name: "trackRegRead", Test: nil},
-		// {Name: "trackRegWrite", Test: nil},
-		// {Name: "userEdit", Test: nil},
-		// {Name: "userLimits", Test: nil},
-		// {Name: "userStats", Test: nil}, // just a simple happy path test. no edge cases hunting
-		// {Name: "userDeleteUploads", Test: nil},
+		// POST /login, POST /logout, POST /user
+		{Name: "loginLogout", Test: testHandlerLoginPOST},
+		// PUT /user
+		{Name: "userEdit", Test: testUserPUT},
+		// GET /user/limits
+		{Name: "userLimits", Test: testUserLimits},
+		// DELETE /user/uploads/:skylink, GET /user/uploads
+		{Name: "userDeleteUploads", Test: testUserUploadsDELETE},
+
 		// {Name: "userConfirmEmail", Test: nil},
 		// {Name: "userReconfirmEmail", Test: nil},
 		// {Name: "userRecoveryRequest", Test: nil},
 		// {Name: "userRecoveryExecute", Test: nil},
+
+		// POST /track/upload/:skylink, POST /track/download/:skylink, POST /track/registry/read, POST /track/registry/write, GET /user/stats
+		{Name: "standardTrackingFlow", Test: testTrackingAndStats},
 		// POST /user, POST /login, PUT /user, GET /user, POST /logout
-		{Name: "standardFlow", Test: testUserFlow},
+		{Name: "standardUserFlow", Test: testUserFlow},
 	}
 
 	// Run subtests
@@ -88,18 +104,18 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try to create a user without passing params.
 	_, _, err := at.Post("/user", nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "400 Bad Request") {
-		t.Fatalf("Expected user creation to fail with '%s', got '%s'", "400 Bad Request", err)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
 	// Try to create a user with an invalid email.
 	_, _, err = at.Post("/user", nil, map[string]string{"email": "invalid", "password": "pass"})
-	if err == nil || !strings.Contains(err.Error(), "400 Bad Request") {
-		t.Fatalf("Expected user creation to fail with '%s', got '%s'", "400 Bad Request", err)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
 	// Try to create a user with an empty password.
 	_, _, err = at.Post("/user", nil, map[string]string{"email": email})
-	if err == nil || !strings.Contains(err.Error(), "400 Bad Request") {
-		t.Fatalf("Expected user creation to fail with '%s', got '%s'", "400 Bad Request", err)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
 	// Create a user.
 	_, _, err = at.Post("/user", nil, params)
@@ -126,8 +142,8 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	}
 	// try to create a user with an already taken email
 	_, _, err = at.Post("/user", nil, params)
-	if err == nil || !strings.Contains(err.Error(), "400 Bad Request") {
-		t.Fatalf("Expected user creation to fail with '%s', got '%s'", "400 Bad Request", err)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
 }
 
@@ -141,10 +157,10 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try logging in with a non-existent user.
 	_, _, err := at.Post("/login", nil, params)
-	if err == nil || !strings.Contains(err.Error(), "401 Unauthorized") {
-		t.Fatalf("Expected '%s', got '%s'", "401 Unauthorized", err)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
-	u, cleanup, err := createTestUser(t, at, email, password)
+	u, cleanup, err := test.CreateUser(t, at, email, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,12 +182,322 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	if err != nil || !strings.Contains(string(b), email) {
 		t.Fatal("Expected to be able to fetch the user with this cookie.")
 	}
+	// Test /logout while we're here.
+	r, _, err = at.Post("/logout", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Expect the returned cookie to be already expired.
+	at.Cookie = test.ExtractCookie(r)
+	if at.Cookie == nil {
+		t.Fatal("Expected to have a cookie.")
+	}
+	if at.Cookie.Expires.After(time.Now().UTC()) {
+		t.Fatal("Expected the cookie to have expired already.")
+	}
+	// Expect to be unable to get the user with this cookie.
+	_, _, err = at.Get("/user", nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatal("Expected to be unable to fetch the user with this cookie.")
+	}
+	// Try logging out again. This should fail with a 401.
+	_, _, err = at.Post("/logout", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected %s, got %s", unauthorized, err)
+	}
 	// Try logging in with a bad password.
 	badPassParams := params
 	badPassParams["password"] = "bad password"
 	_, _, err = at.Post("/login", nil, badPassParams)
-	if err == nil || !strings.Contains(err.Error(), "401 Unauthorized") {
-		t.Fatalf("Expected '%s', got '%s'", "401 Unauthorized", err)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
+	}
+}
+
+// testUserPUT tests the PUT /user endpoint.
+func testUserPUT(t *testing.T, at *test.AccountsTester) {
+	name := strings.ReplaceAll(t.Name(), "/", "_")
+	u, c, cleanup, err := test.CreateUserAndLogin(t, at)
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer cleanup(u)
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+
+	// Call unauthorized.
+	at.Cookie = nil
+	_, _, err = at.Put("/user", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+	}
+	at.Cookie = c
+	// Update the user's Stripe ID.
+	postParams := map[string]string{
+		"stripeCustomerId": name + "_stripe_id",
+	}
+	_, b, err := at.Put("/user", nil, postParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var u2 database.User
+	err = json.Unmarshal(b, &u2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2.StripeID != postParams["stripeCustomerId"] {
+		t.Fatalf("Expected the user to have StripeID %s, got %s", postParams["stripeCustomerId"], u2.StripeID)
+	}
+	// Try to update the StripeID again. Expect this to fail.
+	r, _, err := at.Put("/user", nil, postParams)
+	if err == nil || !strings.Contains(err.Error(), "409 Conflict") || r.StatusCode != http.StatusConflict {
+		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d", err, r.StatusCode)
+	}
+
+	// Update the user's email.
+	postParams = map[string]string{
+		"email": name + "_new@siasky.net",
+	}
+	_, _, err = at.Put("/user", nil, postParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Fetch the user from the DB because we want to be sure that their email
+	// is marked as unconfirmed which is not reflected in the JSON
+	// representation of the object.
+	u3, err := at.DB.UserByEmail(at.Ctx, postParams["email"], false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u3.Email != postParams["email"] {
+		t.Fatalf("Expected the user to have email %s, got %s", postParams["email"], u3.Email)
+	}
+	if u3.EmailConfirmationToken == "" {
+		t.Fatalf("Expected the user to have a non-empty confirmation token, got '%s'", u3.EmailConfirmationToken)
+	}
+	// Expect to find a confirmation email queued for sending.
+	filer := bson.M{"to": postParams["email"]}
+	_, msgs, err := at.DB.FindEmails(at.Ctx, filer, &options.FindOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || msgs[0].Subject != "Please verify your email address" {
+		t.Fatal("Expected to find a confirmation email but didn't.")
+	}
+}
+
+// testUserLimits tests the /user/limits endpoint.
+func testUserLimits(t *testing.T, at *test.AccountsTester) {
+	u, c, cleanup, err := test.CreateUserAndLogin(t, at)
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer cleanup(u)
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+
+	// Call /user/limits with a cookie. Expect FreeTier response.
+	_, b, err := at.Get("/user/limits", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tl database.TierLimits
+	err = json.Unmarshal(b, &tl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tl.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierFree].TierName, tl.TierName)
+	}
+
+	// Call /user/limits without a cookie. Expect FreeAnonymous response.
+	at.Cookie = nil
+	_, b, err = at.Get("/user/limits", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &tl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tl.TierName != database.UserLimits[database.TierAnonymous].TierName {
+		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierAnonymous].TierName, tl.TierName)
+	}
+}
+
+// testUserUploadsDELETE tests the DELETE /user/uploads/:skylink endpoint.
+func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
+	u, c, cleanup, err := test.CreateUserAndLogin(t, at)
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer cleanup(u)
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+
+	// Create an upload.
+	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, u, 128%skynet.KiB)
+	// Make sure it shows up for this user.
+	_, b, err := at.Get("/user/uploads", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ups database.UploadsResponseDTO
+	err = json.Unmarshal(b, &ups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We expect to have a single upload, and we expect it to be of this skylink.
+	if len(ups.Items) != 1 || ups.Items[0].Skylink != skylink.Skylink {
+		t.Fatalf("Expected to have a single upload of %s, got %+v", skylink.Skylink, ups)
+	}
+	// Try to delete the upload without passing a JWT cookie.
+	at.Cookie = nil
+	_, _, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected error %s, got %s", unauthorized, err)
+	}
+	at.Cookie = c
+	// Delete it.
+	_, _, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make sure it's gone.
+	_, b, err = at.Get("/user/uploads", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &ups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We expect to have no uploads.
+	if len(ups.Items) != 0 {
+		t.Fatalf("Expected to have a no uploads, got %+v", ups)
+	}
+}
+
+// testTrackingAndStats tests all the tracking endpoints and verifies that the
+// /user/stats endpoint returns what we expect.
+func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
+	u, c, cleanup, err := test.CreateUserAndLogin(t, at)
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer cleanup(u)
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+
+	// Generate a random skylink.
+	skylink, err := skymodules.NewSkylinkV1(crypto.HashBytes(fastrand.Bytes(32)), 0, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedStats := database.UserStats{}
+
+	// Call trackUpload without a cookie.
+	at.Cookie = nil
+	_, _, err = at.Post("/track/upload/"+skylink.String(), nil, nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+	}
+	at.Cookie = c
+	// Call trackUpload with an invalid skylink.
+	_, _, err = at.Post("/track/upload/INVALID_SKYLINK", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected error '%s', got '%s'", badRequest, err)
+	}
+	// Call trackUpload with a valid skylink.
+	_, _, err = at.Post("/track/upload/"+skylink.String(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Adjust the expectations. We won't adjust anything based on size because
+	// the metafetcher won't be running during testing.
+	expectedStats.NumUploads++
+	expectedStats.BandwidthUploads += skynet.BandwidthUploadCost(0)
+	expectedStats.RawStorageUsed += skynet.RawStorageUsed(0)
+
+	// Call trackDownload without a cookie.
+	at.Cookie = nil
+	downloadParams := map[string]string{"bytes": "100"}
+	_, _, err = at.Post("/track/download/"+skylink.String(), downloadParams, nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+	}
+	at.Cookie = c
+	// Call trackDownload with an invalid skylink.
+	_, _, err = at.Post("/track/download/INVALID_SKYLINK", downloadParams, nil)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected error '%s', got '%s'", badRequest, err)
+	}
+	// Call trackDownload with a valid skylink and a negative size download
+	_, _, err = at.Post("/track/download/"+skylink.String(), map[string]string{"bytes": "-100"}, nil)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected error '%s', got '%s'", badRequest, err)
+	}
+	// Call trackDownload with a valid skylink.
+	_, _, err = at.Post("/track/download/"+skylink.String(), downloadParams, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Adjust the expectations.
+	expectedStats.NumDownloads++
+	expectedStats.BandwidthDownloads += skynet.BandwidthDownloadCost(100)
+	expectedStats.TotalDownloadsSize += 100
+
+	// Call trackRegistryRead without a cookie.
+	at.Cookie = nil
+	_, _, err = at.Post("/track/registry/read", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+	}
+	at.Cookie = c
+	// Call trackRegistryRead.
+	_, _, err = at.Post("/track/registry/read", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Adjust the expectations.
+	expectedStats.NumRegReads++
+	expectedStats.BandwidthRegReads += skynet.CostBandwidthRegistryRead
+
+	// Call trackRegistryWrite without a cookie.
+	at.Cookie = nil
+	_, _, err = at.Post("/track/registry/write", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+	}
+	at.Cookie = c
+	// Call trackRegistryWrite.
+	_, _, err = at.Post("/track/registry/write", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Adjust the expectations.
+	expectedStats.NumRegWrites++
+	expectedStats.BandwidthRegWrites += skynet.CostBandwidthRegistryWrite
+
+	// Call userStats without a cookie.
+	at.Cookie = nil
+	_, _, err = at.Get("/user/stats", nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+	}
+	at.Cookie = c
+	// Call userStats.
+	_, b, err := at.Get("/user/stats", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var serverStats database.UserStats
+	err = json.Unmarshal(b, &serverStats)
+	if err != nil {
+		t.Fatalf("Failed to unmarshall user stats: %s", err.Error())
+	}
+	if !reflect.DeepEqual(serverStats, expectedStats) {
+		t.Fatalf("Expected\n%+v\ngot\n%+v", expectedStats, serverStats)
 	}
 }
 
@@ -186,7 +512,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 		"password": hex.EncodeToString(fastrand.Bytes(16)),
 	}
 	// Create a user.
-	u, cleanup, err := createTestUser(t, at, params["email"], params["password"])
+	u, cleanup, err := test.CreateUser(t, at, params["email"], params["password"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,43 +560,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	at.Cookie = test.ExtractCookie(r)
 	// Try to get the user, expect a 401.
 	_, _, err = at.Get("/user", nil)
-	if err == nil || !strings.Contains(err.Error(), "Unauthorized") {
-		t.Fatalf("Expected to get %s, got %s", "401 Unauthorized", err)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected to get %s, got %s", unauthorized, err)
 	}
-}
-
-// createTestUser is a helper method which simplifies the creation of test users
-// TODO This should probably live in utils.go?
-func createTestUser(t *testing.T, at *test.AccountsTester, customEmail, customPassword string) (*database.User, func(user *database.User), error) {
-	email := customEmail
-	if email == "" {
-		// Use the test's name as an email-compatible identifier.
-		email = strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
-	}
-	password := customPassword
-	if password == "" {
-		password = hex.EncodeToString(fastrand.Bytes(16))
-	}
-	params := map[string]string{
-		"email":    email,
-		"password": password,
-	}
-	// Create a user.
-	_, _, err := at.Post("/user", nil, params)
-	if err != nil {
-		return nil, nil, errors.AddContext(err, "user creation failed")
-	}
-	// Fetch the user from the DB, so we can delete it later.
-	u, err := at.DB.UserByEmail(at.Ctx, email, false)
-	if err != nil {
-		return nil, nil, errors.AddContext(err, "failed to fetch user from the DB")
-	}
-	cleanup := func(user *database.User) {
-		err = at.DB.UserDelete(at.Ctx, user)
-		if err != nil {
-			t.Errorf("Error while cleaning up user: %s", err.Error())
-			return
-		}
-	}
-	return u, cleanup, nil
 }
