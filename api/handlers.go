@@ -19,6 +19,20 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
+const (
+	// userLimitCacheTTL is the TTL of the entries in the userLimitCache.
+	userLimitCacheTTL = time.Hour
+)
+
+var (
+	// userLimitCacheEntry is an in-mem cache that maps from a user's sub to
+	// the data we care about.
+	userLimitCache = map[string]userLimitCacheEntry{}
+	// userLimits is a caching entry to avoid doing the same static operation
+	// over and over.
+	userLimits []TierLimitsPublic
+)
+
 type (
 	// LimitsPublic provides public information of the various limits this
 	// portal has.
@@ -35,6 +49,13 @@ type (
 		MaxNumberUploads  int    `json:"maxNumberUploads"`
 		RegistryDelay     int    `json:"registryDelay"` // ms
 		Storage           int64  `json:"storageLimit"`
+	}
+
+	// userLimitCacheEntry allows us to cache some basic information about the
+	// user, so we don't need to hit the DB to fetch data that rarely changes.
+	userLimitCacheEntry struct {
+		Tier       int
+		LastUpdate time.Time
 	}
 
 	// userUpdateData defines the fields of the User record that can be changed
@@ -57,20 +78,22 @@ func (api *API) healthGET(w http.ResponseWriter, req *http.Request, _ httprouter
 
 // limitsGET returns the speed limits of this portal.
 func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	ul := make([]TierLimitsPublic, len(database.UserLimits))
-	for i, t := range database.UserLimits {
-		ul[i] = TierLimitsPublic{
-			TierName:          t.TierName,
-			UploadBandwidth:   t.UploadBandwidth * 8,   // convert from bytes
-			DownloadBandwidth: t.DownloadBandwidth * 8, // convert from bytes
-			MaxUploadSize:     t.MaxUploadSize,
-			MaxNumberUploads:  t.MaxNumberUploads,
-			RegistryDelay:     t.RegistryDelay,
-			Storage:           t.Storage,
+	if userLimits == nil {
+		userLimits = make([]TierLimitsPublic, len(database.UserLimits))
+		for i, t := range database.UserLimits {
+			userLimits[i] = TierLimitsPublic{
+				TierName:          t.TierName,
+				UploadBandwidth:   t.UploadBandwidth * 8,   // convert from bytes
+				DownloadBandwidth: t.DownloadBandwidth * 8, // convert from bytes
+				MaxUploadSize:     t.MaxUploadSize,
+				MaxNumberUploads:  t.MaxNumberUploads,
+				RegistryDelay:     t.RegistryDelay,
+				Storage:           t.Storage,
+			}
 		}
 	}
 	resp := LimitsPublic{
-		UserLimits: ul,
+		UserLimits: userLimits,
 	}
 	api.WriteJSON(w, resp)
 }
@@ -212,12 +235,45 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 // userLimitsGET returns the speed limits which apply to this user.
 func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	u := api.userFromRequest(req)
-	if u == nil || u.QuotaExceeded {
+	t, err := tokenFromRequest(req)
+	if err != nil {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 		return
 	}
-	api.WriteJSON(w, database.UserLimits[u.Tier])
+	tk, err := jwt.ValidateToken(t)
+	if err != nil {
+		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+		return
+	}
+	s, exists := tk.Get("sub")
+	if !exists {
+		api.staticLogger.Tracef("Token without a sub.")
+		api.WriteJSON(w, database.TierAnonymous)
+		return
+	}
+	sub := s.(string)
+	// If the user is not cached, or they were cached too long ago we'll fetch
+	// their data from the DB.
+	if c, exists := userLimitCache[sub]; !exists || c.LastUpdate.Before(time.Now().Add(-userLimitCacheTTL).UTC()) {
+		u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+		if err != nil {
+			api.staticLogger.Debugf("Failed to fetch user from DB for sub '%s'. Error: %s", sub, err.Error())
+			api.WriteJSON(w, database.TierAnonymous)
+			return
+		}
+		if u == nil || u.QuotaExceeded {
+			userLimitCache[sub] = userLimitCacheEntry{
+				Tier:       database.TierAnonymous,
+				LastUpdate: time.Now().UTC(),
+			}
+		} else {
+			userLimitCache[sub] = userLimitCacheEntry{
+				Tier:       u.Tier,
+				LastUpdate: time.Now().UTC(),
+			}
+		}
+	}
+	api.WriteJSON(w, userLimitCache[sub].Tier)
 }
 
 // userStatsGET returns statistics about an existing user.
