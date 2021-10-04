@@ -1,0 +1,1 @@
+- Add caching to the `/user/limits` endpoint.
