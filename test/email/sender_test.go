@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -79,6 +80,10 @@ func TestSender(t *testing.T) {
 // servers is sent exactly once. The test has several "servers" continuously
 // creating and "sending" emails.
 func TestContendingSenders(t *testing.T) {
+	// Only run this test if the flag is set.
+	if c := os.Getenv("CONTENDING_SENDERS"); c == "" {
+		t.Skip()
+	}
 	ctx := context.Background()
 	logger := logrus.New()
 	db, err := database.New(ctx, test.DBTestCredentials(), logger)
@@ -133,7 +138,7 @@ func TestContendingSenders(t *testing.T) {
 			}
 		}
 	}
-	// Start some generators and some senders. Make sire the number of messages
+	// Start some generators and some senders. Make sure the number of messages
 	// to be sent divides without remainder by the number of generators.
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
