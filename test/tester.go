@@ -133,8 +133,8 @@ func (at *AccountsTester) Post(endpoint string, params map[string]string, postPa
 	for k, v := range postParams {
 		vals[k] = append(vals[k], v)
 	}
-	serviceUrl := testPortalAddr + ":" + testPortalPort + endpoint + "?" + encodeValues(params)
-	req, err := http.NewRequest(http.MethodPost, serviceUrl, strings.NewReader(vals.Encode()))
+	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + encodeValues(params)
+	req, err := http.NewRequest(http.MethodPost, serviceURL, strings.NewReader(vals.Encode()))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -167,8 +167,8 @@ func (at *AccountsTester) executeRequest(method string, endpoint string, queryPa
 	if err != nil {
 		return nil, nil, errors.AddContext(err, "failed to marshal the body JSON")
 	}
-	serviceUrl := testPortalAddr + ":" + testPortalPort + endpoint + "?" + encodeValues(queryParams)
-	req, err := http.NewRequest(method, serviceUrl, bytes.NewBuffer(b))
+	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + encodeValues(queryParams)
+	req, err := http.NewRequest(method, serviceURL, bytes.NewBuffer(b))
 	if err != nil {
 		return nil, nil, err
 	}

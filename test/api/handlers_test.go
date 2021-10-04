@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/NebulousLabs/skynet-accounts/email"
 	"github.com/NebulousLabs/skynet-accounts/skynet"
 	"github.com/NebulousLabs/skynet-accounts/test"
 	"gitlab.com/NebulousLabs/fastrand"
@@ -53,12 +55,10 @@ func TestHandlers(t *testing.T) {
 		{Name: "userLimits", Test: testUserLimits},
 		// DELETE /user/uploads/:skylink, GET /user/uploads
 		{Name: "userDeleteUploads", Test: testUserUploadsDELETE},
-
-		// {Name: "userConfirmEmail", Test: nil},
-		// {Name: "userReconfirmEmail", Test: nil},
-		// {Name: "userRecoveryRequest", Test: nil},
-		// {Name: "userRecoveryExecute", Test: nil},
-
+		// GET /user/confirm, POST /user/reconfirm
+		{Name: "userConfirmReconfirmEmail", Test: testUserConfirmReconfirmEmailGET},
+		// GET /user/recover, POST /user/recover, POST /login
+		{Name: "userAccountRecovery", Test: testUserAccountRecovery},
 		// POST /track/upload/:skylink, POST /track/download/:skylink, POST /track/registry/read, POST /track/registry/write, GET /user/stats
 		{Name: "standardTrackingFlow", Test: testTrackingAndStats},
 		// POST /user, POST /login, PUT /user, GET /user, POST /logout
@@ -375,6 +375,253 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	// We expect to have no uploads.
 	if len(ups.Items) != 0 {
 		t.Fatalf("Expected to have a no uploads, got %+v", ups)
+	}
+}
+
+// testUserConfirmReconfirmEmailGET tests the GET /user/confirm  and
+// POST /user/reconfirm endpoints. The overlap between the endpoints to great
+// that it doesn't make sense to have separate tests.
+func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
+	u, c, cleanup, err := test.CreateUserAndLogin(t, at)
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer cleanup(u)
+	defer func() { at.Cookie = nil }()
+
+	// Confirm the user
+	_, _, err = at.Get("/user/confirm", map[string]string{"token": u.EmailConfirmationToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make sure the user's email address is confirmed now.
+	u2, err := at.DB.UserByEmail(at.Ctx, u.Email, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2.EmailConfirmationToken != "" {
+		t.Fatal("User is not confirmed.")
+	}
+
+	// Make sure `POST /user/reconfirm` requires a cookie.
+	at.Cookie = nil
+	_, _, err = at.Post("/user/reconfirm", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
+	}
+	// Reset the confirmation field, so we can continue testing with the same
+	// user.
+	at.Cookie = c
+	_, _, err = at.Post("/user/reconfirm", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make sure the user's email address is unconfirmed now.
+	u3, err := at.DB.UserByEmail(at.Ctx, u.Email, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u3.EmailConfirmationToken == "" {
+		t.Fatal("User is still confirmed.")
+	}
+
+	// Call the endpoint without a token.
+	_, _, err = at.Get("/user/confirm", nil)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+	// Call the endpoint with a bad token.
+	_, _, err = at.Get("/user/confirm", map[string]string{"token": "this is not a valid token"})
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+	// Call the endpoint with an expired token.
+	u.EmailConfirmationTokenExpiration = time.Now().Add(-time.Hour).UTC()
+	err = at.DB.UserSave(at.Ctx, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = at.Get("/user/confirm", map[string]string{"token": u.EmailConfirmationToken})
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+}
+
+// testUserAccountRecovery tests the account recovery process.
+func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
+	u, _, cleanup, err := test.CreateUserAndLogin(t, at)
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer cleanup(u)
+	defer func() { at.Cookie = nil }()
+
+	// // TEST REQUESTING RECOVERY // //
+
+	// Request recovery without supplying an email.
+	_, _, err = at.Get("/user/recover", nil)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+	// Request recovery with an unknown email address. We don't want to leak
+	// that this email is not used by any account, so we expect to receive an OK
+	// 200. We also expect an email to be sent to the address, informing them
+	// that someone attempted to recover an account using their email address.
+	// We do this because it's possible that the owner of the address is the
+	// person requesting a recovery and they just forgot which email they used
+	// to sign up. While we can't tell them that, we can indicate tht recovery
+	// process works as expected and they should try their other emails.
+	attemptedEmail := hex.EncodeToString(fastrand.Bytes(16)) + "@siasky.net"
+	_, b, err := at.Get("/user/recover", map[string]string{"email": attemptedEmail})
+	if err != nil {
+		t.Fatal(err, string(b))
+	}
+	// Check for the email we expect.
+	filter := bson.M{"to": attemptedEmail}
+	_, msgs, err := at.DB.FindEmails(at.Ctx, filter, &options.FindOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || msgs[0].Subject != "Account access attempted" {
+		t.Fatalf("Expected to find a single email with subject '%s', got %v", "Account access attempted", msgs)
+	}
+	// Request recovery with a valid but unconfirmed email.
+	_, _, err = at.Get("/user/recover", map[string]string{"email": u.Email})
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+	// Confirm the email.
+	_, b, err = at.Get("/user/confirm", map[string]string{"token": u.EmailConfirmationToken})
+	if err != nil {
+		t.Fatal(err, string(b))
+	}
+	// Request recovery with a valid email. We expect there to be a single email
+	// with the recovery token.
+	_, b, err = at.Get("/user/recover", map[string]string{"email": u.Email})
+	if err != nil {
+		t.Fatal(err, string(b))
+	}
+	filter = bson.M{
+		"to":      u.Email,
+		"subject": "Recover access to your account",
+	}
+	_, msgs, err = at.DB.FindEmails(at.Ctx, filter, &options.FindOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("Expected to find a single email with subject '%s', got %v", "Recover access to your account", len(msgs))
+	}
+	// Scan the message body for the recovery link.
+	linkPattern := regexp.MustCompile("<a\\shref=\"(?P<recEndpoint>.*?)\\?token=(?P<token>.*?)\">")
+	match := linkPattern.FindStringSubmatch(msgs[0].Body)
+	if len(match) != 3 {
+		t.Fatalf("Expected to get %d matches, got %d", 3, len(match))
+	}
+	result := make(map[string]string)
+	for i, name := range linkPattern.SubexpNames() {
+		if i != 0 && name != "" {
+			result[name] = match[i]
+		}
+	}
+	expectedEndpoint := email.PortalAddress + "/user/recover"
+	if re, exists := result["recEndpoint"]; !exists || !strings.Contains(re, expectedEndpoint) {
+		t.Fatalf("Expected to find a link to '%s', got '%s'", expectedEndpoint, re)
+	}
+	token, exists := result["token"]
+	if !exists {
+		t.Fatal("Expected to find a token but didn't.")
+	}
+
+	// // TEST EXECUTING RECOVERY // //
+
+	newPassword := hex.EncodeToString(fastrand.Bytes(16))
+	// params := map[string]string{
+	// 	"token":           token,
+	// 	"password":        newPassword,
+	// 	"confirmPassword": newPassword,
+	// }
+	// Try without a token:
+	params := map[string]string{
+		"password":        newPassword,
+		"confirmPassword": newPassword,
+	}
+	_, _, err = at.Post("/user/recover", nil, params)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+	// Try without a password.
+	params = map[string]string{
+		"token":           token,
+		"confirmPassword": newPassword,
+	}
+	_, _, err = at.Post("/user/recover", nil, params)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+	// Try without a confirmation.
+	params = map[string]string{
+		"token":    token,
+		"password": newPassword,
+	}
+	_, _, err = at.Post("/user/recover", nil, params)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+	// Try with mismatched password and confirmation.
+	params = map[string]string{
+		"token":           token,
+		"password":        newPassword,
+		"confirmPassword": "not the same as the password",
+	}
+	_, _, err = at.Post("/user/recover", nil, params)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+	// Try with an invalid token.
+	params = map[string]string{
+		"token":           hex.EncodeToString(fastrand.Bytes(32)),
+		"password":        newPassword,
+		"confirmPassword": newPassword,
+	}
+	_, _, err = at.Post("/user/recover", nil, params)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+	}
+	// Try to use the token we got to recover the account.
+	params = map[string]string{
+		"token":           token,
+		"password":        newPassword,
+		"confirmPassword": newPassword,
+	}
+	_, b, err = at.Post("/user/recover", nil, params)
+	if err != nil {
+		t.Log(token)
+		t.Fatal(err, string(b))
+	}
+	// Make sure the user's password is now successfully changed.
+	_, b, err = at.Post("/login", nil, map[string]string{"email": u.Email, "password": newPassword})
+	if err != nil {
+		t.Fatal(err, string(b))
+	}
+	// Make sure the reset token is removed from the user.
+	u2, err := at.DB.UserByEmail(at.Ctx, u.Email, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2.RecoveryToken != "" {
+		t.Fatalf("Expected recovery token to be empty, got '%s'", u2.RecoveryToken)
+	}
+	// Make extra sure we cannot sue the token again. This is only to make sure
+	// we didn't cache it anywhere or allow it to somehow linger somewhere.
+	params = map[string]string{
+		"token":           token,
+		"password":        newPassword,
+		"confirmPassword": newPassword,
+	}
+	_, _, err = at.Post("/user/recover", nil, params)
+	if err == nil || !strings.Contains(err.Error(), badRequest) {
+		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -19,10 +20,6 @@ import (
 const (
 	// batchSize defines the largest batch of emails we will try to send.
 	batchSize = 10
-
-	// sleepBetweenScans defines how long the sender should sleep between its
-	// sweeps of the DB.
-	sleepBetweenScans = 3 * time.Second
 )
 
 var (
@@ -45,6 +42,16 @@ var (
 	// matchPattern extracts all relevant configuration values from an email
 	// connection URI
 	matchPattern = regexp.MustCompile("smtps://(?P<user>.*):(?P<password>.*)@(?P<server>.*):(?P<port>\\d*)(/\\??skip_ssl_verify=(?P<skip_ssl_verify>\\w*))?")
+
+	// sleepBetweenScans defines how long the sender should sleep between its
+	// sweeps of the DB.
+	sleepBetweenScans = build.Select(
+		build.Var{
+			Dev:      time.Second,
+			Testing:  100 * time.Millisecond,
+			Standard: 3 * time.Second,
+		},
+	).(time.Duration)
 )
 
 type (

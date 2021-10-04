@@ -474,12 +474,8 @@ func (api *API) userConfirmGET(w http.ResponseWriter, req *http.Request, _ httpr
 		return
 	}
 	token := req.Form.Get("token")
-	if token == "" {
-		api.WriteError(w, errors.New("required parameter 'token' is missing"), http.StatusBadRequest)
-		return
-	}
 	u, err := api.staticDB.UserConfirmEmail(req.Context(), token)
-	if errors.Contains(err, database.ErrInvalidToken) {
+	if errors.Contains(err, database.ErrInvalidToken) || errors.Contains(err, database.ErrUserNotFound) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
