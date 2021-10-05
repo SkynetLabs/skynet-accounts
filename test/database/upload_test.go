@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
@@ -15,7 +16,8 @@ import (
 // in the correct order, with the correct sized and so on.
 func TestUploadsByUser(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +141,8 @@ func TestUploadsByUser(t *testing.T) {
 // skylink by this user without affecting uploads by other users.
 func TestUnpinUploads(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

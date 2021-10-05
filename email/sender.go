@@ -36,8 +36,15 @@ var (
 	// ServerLockID holds the name of the name of this particular server. Its
 	// value is controlled by the SERVER_DOMAIN entry in the .env file. If the
 	// SERVER_DOMAIN entry is empty or missing, the PORTAL_DOMAIN (preceded by
-	// schema) will be used instead.
-	ServerLockID string
+	// schema) will be used instead. The only exception is testing where there's
+	// nothing to set it, so we want to always have it set.
+	ServerLockID = build.Select(
+		build.Var{
+			Dev:      "",
+			Testing:  "siasky.test",
+			Standard: "",
+		},
+	).(string)
 
 	// matchPattern extracts all relevant configuration values from an email
 	// connection URI

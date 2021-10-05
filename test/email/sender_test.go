@@ -2,8 +2,8 @@ package email
 
 import (
 	"context"
-	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -22,7 +22,8 @@ import (
 func TestSender(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,6 +73,7 @@ func TestSender(t *testing.T) {
 		t.Fatalf("Expected 1 email in the DB, got %d\n", len(emails))
 	}
 	if emails[0].SentAt.IsZero() {
+		emails[0].Body = "<<<Body removed for logging brevity.>>>"
 		t.Fatalf("Email not sent. Email: %+v\n", emails[0])
 	}
 }
@@ -80,13 +82,10 @@ func TestSender(t *testing.T) {
 // servers is sent exactly once. The test has several "servers" continuously
 // creating and "sending" emails.
 func TestContendingSenders(t *testing.T) {
-	// Only run this test if the flag is set.
-	if c := os.Getenv("CONTENDING_SENDERS"); c == "" {
-		t.Skip()
-	}
 	ctx := context.Background()
+	dbName := strings.ReplaceAll(t.Name(), "/", "_")
 	logger := logrus.New()
-	db, err := database.New(ctx, test.DBTestCredentials(), logger)
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), logger)
 	if err != nil {
 		t.Fatal(err)
 	}

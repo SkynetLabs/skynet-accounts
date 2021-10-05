@@ -52,7 +52,7 @@ func ExtractCookie(r *http.Response) *http.Cookie {
 
 // NewAccountsTester creates and starts a new AccountsTester service.
 // Use the Shutdown method for a graceful shutdown.
-func NewAccountsTester() (*AccountsTester, error) {
+func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logrus.New()
 
@@ -68,7 +68,7 @@ func NewAccountsTester() (*AccountsTester, error) {
 	}
 
 	// Connect to the database.
-	db, err := database.New(ctx, DBTestCredentials(), logger)
+	db, err := database.NewCustomDB(ctx, dbName, DBTestCredentials(), logger)
 	if err != nil {
 		cancel()
 		return nil, errors.AddContext(err, "failed to connect to the DB")

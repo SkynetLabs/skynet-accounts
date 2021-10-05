@@ -97,6 +97,11 @@ type (
 
 // New returns a new DB connection based on the passed parameters.
 func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, error) {
+	return NewCustomDB(ctx, dbName, creds, logger)
+}
+
+// NewCustomDB returns a new DB connection based on the passed parameters.
+func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger *logrus.Logger) (*DB, error) {
 	connStr := connectionString(creds)
 	c, err := mongo.NewClient(options.Client().ApplyURI(connStr))
 	if err != nil {
