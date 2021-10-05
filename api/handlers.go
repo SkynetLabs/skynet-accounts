@@ -254,7 +254,7 @@ func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httpro
 	sub := s.(string)
 	// If the user is not cached, or they were cached too long ago we'll fetch
 	// their data from the DB.
-	if c, exists := userLimitCache[sub]; !exists || c.LastUpdate.Before(time.Now().Add(-userLimitCacheTTL).UTC()) {
+	if c, exists := userLimitCache[sub]; !exists || c.LastUpdate.Since(time.Now()) > userLimitCacheTTL {
 		u, err := api.staticDB.UserBySub(req.Context(), sub, false)
 		if err != nil {
 			api.staticLogger.Debugf("Failed to fetch user from DB for sub '%s'. Error: %s", sub, err.Error())
