@@ -169,6 +169,31 @@ func (at *AccountsTester) CreateUserPost(email, password string) (r *http.Respon
 	return at.Post("/user", nil, params)
 }
 
+// UserPUT is a helper.
+func (at *AccountsTester) UserPUT(email, stipeID string) (*http.Response, []byte, error) {
+	serviceURL := testPortalAddr + ":" + testPortalPort + "/user"
+	b, err := json.Marshal(map[string]string{
+		"email":            email,
+		"stripeCustomerId": stipeID,
+	})
+	if err != nil {
+		return nil, nil, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	req, err := http.NewRequest(http.MethodPut, serviceURL, bytes.NewBuffer(b))
+	if err != nil {
+		return nil, nil, err
+	}
+	if at.Cookie != nil {
+		req.Header.Set("Cookie", at.Cookie.String())
+	}
+	client := http.Client{}
+	r, err := client.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	return processResponse(r)
+}
+
 // request is a helper method that puts together and executes an HTTP
 // request. It attaches the current cookie, if one exists.
 func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, bodyParams url.Values) (*http.Response, []byte, error) {

@@ -253,9 +253,8 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	}
 	at.Cookie = c
 	// Update the user's Stripe ID.
-	params := url.Values{}
-	params.Add("stripeCustomerId", name+"_stripe_id")
-	_, b, err := at.Put("/user", nil, params)
+	stripeID := name + "_stripe_id"
+	_, b, err := at.UserPUT("", stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,37 +263,36 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u2.StripeID != params.Get("stripeCustomerId") {
-		t.Fatalf("Expected the user to have StripeID %s, got %s", params.Get("stripeCustomerId"), u2.StripeID)
+	if u2.StripeID != stripeID {
+		t.Fatalf("Expected the user to have StripeID %s, got %s", stripeID, u2.StripeID)
 	}
 	// Try to update the StripeID again. Expect this to fail.
-	r, _, err := at.Put("/user", nil, params)
+	r, _, err := at.UserPUT("", stripeID)
 	if err == nil || !strings.Contains(err.Error(), "409 Conflict") || r.StatusCode != http.StatusConflict {
 		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d", err, r.StatusCode)
 	}
 
 	// Update the user's email.
-	params = url.Values{}
-	params.Add("email", name+"_new@siasky.net")
-	_, _, err = at.Put("/user", nil, params)
+	email := name + "_new@siasky.net"
+	_, _, err = at.UserPUT(email, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Fetch the user from the DB because we want to be sure that their email
 	// is marked as unconfirmed which is not reflected in the JSON
 	// representation of the object.
-	u3, err := at.DB.UserByEmail(at.Ctx, params.Get("email"), false)
+	u3, err := at.DB.UserByEmail(at.Ctx, email, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u3.Email != params.Get("email") {
-		t.Fatalf("Expected the user to have email %s, got %s", params.Get("email"), u3.Email)
+	if u3.Email != email {
+		t.Fatalf("Expected the user to have email %s, got %s", email, u3.Email)
 	}
 	if u3.EmailConfirmationToken == "" {
 		t.Fatalf("Expected the user to have a non-empty confirmation token, got '%s'", u3.EmailConfirmationToken)
 	}
 	// Expect to find a confirmation email queued for sending.
-	filer := bson.M{"to": params.Get("email")}
+	filer := bson.M{"to": email}
 	_, msgs, err := at.DB.FindEmails(at.Ctx, filer, &options.FindOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -839,9 +837,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	// Change the user's email.
 	newEmail := name + "_new@siasky.net"
-	params = url.Values{}
-	params.Add("email", newEmail)
-	r, b, err := at.Put("/user", nil, params)
+	r, b, err := at.UserPUT(newEmail, "")
 	if err != nil {
 		t.Fatalf("Failed to update user. Error: %s. Body: %s", err.Error(), string(b))
 	}

@@ -28,15 +28,16 @@ const (
 )
 
 type (
-	// testUser is a helper struct that allows for easy cleanup from the DB.
-	testUser struct {
+	// User is a helper struct that allows for easy cleanup from the DB.
+	// It's called User and not TestUser because lint won't allow that.
+	User struct {
 		*database.User
 		staticDB *database.DB
 	}
 )
 
 // Delete removes the test user from the DB.
-func (tu *testUser) Delete(ctx context.Context) error {
+func (tu *User) Delete(ctx context.Context) error {
 	return tu.staticDB.UserDelete(ctx, tu.User)
 }
 
@@ -51,7 +52,7 @@ func DBTestCredentials() database.DBCredentials {
 }
 
 // CreateUser is a helper method which simplifies the creation of test users
-func CreateUser(at *AccountsTester, email, password string) (*testUser, error) {
+func CreateUser(at *AccountsTester, email, password string) (*User, error) {
 	// Create a user.
 	_, _, err := at.CreateUserPost(email, password)
 	if err != nil {
@@ -62,13 +63,13 @@ func CreateUser(at *AccountsTester, email, password string) (*testUser, error) {
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to fetch user from the DB")
 	}
-	return &testUser{u, at.DB}, nil
+	return &User{u, at.DB}, nil
 }
 
 // CreateUserAndLogin is a helper method that creates a new test user and
 // immediately logs in with it, returning the user, the login cookie, a cleanup
 // function that deletes the user.
-func CreateUserAndLogin(at *AccountsTester, name string) (*testUser, *http.Cookie, error) {
+func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, error) {
 	// Use the test's name as an email-compatible identifier.
 	params := url.Values{}
 	params.Add("email", strings.ReplaceAll(name, "/", "_")+"@siasky.net")
