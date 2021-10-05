@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
-	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"gitlab.com/NebulousLabs/errors"
@@ -27,6 +27,19 @@ const (
 	UserSubLen = 36
 )
 
+type (
+	// testUser is a helper struct that allows for easy cleanup from the DB.
+	testUser struct {
+		*database.User
+		staticDB *database.DB
+	}
+)
+
+// Delete removes the test user from the DB.
+func (tu *testUser) Delete(ctx context.Context) error {
+	return tu.staticDB.UserDelete(ctx, tu.User)
+}
+
 // DBTestCredentials sets the environment variables to what we have defined in Makefile.
 func DBTestCredentials() database.DBCredentials {
 	return database.DBCredentials{
@@ -38,66 +51,44 @@ func DBTestCredentials() database.DBCredentials {
 }
 
 // CreateUser is a helper method which simplifies the creation of test users
-func CreateUser(t *testing.T, at *AccountsTester, customEmail, customPassword string) (*database.User, func(user *database.User), error) {
-	email := customEmail
-	if email == "" {
-		// Use the test's name as an email-compatible identifier.
-		email = strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
-	}
-	password := customPassword
-	if password == "" {
-		password = hex.EncodeToString(fastrand.Bytes(16))
-	}
-	params := map[string]string{
-		"email":    email,
-		"password": password,
-	}
+func CreateUser(at *AccountsTester, email, password string) (*testUser, error) {
 	// Create a user.
-	_, _, err := at.Post("/user", nil, params)
+	_, _, err := at.CreateUserPost(email, password)
 	if err != nil {
-		return nil, nil, errors.AddContext(err, "user creation failed")
+		return nil, errors.AddContext(err, "user creation failed")
 	}
 	// Fetch the user from the DB, so we can delete it later.
 	u, err := at.DB.UserByEmail(at.Ctx, email, false)
 	if err != nil {
-		return nil, nil, errors.AddContext(err, "failed to fetch user from the DB")
+		return nil, errors.AddContext(err, "failed to fetch user from the DB")
 	}
-	cleanup := func(user *database.User) {
-		err = at.DB.UserDelete(at.Ctx, user)
-		if err != nil {
-			t.Errorf("Error while cleaning up user: %s", err.Error())
-			return
-		}
-	}
-	return u, cleanup, nil
+	return &testUser{u, at.DB}, nil
 }
 
-// CreateUserAndLogin is a helper method that creates anew test user and
+// CreateUserAndLogin is a helper method that creates a new test user and
 // immediately logs in with it, returning the user, the login cookie, a cleanup
 // function that deletes the user.
-func CreateUserAndLogin(t *testing.T, at *AccountsTester) (*database.User, *http.Cookie, func(user *database.User), error) {
+func CreateUserAndLogin(at *AccountsTester, name string) (*testUser, *http.Cookie, error) {
 	// Use the test's name as an email-compatible identifier.
-	name := strings.ReplaceAll(t.Name(), "/", "_")
-	params := map[string]string{
-		"email":    name + "@siasky.net",
-		"password": hex.EncodeToString(fastrand.Bytes(16)),
-	}
+	params := url.Values{}
+	params.Add("email", strings.ReplaceAll(name, "/", "_")+"@siasky.net")
+	params.Add("password", hex.EncodeToString(fastrand.Bytes(16)))
 	// Create a user.
-	u, cleanup, err := CreateUser(t, at, params["email"], params["password"])
+	u, err := CreateUser(at, params.Get("email"), params.Get("password"))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	// Log in with that user in order to make sure it exists.
 	r, _, err := at.Post("/login", nil, params)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	// Grab the Skynet cookie, so we can make authenticated calls.
 	c := ExtractCookie(r)
 	if c == nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	return u, c, cleanup, nil
+	return u, c, nil
 }
 
 // CreateTestUpload creates a new skyfile and uploads it under the given user's
