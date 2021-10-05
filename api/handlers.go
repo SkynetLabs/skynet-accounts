@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
@@ -27,7 +28,8 @@ const (
 var (
 	// userLimitCacheEntry is an in-mem cache that maps from a user's sub to
 	// the data we care about.
-	userLimitCache = map[string]userLimitCacheEntry{}
+	userLimitCache   = map[string]userLimitCacheEntry{}
+	userLimitCacheMu sync.Mutex
 	// userLimits is a caching entry to avoid doing the same static operation
 	// over and over.
 	userLimits []TierLimitsPublic
@@ -254,8 +256,13 @@ func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httpro
 	sub := s.(string)
 	// If the user is not cached, or they were cached too long ago we'll fetch
 	// their data from the DB.
-	if c, exists := userLimitCache[sub]; !exists || c.LastUpdate.Since(time.Now()) > userLimitCacheTTL {
+	userLimitCacheMu.Lock()
+	defer userLimitCacheMu.Unlock()
+	if c, exists := userLimitCache[sub]; !exists || c.LastUpdate.Sub(time.Now()) > userLimitCacheTTL {
+		// we don't want to hold the lock during a DB operation
+		userLimitCacheMu.Unlock()
 		u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+		userLimitCacheMu.Lock()
 		if err != nil {
 			api.staticLogger.Debugf("Failed to fetch user from DB for sub '%s'. Error: %s", sub, err.Error())
 			api.WriteJSON(w, database.TierAnonymous)
