@@ -32,7 +32,8 @@ var (
 	userLimitCacheMu sync.Mutex
 	// userLimits is a caching entry to avoid doing the same static operation
 	// over and over.
-	userLimits []TierLimitsPublic
+	userLimits   []TierLimitsPublic
+	userLimitsMu sync.Mutex
 )
 
 type (
@@ -80,6 +81,8 @@ func (api *API) healthGET(w http.ResponseWriter, req *http.Request, _ httprouter
 
 // limitsGET returns the speed limits of this portal.
 func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	userLimitsMu.Lock()
+	defer userLimitsMu.Unlock()
 	if userLimits == nil {
 		userLimits = make([]TierLimitsPublic, len(database.UserLimits))
 		for i, t := range database.UserLimits {
