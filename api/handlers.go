@@ -8,7 +8,6 @@ import (
 	"net/mail"
 	"net/url"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
@@ -18,22 +17,6 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
-)
-
-const (
-	// userLimitCacheTTL is the TTL of the entries in the userLimitCache.
-	userLimitCacheTTL = time.Hour
-)
-
-var (
-	// userLimitCacheEntry is an in-mem cache that maps from a user's sub to
-	// the data we care about.
-	userLimitCache   = map[string]userLimitCacheEntry{}
-	userLimitCacheMu sync.Mutex
-	// userLimits is a caching entry to avoid doing the same static operation
-	// over and over.
-	userLimits   []TierLimitsPublic
-	userLimitsMu sync.Mutex
 )
 
 type (
@@ -52,13 +35,6 @@ type (
 		MaxNumberUploads  int    `json:"maxNumberUploads"`
 		RegistryDelay     int    `json:"registryDelay"` // ms
 		Storage           int64  `json:"storageLimit"`
-	}
-
-	// userLimitCacheEntry allows us to cache some basic information about the
-	// user, so we don't need to hit the DB to fetch data that rarely changes.
-	userLimitCacheEntry struct {
-		Tier       int
-		LastUpdate time.Time
 	}
 
 	// userUpdateData defines the fields of the User record that can be changed
@@ -81,24 +57,8 @@ func (api *API) healthGET(w http.ResponseWriter, req *http.Request, _ httprouter
 
 // limitsGET returns the speed limits of this portal.
 func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	userLimitsMu.Lock()
-	defer userLimitsMu.Unlock()
-	if userLimits == nil {
-		userLimits = make([]TierLimitsPublic, len(database.UserLimits))
-		for i, t := range database.UserLimits {
-			userLimits[i] = TierLimitsPublic{
-				TierName:          t.TierName,
-				UploadBandwidth:   t.UploadBandwidth * 8,   // convert from bytes
-				DownloadBandwidth: t.DownloadBandwidth * 8, // convert from bytes
-				MaxUploadSize:     t.MaxUploadSize,
-				MaxNumberUploads:  t.MaxNumberUploads,
-				RegistryDelay:     t.RegistryDelay,
-				Storage:           t.Storage,
-			}
-		}
-	}
 	resp := LimitsPublic{
-		UserLimits: userLimits,
+		UserLimits: api.staticTierLimits,
 	}
 	api.WriteJSON(w, resp)
 }
@@ -252,38 +212,25 @@ func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httpro
 	}
 	s, exists := tk.Get("sub")
 	if !exists {
-		api.staticLogger.Tracef("Token without a sub.")
-		api.WriteJSON(w, database.TierAnonymous)
+		api.staticLogger.Warnln("Token without a sub.")
+		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 		return
 	}
 	sub := s.(string)
 	// If the user is not cached, or they were cached too long ago we'll fetch
 	// their data from the DB.
-	userLimitCacheMu.Lock()
-	defer userLimitCacheMu.Unlock()
-	if c, exists := userLimitCache[sub]; !exists || c.LastUpdate.Sub(time.Now()) > userLimitCacheTTL {
-		// we don't want to hold the lock during a DB operation
-		userLimitCacheMu.Unlock()
+	tier, ok := api.staticUserTierCache.Get(sub)
+	if !ok {
 		u, err := api.staticDB.UserBySub(req.Context(), sub, false)
-		userLimitCacheMu.Lock()
 		if err != nil {
 			api.staticLogger.Debugf("Failed to fetch user from DB for sub '%s'. Error: %s", sub, err.Error())
-			api.WriteJSON(w, database.TierAnonymous)
+			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 			return
 		}
-		if u == nil || u.QuotaExceeded {
-			userLimitCache[sub] = userLimitCacheEntry{
-				Tier:       database.TierAnonymous,
-				LastUpdate: time.Now().UTC(),
-			}
-		} else {
-			userLimitCache[sub] = userLimitCacheEntry{
-				Tier:       u.Tier,
-				LastUpdate: time.Now().UTC(),
-			}
-		}
+		tier = u.Tier
+		api.staticUserTierCache.Set(u)
 	}
-	api.WriteJSON(w, userLimitCache[sub].Tier)
+	api.WriteJSON(w, database.UserLimits[tier])
 }
 
 // userStatsGET returns statistics about an existing user.
