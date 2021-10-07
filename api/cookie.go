@@ -6,8 +6,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/gorilla/securecookie"
 	"github.com/joho/godotenv"
+	"gitlab.com/NebulousLabs/fastrand"
 )
 
 const (
@@ -30,6 +32,14 @@ var (
 		_ = godotenv.Load()
 		hashKeyStr := os.Getenv(envCookieHashKey)
 		encKeyStr := os.Getenv(envCookieEncKey)
+		if build.Release == "testing" {
+			if len(hashKeyStr) < 32 {
+				hashKeyStr = string(fastrand.Bytes(32))
+			}
+			if len(encKeyStr) < 32 {
+				encKeyStr = string(fastrand.Bytes(32))
+			}
+		}
 		if len(hashKeyStr) < 32 || len(encKeyStr) < 32 {
 			panic(fmt.Sprintf("Both %s and %s are required environment variables and need to contain at least 32 bytes of hex-encoded entropy. %s, %s", envCookieHashKey, envCookieEncKey, hashKeyStr, encKeyStr))
 		}

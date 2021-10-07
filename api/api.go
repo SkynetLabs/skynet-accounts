@@ -58,12 +58,13 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 	}
 
 	api := &API{
-		staticDB:         db,
-		staticMF:         mf,
-		staticRouter:     router,
-		staticLogger:     logger,
-		staticMailer:     mailer,
-		staticTierLimits: tierLimits,
+		staticDB:            db,
+		staticMF:            mf,
+		staticRouter:        router,
+		staticLogger:        logger,
+		staticMailer:        mailer,
+		staticTierLimits:    tierLimits,
+		staticUserTierCache: NewUserTierCache(),
 	}
 	api.buildHTTPRoutes()
 	return api, nil
