@@ -12,6 +12,7 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/klauspost/compress v1.13.5 // indirect
 	github.com/lestrrat-go/jwx v1.2.6
+	github.com/lib/pq v1.10.3 // indirect
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stripe/stripe-go/v71 v71.48.0
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect

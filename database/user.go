@@ -119,6 +119,7 @@ type (
 		RecoveryToken                    string             `bson:"recovery_token,omitempty" json:"-"`
 		Sub                              string             `bson:"sub" json:"sub"`
 		Tier                             int                `bson:"tier" json:"tier"`
+		CreatedAt                        time.Time          `bson:"created_at" json:"createdAt"`
 		SubscribedUntil                  time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
 		SubscriptionStatus               string             `bson:"subscription_status" json:"subscriptionStatus"`
 		SubscriptionCancelAt             time.Time          `bson:"subscription_cancel_at" json:"subscriptionCancelAt"`
