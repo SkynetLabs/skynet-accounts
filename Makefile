@@ -34,14 +34,16 @@ vet:
 # markdown-spellcheck runs codespell on all markdown files that are not
 # vendored.
 markdown-spellcheck:
+	pip install codespell 1>/dev/null 2>&1
 	git ls-files "*.md" :\!:"vendor/**" | xargs codespell --check-filenames
 
 # lint runs golangci-lint (which includes golint, a spellcheck of the codebase,
 # and other linters), the custom analyzers, and also a markdown spellchecker.
-lint: clean fmt markdown-spellcheck lint-analyze vet
+lint: clean fmt markdown-spellcheck vet
 	golint ./...
 	golangci-lint run -c .golangci.yml
 	go mod tidy
+	analyze -lockcheck -- $(pkgs)
 
 # lint-ci runs golint.
 lint-ci:
@@ -52,10 +54,6 @@ ifneq ("$(OS)","Windows_NT")
 	golint -min_confidence=1.0 -set_exit_status $(pkgs)
 	go mod tidy
 endif
-
-# lint-analyze runs the custom analyzers.
-lint-analyze:
-	analyze -lockcheck -- $(pkgs)
 
 # start-mongo starts a local mongoDB container with no persistence.
 # We first prepare for the start of the container by making sure the test
