@@ -1,0 +1,12 @@
+name: Skynet Accounts Actions
+on: [ push ]
+jobs:
+  Tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Lint
+        run: make lint
+      - name: Run unit tests
+        run: make test

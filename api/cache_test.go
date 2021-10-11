@@ -9,7 +9,7 @@ import (
 
 // TestUserTierCache tests that working with userTierCache works as expected.
 func TestUserTierCache(t *testing.T) {
-	cache := NewUserTierCache()
+	cache := newUserTierCache()
 	u := &database.User{
 		Sub:             t.Name(),
 		Tier:            database.TierPremium5,

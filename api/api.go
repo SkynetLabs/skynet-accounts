@@ -64,7 +64,7 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 		staticLogger:        logger,
 		staticMailer:        mailer,
 		staticTierLimits:    tierLimits,
-		staticUserTierCache: NewUserTierCache(),
+		staticUserTierCache: newUserTierCache(),
 	}
 	api.buildHTTPRoutes()
 	return api, nil

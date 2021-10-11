@@ -27,11 +27,10 @@ type (
 	}
 )
 
-// NewUserTierCache creates a new userTierCache.
-func NewUserTierCache() *userTierCache {
+// newUserTierCache creates a new userTierCache.
+func newUserTierCache() *userTierCache {
 	return &userTierCache{
 		cache: make(map[string]userTierCacheEntry),
-		mu:    sync.Mutex{},
 	}
 }
 
