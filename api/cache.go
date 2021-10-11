@@ -40,7 +40,7 @@ func (utc *userTierCache) Get(sub string) (int, bool) {
 	utc.mu.Lock()
 	ce, exists := utc.cache[sub]
 	utc.mu.Unlock()
-	if !exists || ce.ExpiresAt.After(time.Now().UTC()) {
+	if !exists || ce.ExpiresAt.Before(time.Now().UTC()) {
 		return database.TierAnonymous, false
 	}
 	return ce.Tier, true
@@ -51,29 +51,19 @@ func (utc *userTierCache) Set(u *database.User) {
 	var ce userTierCacheEntry
 	now := time.Now().UTC()
 	if u.SubscribedUntil.Before(now) {
-		// The user is unsubscribed. Cache them as TierAnonymous, we'll purge
-		// the cache in case they subscribe.
+		ce = userTierCacheEntry{
+			Tier:      database.TierFree,
+			ExpiresAt: now.Add(userTierCacheTTL),
+		}
+	} else if u.QuotaExceeded {
 		ce = userTierCacheEntry{
 			Tier:      database.TierAnonymous,
 			ExpiresAt: now.Add(userTierCacheTTL),
 		}
-	} else if u.QuotaExceeded {
-		// If their month rollover time is in less than an hour, adjust the
-		// ExpiresAt time, so the cache expires right before that.
-		expires := now.Add(userTierCacheTTL)
-		su := u.SubscribedUntil
-		t := time.Date(now.Year(), now.Month(), su.Day(), su.Hour(), su.Minute(), su.Second(), su.Nanosecond(), time.UTC)
-		if t.Sub(now) < time.Hour {
-			expires = t
-		}
-		ce = userTierCacheEntry{
-			Tier:      database.TierAnonymous,
-			ExpiresAt: expires,
-		}
 	} else {
 		ce = userTierCacheEntry{
 			Tier:      u.Tier,
-			ExpiresAt: now,
+			ExpiresAt: now.Add(userTierCacheTTL),
 		}
 	}
 	utc.mu.Lock()

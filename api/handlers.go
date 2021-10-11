@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
@@ -232,8 +233,11 @@ func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httpro
 			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 			return
 		}
-		tier = u.Tier
 		api.staticUserTierCache.Set(u)
+	}
+	tier, ok = api.staticUserTierCache.Get(sub)
+	if !ok {
+		build.Critical("Failed to fetch user from UserTierCache right after setting it.")
 	}
 	api.WriteJSON(w, database.UserLimits[tier])
 }
@@ -838,19 +842,21 @@ func (api *API) userUploadsDELETE(w http.ResponseWriter, req *http.Request, ps h
 // checkUserQuotas compares the resources consumed by the user to their quotas
 // and sets the QuotaExceeded flag on their account if they exceed any.
 func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
-	us, err := api.staticDB.UserStats(ctx, *u)
+	startOfTime := time.Time{}
+	numUploads, storageUsed, _, _, err := api.staticDB.UserUploadStats(ctx, u.ID, startOfTime)
 	if err != nil {
-		api.staticLogger.Infof("Failed to fetch user's stats. UID: %s, err: %s", u.ID.Hex(), err.Error())
+		api.staticLogger.Debugln("Failed to get user's upload bandwidth used:", err)
 		return
 	}
-	q := database.UserLimits[u.Tier]
-	quotaExceeded := us.NumUploads > q.MaxNumberUploads || us.TotalUploadsSize > q.Storage
+	quota := database.UserLimits[u.Tier]
+	quotaExceeded := numUploads > quota.MaxNumberUploads || storageUsed > quota.Storage
 	if quotaExceeded != u.QuotaExceeded {
 		u.QuotaExceeded = quotaExceeded
 		err = api.staticDB.UserSave(ctx, u)
 		if err != nil {
 			api.staticLogger.Infof("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
+		api.staticUserTierCache.Set(u)
 	}
 }
 
