@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -19,10 +20,6 @@ import (
 const (
 	// batchSize defines the largest batch of emails we will try to send.
 	batchSize = 10
-
-	// sleepBetweenScans defines how long the sender should sleep between its
-	// sweeps of the DB.
-	sleepBetweenScans = 3 * time.Second
 )
 
 var (
@@ -39,12 +36,29 @@ var (
 	// ServerLockID holds the name of the name of this particular server. Its
 	// value is controlled by the SERVER_DOMAIN entry in the .env file. If the
 	// SERVER_DOMAIN entry is empty or missing, the PORTAL_DOMAIN (preceded by
-	// schema) will be used instead.
-	ServerLockID string
+	// schema) will be used instead. The only exception is testing where there's
+	// nothing to set it, so we want to always have it set.
+	ServerLockID = build.Select(
+		build.Var{
+			Dev:      "",
+			Testing:  "siasky.test",
+			Standard: "",
+		},
+	).(string)
 
 	// matchPattern extracts all relevant configuration values from an email
 	// connection URI
 	matchPattern = regexp.MustCompile("smtps://(?P<user>.*):(?P<password>.*)@(?P<server>.*):(?P<port>\\d*)(/\\??skip_ssl_verify=(?P<skip_ssl_verify>\\w*))?")
+
+	// sleepBetweenScans defines how long the sender should sleep between its
+	// sweeps of the DB.
+	sleepBetweenScans = build.Select(
+		build.Var{
+			Dev:      time.Second,
+			Testing:  100 * time.Millisecond,
+			Standard: 3 * time.Second,
+		},
+	).(time.Duration)
 )
 
 type (

@@ -24,3 +24,11 @@ func TestConfig(t *testing.T) {
 		t.Fatal("Unexpected result.")
 	}
 }
+
+// TestServerLockID make sure that ServerLockID is set in testing mode. If it's
+// not, that might compromise the other tests in the project.
+func TestServerLockID(t *testing.T) {
+	if ServerLockID == "" {
+		t.Fatal("Expected ServerLockID to not be empty.")
+	}
+}
