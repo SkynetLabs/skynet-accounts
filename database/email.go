@@ -78,7 +78,7 @@ func (db *DB) EmailLockAndFetch(ctx context.Context, lockID string, batchSize in
 	filterLock := bson.M{
 		"failed_attempts": bson.M{"$lt": EmailMaxSendAttempts},
 		"sent_at":         nil,
-		"$or": []interface{}{
+		"$or": bson.A{
 			bson.M{"locked_by": ""},
 			bson.M{"locked_at": bson.M{"$lt": time.Now().UTC().Add(-emailLockTTL)}},
 		},

@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
@@ -15,13 +16,14 @@ import (
 // in the correct order, with the correct sized and so on.
 func TestUploadsByUser(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	testUploadSize := int64(1 + fastrand.Intn(1e10))
 	// Add a test user.
-	sub := string(fastrand.Bytes(UserSubLen))
+	sub := string(fastrand.Bytes(test.UserSubLen))
 	u, err := db.UserCreate(ctx, "email@example.com", "", sub, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +32,7 @@ func TestUploadsByUser(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Create a skylink record and register an upload for it.
-	sl, _, err := CreateTestUpload(ctx, db, u, testUploadSize)
+	sl, _, err := test.CreateTestUpload(ctx, db, u, testUploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +78,7 @@ func TestUploadsByUser(t *testing.T) {
 	}
 	// Create a second upload for the same skylink. The user's used storage
 	// should stay the same but the upload bandwidth should increase.
-	_, _, err = RegisterTestUpload(ctx, db, u, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
@@ -105,7 +107,7 @@ func TestUploadsByUser(t *testing.T) {
 		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
 	}
 	// Upload the same file again. Uploads go up, storage stays the same.
-	_, _, err = RegisterTestUpload(ctx, db, u, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload after unpinning.", err)
 	}
@@ -139,13 +141,14 @@ func TestUploadsByUser(t *testing.T) {
 // skylink by this user without affecting uploads by other users.
 func TestUnpinUploads(t *testing.T) {
 	ctx := context.Background()
-	db, err := database.New(ctx, test.DBTestCredentials(), nil)
+	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	testUploadSize := int64(1 + fastrand.Intn(1e10))
 	// Add two test users.
-	sub1 := string(fastrand.Bytes(UserSubLen))
+	sub1 := string(fastrand.Bytes(test.UserSubLen))
 	u1, err := db.UserCreate(ctx, "email1@example.com", "", sub1, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +156,7 @@ func TestUnpinUploads(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u1)
-	sub2 := string(fastrand.Bytes(UserSubLen))
+	sub2 := string(fastrand.Bytes(test.UserSubLen))
 	u2, err := db.UserCreate(ctx, "email2@example.com", "", sub2, database.TierPremium5)
 	if err != nil {
 		t.Fatal(err)
@@ -162,17 +165,17 @@ func TestUnpinUploads(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u2)
 	// Create a skylink record and register an upload for it.
-	sl, _, err := CreateTestUpload(ctx, db, u1, testUploadSize)
+	sl, _, err := test.CreateTestUpload(ctx, db, u1, testUploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Upload it again for the same user.
-	_, _, err = RegisterTestUpload(ctx, db, u1, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, u1, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
 	// Upload it for the second user.
-	_, _, err = RegisterTestUpload(ctx, db, u2, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, u2, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
