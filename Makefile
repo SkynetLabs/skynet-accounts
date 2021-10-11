@@ -59,10 +59,11 @@ endif
 # We first prepare for the start of the container by making sure the test
 # keyfile has the right permissions, then we clear any potential leftover
 # containers with the same name. After we start the container we initialise a
-# single node replica set.
+# single node replica set. All the output is discarded because it's noisy and
+# if it causes a failure we'll immediately know where it is even without it.
 start-mongo:
-	-docker stop skynet-accounts-mongo-test-db
-	-docker rm skynet-accounts-mongo-test-db
+	-docker stop skynet-accounts-mongo-test-db 1>/dev/null 2>&1
+	-docker rm skynet-accounts-mongo-test-db 1>/dev/null 2>&1
 	chmod 400 $(shell pwd)/test/fixtures/mongo_keyfile
 	docker run \
      --rm \
@@ -72,10 +73,11 @@ start-mongo:
      -e MONGO_INITDB_ROOT_USERNAME=admin \
      -e MONGO_INITDB_ROOT_PASSWORD=aO4tV5tC1oU3oQ7u \
      -v $(shell pwd)/test/fixtures/mongo_keyfile:/data/mgkey \
-	mongo:4.4.1 mongod --port=17017 --replSet=skynet --keyFile=/data/mgkey
-	sleep 3 # wait for mongo to start before we try to configure it
+	mongo:4.4.1 mongod --port=17017 --replSet=skynet --keyFile=/data/mgkey 1>/dev/null 2>&1
+	# wait for mongo to start before we try to configure it
+	sleep 3
 	# Initialise a single node replica set.
-	docker exec skynet-accounts-mongo-test-db mongo -u admin -p aO4tV5tC1oU3oQ7u --port 17017 --eval "rs.initiate({_id: \"skynet\", members: [{ _id: 0, host: \"localhost:17017\" }]})"
+	docker exec skynet-accounts-mongo-test-db mongo -u admin -p aO4tV5tC1oU3oQ7u --port 17017 --eval "rs.initiate({_id: \"skynet\", members: [{ _id: 0, host: \"localhost:17017\" }]})" 1>/dev/null 2>&1
 
 stop-mongo:
 	-docker stop skynet-accounts-mongo-test-db
