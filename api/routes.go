@@ -14,18 +14,21 @@ import (
 // buildHTTPRoutes registers all HTTP routes and their handlers.
 func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/health", api.noValidate(api.healthGET))
-
 	api.staticRouter.GET("/limits", api.noValidate(api.limitsGET))
 
+	api.staticRouter.GET("/login", api.WithDBSession(api.noValidate(api.loginGET)))
 	api.staticRouter.POST("/login", api.WithDBSession(api.noValidate(api.loginPOST)))
 	api.staticRouter.POST("/logout", api.WithDBSession(api.validate(api.logoutPOST)))
+	api.staticRouter.GET("/register", api.WithDBSession(api.noValidate(api.registerGET)))
+	api.staticRouter.POST("/register", api.WithDBSession(api.noValidate(api.registerPOST)))
 
+	// Endpoints at which Nginx reports portal usage.
 	api.staticRouter.POST("/track/upload/:skylink", api.WithDBSession(api.validate(api.trackUploadPOST)))
 	api.staticRouter.POST("/track/download/:skylink", api.WithDBSession(api.validate(api.trackDownloadPOST)))
 	api.staticRouter.POST("/track/registry/read", api.WithDBSession(api.validate(api.trackRegistryReadPOST)))
 	api.staticRouter.POST("/track/registry/write", api.WithDBSession(api.validate(api.trackRegistryWritePOST)))
 
-	api.staticRouter.POST("/user", api.WithDBSession(api.noValidate(api.userPOST)))
+	api.staticRouter.POST("/user", api.WithDBSession(api.noValidate(api.userPOST))) // This will be removed in the future.
 	api.staticRouter.GET("/user", api.WithDBSession(api.validate(api.userGET)))
 	api.staticRouter.PUT("/user", api.WithDBSession(api.validate(api.userPUT)))
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
@@ -34,6 +37,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.validate(api.userUploadsDELETE)))
 	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
 
+	// Endpoints for email communication with the user.
 	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET)))
 	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.validate(api.userReconfirmPOST)))
 	api.staticRouter.GET("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverGET)))

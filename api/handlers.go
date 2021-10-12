@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -75,6 +76,21 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 	api.WriteJSON(w, resp)
 }
 
+// loginGET generates a login challenge for the caller.
+func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	pk, err := hex.DecodeString(req.FormValue("pubKey"))
+	if err != nil || len(pk) != database.PubKeyLen {
+		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
+		return
+	}
+	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeLogin)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, ch)
+}
+
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Since we don't want to have separate endpoints for logging in with
@@ -89,9 +105,23 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 		api.loginPOSTCredentials(w, req, email, pw)
 		return
 	}
+
+	// Check for a challenge response in the request.
+	chr, err := challengeResponseFromRequest(req)
+	if err == nil && chr != nil {
+		api.loginPOSTChallengeResponse(w, req, chr)
+		return
+	}
+
 	// In case credentials were not found try to log the user by detecting a
 	// token.
 	api.loginPOSTToken(w, req)
+}
+
+// loginPOSTChallengeResponse is ahelper that handles logins with a challenge.
+func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Request, chr *database.ChallengeResponse) {
+	// pk, err := api.staticDB.ValidateChallengeResponse(req.Context(), chr)
+	// // TODO Implement
 }
 
 // loginPOSTCredentials is a helper that handles logins with credentials.
@@ -181,6 +211,33 @@ func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httproute
 		return
 	}
 	api.WriteSuccess(w)
+}
+
+// registerGET generates a registration challenge for the caller.
+func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	pk, err := hex.DecodeString(req.FormValue("pubKey"))
+	if err != nil || len(pk) != database.PubKeyLen {
+		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
+		return
+	}
+	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeRegister)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, ch)
+}
+
+// registerPOST registers a new user based on a challenge-response.
+func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// // Check for a challenge response in the request.
+	// chr, err := challengeResponseFromRequest(req)
+	// if err != nil {
+	// 	api.WriteError(w, errors.AddContext(err, "invalid challenge response"), http.StatusBadRequest)
+	// 	return
+	// }
+	// pk, err := api.staticDB.ValidateChallengeResponse(req.Context(), chr)
+	// // TODO Implement
 }
 
 // userGET returns information about an existing user and create it if it
@@ -297,7 +354,6 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	defer func() { _ = req.Body.Close() }()
 	var payload userUpdateData
 	err = json.Unmarshal(bodyBytes, &payload)
 	if err != nil {
@@ -845,6 +901,21 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	api.WriteJSON(w, jwt.AccountsPublicJWKS)
+}
+
+// challengeResponseFromRequest reads a challenge response from the request's
+// body.
+func challengeResponseFromRequest(req *http.Request) (*database.ChallengeResponse, error) {
+	b, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to read challenge response")
+	}
+	var chr database.ChallengeResponse
+	err = json.Unmarshal(b, &chr)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to unmarshal challenge response")
+	}
+	return &chr, nil
 }
 
 // fetchOffset extracts the offset from the params and validates its value.
