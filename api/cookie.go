@@ -35,10 +35,10 @@ var (
 		hashKeyStr := os.Getenv(envCookieHashKey)
 		encKeyStr := os.Getenv(envCookieEncKey)
 		if build.Release == "testing" {
-			if len(hashKeyStr) < 32 {
+			if len(hashKeyStr) < secureCookieKeySize {
 				hashKeyStr = string(securecookie.GenerateRandomKey(secureCookieKeySize))
 			}
-			if len(encKeyStr) < 32 {
+			if len(encKeyStr) < secureCookieKeySize {
 				encKeyStr = string(securecookie.GenerateRandomKey(secureCookieKeySize))
 			}
 		}

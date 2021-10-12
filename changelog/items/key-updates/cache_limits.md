@@ -1,1 +1,2 @@
 - Add caching to the `/user/limits` endpoint.
+- Add a GitHub Action that runs the tests on push. 
