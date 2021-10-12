@@ -29,6 +29,7 @@ type cru struct {
 	PassHash  string    `json:"pass_hash"`
 }
 
+// See https://github.com/cockroachdb/examples-go/blob/master/bank/main.go
 func connCockroachDB(creds database.DBCredentials) (*sql.DB, error) {
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/defaultdb", creds.User, url.QueryEscape(creds.Password), creds.Host, creds.Port)
 	parsedURL, err := url.Parse(dbURL)
