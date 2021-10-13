@@ -83,6 +83,7 @@ func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
 		return
 	}
+	// TODO Should we check if the pubkey is not yet registered with a user?
 	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeLogin)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -230,6 +231,12 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
 		return
 	}
+	// Check if this pubkey is already associated with a user.
+	_, err = api.staticDB.UserByPubKey(req.Context(), pk)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, errors.New("pubkey already registered"), http.StatusBadRequest)
+		return
+	}
 	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeRegister)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -240,10 +247,10 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 
 // registerPOST registers a new user based on a challenge-response.
 func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// Check for a challenge response in the request.
+	// Get the challenge response.
 	chr, err := challengeResponseFromRequest(req)
 	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "missing challenge response"), http.StatusBadRequest)
+		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
 	}
 	ctx := req.Context()
@@ -252,9 +259,8 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusUnauthorized)
 		return
 	}
-
-	email := req.PostFormValue("email")
 	// Validate the email address.
+	email := req.PostFormValue("email")
 	e, err := mail.ParseAddress(email)
 	if err != nil {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
@@ -273,7 +279,7 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
+	err = api.staticMailer.SendAddressConfirmationEmail(ctx, u.Email, u.EmailConfirmationToken)
 	if err != nil {
 		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
@@ -946,16 +952,18 @@ func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httpr
 // challengeResponseFromRequest reads a challenge response from the request's
 // body.
 func challengeResponseFromRequest(req *http.Request) (*database.ChallengeResponse, error) {
-	b, err := ioutil.ReadAll(req.Body)
+	resp, err := hex.DecodeString(req.PostFormValue("response"))
 	if err != nil {
-		return nil, errors.AddContext(err, "failed to read challenge response")
+		return nil, errors.AddContext(err, "failed to parse the response")
 	}
-	var chr database.ChallengeResponse
-	err = json.Unmarshal(b, &chr)
+	sig, err := hex.DecodeString(req.PostFormValue("signature"))
 	if err != nil {
-		return nil, errors.AddContext(err, "failed to unmarshal challenge response")
+		return nil, errors.AddContext(err, "failed to parse the response")
 	}
-	return &chr, nil
+	return &database.ChallengeResponse{
+		Response:  resp,
+		Signature: sig,
+	}, nil
 }
 
 // fetchOffset extracts the offset from the params and validates its value.

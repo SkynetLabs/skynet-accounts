@@ -211,7 +211,7 @@ func (db *DB) UserByPubKey(ctx context.Context, pk PubKey) (*User, error) {
 	var u User
 	err := sr.Decode(&u)
 	if err != nil {
-		return nil, errors.AddContext(err, "user not found")
+		return nil, ErrUserNotFound
 	}
 	return &u, nil
 }

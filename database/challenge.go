@@ -34,18 +34,19 @@ type (
 	// Challenge defines the format in which we will deliver our login and
 	// registration challenges to the caller.
 	Challenge struct {
-		ID        primitive.ObjectID `bson:"_id,omitempty" json:"-"`
-		Challenge []byte             `bson:"challenge" json:"challenge"`
-		Type      string             `bson:"type" json:"-"`
-		PubKey    PubKey             `bson:"pub_key" json:"-"`
-		ExpiresAt time.Time          `bson:"expires_at" json:"-"`
+		ID primitive.ObjectID `bson:"_id,omitempty" json:"-"`
+		// Challenge is a hex-encoded representation of the []byte challenge.
+		Challenge string    `bson:"challenge" json:"challenge"`
+		Type      string    `bson:"type" json:"-"`
+		PubKey    PubKey    `bson:"pub_key" json:"-"`
+		ExpiresAt time.Time `bson:"expires_at" json:"-"`
 	}
 
 	// ChallengeResponse defines the format in which the caller will deliver
 	// its response to our login and register challenges.
 	ChallengeResponse struct {
-		Response  string `json:"response"`
-		Signature string `json:"signature"`
+		Response  []byte `json:"response"`
+		Signature []byte `json:"signature"`
 	}
 
 	// PubKey represents a public key. It's a helper type used to make function
@@ -59,7 +60,7 @@ func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, typ string) (*Cha
 		return nil, errors.New(fmt.Sprintf("invalid challenge type '%s'", typ))
 	}
 	ch := &Challenge{
-		Challenge: fastrand.Bytes(challengeSize),
+		Challenge: hex.EncodeToString(fastrand.Bytes(challengeSize)),
 		Type:      typ,
 		PubKey:    pubKey,
 		ExpiresAt: time.Now().UTC().Add(challengeTTL),
@@ -74,16 +75,10 @@ func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, typ string) (*Cha
 // ValidateChallengeResponse validates the challenge response against the
 // database. It makes sure the challenge and type in the response match what's
 // in the database and that the signature is valid.
+//
+// Challenge format: challenge + type + recipient
 func (db *DB) ValidateChallengeResponse(ctx context.Context, chr *ChallengeResponse) (PubKey, error) {
-	resp, err := hex.DecodeString(chr.Response)
-	if err != nil || len(resp) < challengeSize {
-		return nil, errors.AddContext(err, "invalid challenge response")
-	}
-	sig, err := hex.DecodeString(chr.Signature)
-	if err != nil {
-		return nil, errors.AddContext(err, "invalid signature")
-	}
-	challenge := resp[:challengeSize]
+	resp := chr.Response
 	var typ string
 	if strings.HasPrefix(string(resp[challengeSize:]), ChallengeTypeLogin) {
 		typ = ChallengeTypeLogin
@@ -93,19 +88,19 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr *ChallengeRespo
 		return nil, errors.New("invalid challenge type")
 	}
 	filter := bson.M{
-		"challenge": challenge,
+		"challenge": hex.EncodeToString(resp[:challengeSize]),
 		"type":      typ,
 	}
 	sr := db.staticChallenges.FindOne(ctx, filter)
 	var ch Challenge
-	err = sr.Decode(&ch)
+	err := sr.Decode(&ch)
 	if err != nil {
 		return nil, errors.AddContext(err, "challenge not found")
 	}
 	if ch.ExpiresAt.Before(time.Now().UTC()) {
 		return nil, errors.New("challenge expired")
 	}
-	if !verifySignature(ch.PubKey, resp, sig) {
+	if !verifySignature(ch.PubKey, resp, chr.Signature) {
 		return nil, errors.New("invalid signature")
 	}
 	_, err = db.staticChallenges.DeleteOne(ctx, bson.M{"_id": ch.ID})
