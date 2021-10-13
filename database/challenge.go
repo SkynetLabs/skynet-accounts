@@ -108,7 +108,10 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr *ChallengeRespo
 	if !verifySignature(ch.PubKey, resp, sig) {
 		return nil, errors.New("invalid signature")
 	}
-	// TODO Should we delete the challenge from the DB here or should we do it in a cleanup run somewhere else?
+	_, err = db.staticChallenges.DeleteOne(ctx, bson.M{"_id": ch.ID})
+	if err != nil {
+		db.staticLogger.Debugln("Failed to delete challenge from DB:", err)
+	}
 	return ch.PubKey, nil
 }
 

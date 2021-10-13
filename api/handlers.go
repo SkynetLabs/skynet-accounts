@@ -118,10 +118,20 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	api.loginPOSTToken(w, req)
 }
 
-// loginPOSTChallengeResponse is ahelper that handles logins with a challenge.
+// loginPOSTChallengeResponse is a helper that handles logins with a challenge.
 func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Request, chr *database.ChallengeResponse) {
-	// pk, err := api.staticDB.ValidateChallengeResponse(req.Context(), chr)
-	// // TODO Implement
+	ctx := req.Context()
+	pk, err := api.staticDB.ValidateChallengeResponse(ctx, chr)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserByPubKey(ctx, pk)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	api.loginUser(w, u, false)
 }
 
 // loginPOSTCredentials is a helper that handles logins with credentials.
@@ -230,14 +240,44 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 
 // registerPOST registers a new user based on a challenge-response.
 func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// // Check for a challenge response in the request.
-	// chr, err := challengeResponseFromRequest(req)
-	// if err != nil {
-	// 	api.WriteError(w, errors.AddContext(err, "invalid challenge response"), http.StatusBadRequest)
-	// 	return
-	// }
-	// pk, err := api.staticDB.ValidateChallengeResponse(req.Context(), chr)
-	// // TODO Implement
+	// Check for a challenge response in the request.
+	chr, err := challengeResponseFromRequest(req)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "missing challenge response"), http.StatusBadRequest)
+		return
+	}
+	ctx := req.Context()
+	pk, err := api.staticDB.ValidateChallengeResponse(ctx, chr)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusUnauthorized)
+		return
+	}
+
+	email := req.PostFormValue("email")
+	// Validate the email address.
+	e, err := mail.ParseAddress(email)
+	if err != nil {
+		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
+		return
+	}
+	// Strip any names from the email and leave just the address.
+	email = e.Address
+	// The password is optional.
+	pass := req.PostFormValue("password")
+	u, err := api.staticDB.UserCreatePK(ctx, email, pass, "", pk, database.TierFree)
+	if errors.Contains(err, database.ErrUserAlreadyExists) {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
+	if err != nil {
+		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
+	}
+	api.loginUser(w, u, true)
 }
 
 // userGET returns information about an existing user and create it if it
@@ -335,7 +375,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 	if err != nil {
 		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
-	api.WriteJSON(w, u)
+	api.loginUser(w, u, true)
 }
 
 // userPUT allows changing some user information.
