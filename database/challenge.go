@@ -15,6 +15,11 @@ import (
 )
 
 const (
+	// ChallengeSignatureSize is the size of the expected signature.
+	ChallengeSignatureSize = ed25519.SignatureSize
+	// ChallengeSize defines the number of bytes of entropy to send as a
+	// challenge
+	ChallengeSize = 32
 	// ChallengeTypeLogin is the type of the login challenge.
 	ChallengeTypeLogin = "login"
 	// ChallengeTypeRegister is the type of the registration challenge.
@@ -23,9 +28,6 @@ const (
 	// PubKeyLen defines the length of the public key in bytes.
 	PubKeyLen = 32
 
-	// challengeSize defines the number of bytes of entropy to send as a
-	// Challenge
-	challengeSize = 32
 	// challengeTTL defines how long we accept responses to this challenge.
 	challengeTTL = 30 * time.Second
 )
@@ -60,7 +62,7 @@ func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, typ string) (*Cha
 		return nil, errors.New(fmt.Sprintf("invalid challenge type '%s'", typ))
 	}
 	ch := &Challenge{
-		Challenge: hex.EncodeToString(fastrand.Bytes(challengeSize)),
+		Challenge: hex.EncodeToString(fastrand.Bytes(ChallengeSize)),
 		Type:      typ,
 		PubKey:    pubKey,
 		ExpiresAt: time.Now().UTC().Add(challengeTTL),
@@ -80,15 +82,15 @@ func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, typ string) (*Cha
 func (db *DB) ValidateChallengeResponse(ctx context.Context, chr *ChallengeResponse) (PubKey, error) {
 	resp := chr.Response
 	var typ string
-	if strings.HasPrefix(string(resp[challengeSize:]), ChallengeTypeLogin) {
+	if strings.HasPrefix(string(resp[ChallengeSize:]), ChallengeTypeLogin) {
 		typ = ChallengeTypeLogin
-	} else if strings.HasPrefix(string(resp[challengeSize:]), ChallengeTypeRegister) {
+	} else if strings.HasPrefix(string(resp[ChallengeSize:]), ChallengeTypeRegister) {
 		typ = ChallengeTypeRegister
 	} else {
 		return nil, errors.New("invalid challenge type")
 	}
 	filter := bson.M{
-		"challenge": hex.EncodeToString(resp[:challengeSize]),
+		"challenge": hex.EncodeToString(resp[:ChallengeSize]),
 		"type":      typ,
 	}
 	sr := db.staticChallenges.FindOne(ctx, filter)

@@ -256,7 +256,7 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 	ctx := req.Context()
 	pk, err := api.staticDB.ValidateChallengeResponse(ctx, chr)
 	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusUnauthorized)
+		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusBadRequest)
 		return
 	}
 	// Validate the email address.
@@ -956,9 +956,16 @@ func challengeResponseFromRequest(req *http.Request) (*database.ChallengeRespons
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse the response")
 	}
+	if len(resp) < database.ChallengeSize {
+		return nil, errors.New("invalid response")
+	}
 	sig, err := hex.DecodeString(req.PostFormValue("signature"))
 	if err != nil {
-		return nil, errors.AddContext(err, "failed to parse the response")
+		return nil, errors.AddContext(err, "failed to parse the response signature")
+	}
+	if len(sig) < database.ChallengeSignatureSize {
+		println(len(sig))
+		return nil, errors.New("invalid signature")
 	}
 	return &database.ChallengeResponse{
 		Response:  resp,
