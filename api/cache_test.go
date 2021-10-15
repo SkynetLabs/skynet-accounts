@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/database"
 )
 
 // TestUserTierCache tests that working with userTierCache works as expected.

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/lib"
+	"github.com/SkynetLabs/skynet-accounts/lib"
 
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwt"

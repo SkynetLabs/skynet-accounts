@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/NebulousLabs/skynet-accounts/build"
-	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/email"
-	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+	"github.com/SkynetLabs/skynet-accounts/build"
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/email"
+	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"

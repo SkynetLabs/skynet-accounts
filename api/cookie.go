@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/build"
+	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/gorilla/securecookie"
 	"github.com/joho/godotenv"
 )

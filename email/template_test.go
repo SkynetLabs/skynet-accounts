@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NebulousLabs/skynet-accounts/lib"
+	"github.com/SkynetLabs/skynet-accounts/lib"
 )
 
 // TestConfirmEmailEmail ensures that the email we send to the user contains

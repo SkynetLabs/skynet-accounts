@@ -10,11 +10,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/NebulousLabs/skynet-accounts/api"
-	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/email"
-	"github.com/NebulousLabs/skynet-accounts/jwt"
-	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+	"github.com/SkynetLabs/skynet-accounts/api"
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/email"
+	"github.com/SkynetLabs/skynet-accounts/jwt"
+	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )

@@ -3,7 +3,7 @@ package lib
 import (
 	"encoding/hex"
 
-	"github.com/NebulousLabs/skynet-accounts/build"
+	"github.com/SkynetLabs/skynet-accounts/build"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/uuid"
 )
 

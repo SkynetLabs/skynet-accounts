@@ -1,4 +1,4 @@
-module github.com/NebulousLabs/skynet-accounts
+module github.com/SkynetLabs/skynet-accounts
 
 go 1.15
 
@@ -17,6 +17,7 @@ require (
 	github.com/lib/pq v1.10.3
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stripe/stripe-go/v71 v71.48.0
+	github.com/tus/tusd v1.7.1 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	gitlab.com/NebulousLabs/errors v0.0.0-20200929122200-06c536cf6975
 	gitlab.com/NebulousLabs/fastrand v0.0.0-20181126182046-603482d69e40
@@ -27,9 +28,9 @@ require (
 	go.mongodb.org/mongo-driver v1.7.3
 	go.sia.tech/siad v1.5.7
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
-	golang.org/x/net v0.0.0-20211008194852-3b03d305991f // indirect
+	golang.org/x/net v0.0.0-20211014222326-fd004c51d1d6 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac // indirect
+	golang.org/x/sys v0.0.0-20211013075003-97ac67df715c // indirect
 	golang.org/x/text v0.3.7 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/mail.v2 v2.3.1
