@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 
@@ -25,6 +26,7 @@ type (
 		staticMailer        *email.Mailer
 		staticTierLimits    []TierLimitsPublic
 		staticUserTierCache *userTierCache
+		staticCockroachDB   *sql.DB
 	}
 
 	// errorWrap is a helper type for converting an `error` struct to JSON.
@@ -34,7 +36,7 @@ type (
 )
 
 // New returns a new initialised API.
-func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer) (*API, error) {
+func New(db *database.DB, crdb *sql.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
 	}
@@ -65,6 +67,7 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 		staticMailer:        mailer,
 		staticTierLimits:    tierLimits,
 		staticUserTierCache: newUserTierCache(),
+		staticCockroachDB:   crdb,
 	}
 	api.buildHTTPRoutes()
 	return api, nil

@@ -119,6 +119,7 @@ type (
 		RecoveryToken                    string             `bson:"recovery_token,omitempty" json:"-"`
 		Sub                              string             `bson:"sub" json:"sub"`
 		Tier                             int                `bson:"tier" json:"tier"`
+		CreatedAt                        time.Time          `bson:"created_at" json:"created_at"`
 		SubscribedUntil                  time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
 		SubscriptionStatus               string             `bson:"subscription_status" json:"subscriptionStatus"`
 		SubscriptionCancelAt             time.Time          `bson:"subscription_cancel_at" json:"subscriptionCancelAt"`
@@ -354,6 +355,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		PasswordHash:                     string(passHash),
 		Sub:                              sub,
 		Tier:                             tier,
+		CreatedAt:                        time.Now().UTC(),
 	}
 	// Insert the user.
 	fields, err := bson.Marshal(u)

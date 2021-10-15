@@ -193,6 +193,13 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
+	// Connect to CockroachDB.
+	crdb, err := database.NewCockroachDB()
+	if errors.Contains(err, database.ErrCockroachDBNotConfigured) {
+		logger.Warnln("CockroachDB not properly configured.")
+	} else if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to connect to CockroachDB"))
+	}
 	mailer := email.NewMailer(db)
 	// Start the mail sender background thread.
 	sender, err := email.NewSender(ctx, db, logger, &skymodules.SkynetDependencies{}, emailURI)
@@ -204,7 +211,7 @@ func main() {
 	// we can determine their size.
 	mf := metafetcher.New(ctx, db, logger)
 	// Start the HTTP server.
-	server, err := api.New(db, mf, logger, mailer)
+	server, err := api.New(db, crdb, mf, logger, mailer)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}

@@ -18,6 +18,8 @@ import (
 	"github.com/NebulousLabs/skynet-accounts/metafetcher"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/fastrand"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type (
@@ -87,10 +89,57 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
 	// Fetch the user with that email, if they exist.
 	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
-	if err != nil {
+	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
 		api.staticLogger.Tracef("Error fetching a user with email '%s': %+v\n", email, err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
+	}
+	// If the user is not in the DB there is a chance that it's in CockroachDB.
+	// Try to fetch it from there and if it's there, create a version of it in
+	// MongoDB. Then try to login against this new user record, as the hash of
+	// the password will be moved from CockroachDB and fully usable.
+	if errors.Contains(err, database.ErrUserNotFound) {
+		cru, err := database.CockroachUserByEmail(api.staticCockroachDB, email)
+		if err != nil {
+			api.staticLogger.Warnf("Failed to fetch user from CockroachDB: %s", err)
+			api.WriteError(w, database.ErrUserNotFound, http.StatusUnauthorized)
+			return
+		}
+		// We need to generate an ID for the user because UserSave won't be able
+		// to create one for us.
+		var id primitive.ObjectID
+		copy(id[:], fastrand.Bytes(12))
+		u = &database.User{
+			ID:           id,
+			Email:        cru.Email,
+			PasswordHash: cru.PassHash,
+			Sub:          cru.Sub,
+			CreatedAt:    cru.CreatedAt,
+		}
+		err = api.staticDB.UserSave(req.Context(), u)
+		if err != nil {
+			api.staticLogger.Warnf("Failed to move user from CockroachDB: %s", err)
+			api.WriteError(w, database.ErrUserNotFound, http.StatusUnauthorized)
+			return
+		}
+		api.staticLogger.Debugf("User with email %s moved from CockroachDB.", u.Email)
+	}
+	// Check if we somehow have an empty password hash and try to fill that.
+	if u.PasswordHash == "" {
+		cru, err := database.CockroachUserByEmail(api.staticCockroachDB, email)
+		if err != nil {
+			api.staticLogger.Warnf("Failed to fetch user from CockroachDB: %s", err)
+			api.WriteError(w, database.ErrUserNotFound, http.StatusUnauthorized)
+			return
+		}
+		u.PasswordHash = cru.PassHash
+		err = api.staticDB.UserSave(req.Context(), u)
+		if err != nil {
+			api.staticLogger.Warnf("Failed to fill user password hash from CockroachDB: %s", err)
+			api.WriteError(w, database.ErrUserNotFound, http.StatusUnauthorized)
+			return
+		}
+		api.staticLogger.Debugf("User with email %s had their password hash filled from CockroachDB.", u.Email)
 	}
 	// Check if the password matches.
 	err = hash.Compare(password, []byte(u.PasswordHash))
