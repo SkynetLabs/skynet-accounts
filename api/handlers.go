@@ -674,7 +674,7 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 	// Send the token to the user via an email.
 	err = api.staticMailer.SendRecoverAccountEmail(req.Context(), u.Email, u.RecoveryToken)
 	if err != nil {
-		// The token was successfully generated and added to the user's account
+		// The token was successfully generated and added to the user's account,
 		// but we failed to send it to the user. We will try to remove it.
 		u.RecoveryToken = ""
 		if errRem := api.staticDB.UserSave(req.Context(), u); errRem != nil {
@@ -760,7 +760,7 @@ func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps htt
 	}
 	if skylink.Size == 0 {
 		// Zero size means that we haven't fetched the skyfile's size yet.
-		// Queue the skylink to have its meta data fetched and updated in the DB.
+		// Queue the skylink to have its metadata fetched and updated in the DB.
 		go func() {
 			api.staticMF.Queue <- metafetcher.Message{
 				SkylinkID: skylink.ID,
@@ -829,7 +829,7 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 	}
 	if skylink.Size == 0 {
 		// Zero size means that we haven't fetched the skyfile's size yet.
-		// Queue the skylink to have its meta data fetched. We do not specify a user
+		// Queue the skylink to have its metadata fetched. We do not specify a user
 		// here because this is not an upload, so nobody's used storage needs to be
 		// adjusted.
 		go func() {

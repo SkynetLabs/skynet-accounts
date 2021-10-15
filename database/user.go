@@ -354,12 +354,12 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	if pass != "" {
 		passHash, err = hash.Generate(pass)
 		if err != nil {
-			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
+			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to hash password")
 		}
 	}
 	emailConfToken, err := lib.GenerateUUID()
 	if err != nil {
-		return nil, errors.AddContext(err, "failed to generate an emil confirmation token")
+		return nil, errors.AddContext(err, "failed to generate an email confirmation token")
 	}
 	u := &User{
 		ID:                               primitive.ObjectID{},
@@ -423,12 +423,12 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 	if pass != "" {
 		passHash, err = hash.Generate(pass)
 		if err != nil {
-			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
+			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to hash password")
 		}
 	}
 	emailConfToken, err := lib.GenerateUUID()
 	if err != nil {
-		return nil, errors.AddContext(err, "failed to generate an emil confirmation token")
+		return nil, errors.AddContext(err, "failed to generate an email confirmation token")
 	}
 	u := &User{
 		ID:                               primitive.ObjectID{},
