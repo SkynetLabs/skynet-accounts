@@ -355,7 +355,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		PasswordHash:                     string(passHash),
 		Sub:                              sub,
 		Tier:                             tier,
-		CreatedAt:                        time.Now().UTC(),
+		CreatedAt:                        time.Now().UTC().Truncate(time.Millisecond),
 	}
 	// Insert the user.
 	fields, err := bson.Marshal(u)

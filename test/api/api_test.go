@@ -53,7 +53,7 @@ func TestWithDBSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testAPI, err := api.New(db, nil, &logrus.Logger{}, nil)
+	testAPI, err := api.New(db, nil, nil, &logrus.Logger{}, nil)
 	if err != nil {
 		t.Fatal("Failed to instantiate API.", err)
 	}
