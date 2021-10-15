@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/NebulousLabs/skynet-accounts/build"
 	"github.com/NebulousLabs/skynet-accounts/database"
 	"github.com/NebulousLabs/skynet-accounts/hash"
 	"github.com/NebulousLabs/skynet-accounts/jwt"
@@ -57,20 +58,8 @@ func (api *API) healthGET(w http.ResponseWriter, req *http.Request, _ httprouter
 
 // limitsGET returns the speed limits of this portal.
 func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	ul := make([]TierLimitsPublic, len(database.UserLimits))
-	for i, t := range database.UserLimits {
-		ul[i] = TierLimitsPublic{
-			TierName:          t.TierName,
-			UploadBandwidth:   t.UploadBandwidth * 8,   // convert from bytes
-			DownloadBandwidth: t.DownloadBandwidth * 8, // convert from bytes
-			MaxUploadSize:     t.MaxUploadSize,
-			MaxNumberUploads:  t.MaxNumberUploads,
-			RegistryDelay:     t.RegistryDelay,
-			Storage:           t.Storage,
-		}
-	}
 	resp := LimitsPublic{
-		UserLimits: ul,
+		UserLimits: api.staticTierLimits,
 	}
 	api.WriteJSON(w, resp)
 }
@@ -217,12 +206,40 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 // userLimitsGET returns the speed limits which apply to this user.
 func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	u := api.userFromRequest(req)
-	if u == nil || u.QuotaExceeded {
+	t, err := tokenFromRequest(req)
+	if err != nil {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 		return
 	}
-	api.WriteJSON(w, database.UserLimits[u.Tier])
+	tk, err := jwt.ValidateToken(t)
+	if err != nil {
+		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+		return
+	}
+	s, exists := tk.Get("sub")
+	if !exists {
+		api.staticLogger.Warnln("Token without a sub.")
+		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+		return
+	}
+	sub := s.(string)
+	// If the user is not cached, or they were cached too long ago we'll fetch
+	// their data from the DB.
+	tier, ok := api.staticUserTierCache.Get(sub)
+	if !ok {
+		u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+		if err != nil {
+			api.staticLogger.Debugf("Failed to fetch user from DB for sub '%s'. Error: %s", sub, err.Error())
+			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+			return
+		}
+		api.staticUserTierCache.Set(u)
+	}
+	tier, ok = api.staticUserTierCache.Get(sub)
+	if !ok {
+		build.Critical("Failed to fetch user from UserTierCache right after setting it.")
+	}
+	api.WriteJSON(w, database.UserLimits[tier])
 }
 
 // userStatsGET returns statistics about an existing user.
@@ -825,19 +842,21 @@ func (api *API) userUploadsDELETE(w http.ResponseWriter, req *http.Request, ps h
 // checkUserQuotas compares the resources consumed by the user to their quotas
 // and sets the QuotaExceeded flag on their account if they exceed any.
 func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
-	us, err := api.staticDB.UserStats(ctx, *u)
+	startOfTime := time.Time{}
+	numUploads, storageUsed, _, _, err := api.staticDB.UserUploadStats(ctx, u.ID, startOfTime)
 	if err != nil {
-		api.staticLogger.Infof("Failed to fetch user's stats. UID: %s, err: %s", u.ID.Hex(), err.Error())
+		api.staticLogger.Debugln("Failed to get user's upload bandwidth used:", err)
 		return
 	}
-	q := database.UserLimits[u.Tier]
-	quotaExceeded := us.NumUploads > q.MaxNumberUploads || us.TotalUploadsSize > q.Storage
+	quota := database.UserLimits[u.Tier]
+	quotaExceeded := numUploads > quota.MaxNumberUploads || storageUsed > quota.Storage
 	if quotaExceeded != u.QuotaExceeded {
 		u.QuotaExceeded = quotaExceeded
 		err = api.staticDB.UserSave(ctx, u)
 		if err != nil {
 			api.staticLogger.Infof("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
+		api.staticUserTierCache.Set(u)
 	}
 }
 

@@ -489,7 +489,7 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, size, rawStorage, bw, err := db.userUploadStats(ctx, user.ID, startOfMonth)
+		n, size, rawStorage, bw, err := db.UserUploadStats(ctx, user.ID, startOfMonth)
 		if err != nil {
 			regErr("Failed to get user's upload bandwidth used:", err)
 			return
@@ -545,10 +545,10 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 	return &stats, nil
 }
 
-// userUploadStats reports on the user's uploads - count, total size and total
+// UserUploadStats reports on the user's uploads - count, total size and total
 // bandwidth used. It uses the total size of the uploaded skyfiles as basis.
-func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthStart time.Time) (count int, totalSize int64, rawStorageUsed int64, totalBandwidth int64, err error) {
-	matchStage := bson.D{{"$match", bson.D{{"user_id", id}}}}
+func (db *DB) UserUploadStats(ctx context.Context, id primitive.ObjectID, since time.Time) (count int, totalSize int64, rawStorageUsed int64, totalBandwidth int64, err error) {
+	matchStage := bson.D{{"$match", bson.M{"user_id": id}}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
@@ -601,7 +601,7 @@ func (db *DB) userUploadStats(ctx context.Context, id primitive.ObjectID, monthS
 		}
 		// We first weed out any old uploads that we fetch only in order to
 		// calculate the total used storage.
-		if result.Timestamp.Before(monthStart) {
+		if result.Timestamp.Before(since) {
 			if result.Unpinned || processedSkylinks[result.Skylink] {
 				continue
 			}

@@ -260,6 +260,8 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	if err == nil {
 		api.staticLogger.Tracef("Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
 	}
+	// Re-set the tier cache for this user, in case their tier changed.
+	api.staticUserTierCache.Set(u)
 	return err
 }
 
