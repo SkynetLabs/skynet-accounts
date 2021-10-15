@@ -3,7 +3,7 @@ package email
 import (
 	"context"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/database"
 )
 
 /**

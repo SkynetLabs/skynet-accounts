@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/database"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/stripe/stripe-go/v71"

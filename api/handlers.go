@@ -10,12 +10,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/build"
-	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/hash"
-	"github.com/NebulousLabs/skynet-accounts/jwt"
-	"github.com/NebulousLabs/skynet-accounts/lib"
-	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+	"github.com/SkynetLabs/skynet-accounts/build"
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/hash"
+	"github.com/SkynetLabs/skynet-accounts/jwt"
+	"github.com/SkynetLabs/skynet-accounts/lib"
+	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )

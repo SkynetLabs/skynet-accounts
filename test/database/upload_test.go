@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/skynet"
-	"github.com/NebulousLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/skynet"
+	"github.com/SkynetLabs/skynet-accounts/test"
 
 	"gitlab.com/NebulousLabs/fastrand"
 )

@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/database"
 )
 
 const (
