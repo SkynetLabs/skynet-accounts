@@ -3,13 +3,18 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/api"
-	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/api"
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/test"
+	"gitlab.com/NebulousLabs/fastrand"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"
@@ -151,5 +156,108 @@ func TestWithDBSession(t *testing.T) {
 	u, err = db.UserByEmail(ctx, emailFailure, false)
 	if err == nil {
 		t.Fatal("Fetched a user that shouldn't have existed")
+	}
+}
+
+// TestUserTierCache ensures out tier cache works as expected.
+func TestUserTierCache(t *testing.T) {
+	t.Parallel()
+
+	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	at, err := test.NewAccountsTester(dbName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer at.Close()
+	email := strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
+	password := hex.EncodeToString(fastrand.Bytes(16))
+	u, err := test.CreateUser(at, email, password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err = u.Delete(at.Ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	// Promote the user to Pro.
+	u.Tier = database.TierPremium20
+	err = at.DB.UserSave(at.Ctx, u.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := url.Values{}
+	params.Add("email", email)
+	params.Add("password", password)
+	r, _, err := at.Post("/login", nil, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at.Cookie = test.ExtractCookie(r)
+	// Get the user's limit. Since they are on a Pro account but their
+	// SubscribedUntil is set in the past, we expect to get TierFree.
+	_, b, err := at.Get("/user/limits", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ul database.TierLimits
+	err = json.Unmarshal(b, &ul)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ul.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected tier '%s', got '%s'", database.UserLimits[database.TierFree].TierName, ul.TierName)
+	}
+	// Now set their SubscribedUntil in the future, so their subscription tier
+	// is active.
+	u.SubscribedUntil = time.Now().UTC().Add(365 * 24 * time.Hour)
+	err = at.DB.UserSave(at.Ctx, u.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Register a test upload that exceeds the user's allowed storage, so their
+	// QuotaExceeded flag will get raised.
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, database.UserLimits[u.Tier].Storage+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make a specific call to trackUploadPOST in order to trigger the
+	// checkUserQuotas method. This wil register the upload a second time but
+	// that doesn't affect the test.
+	_, _, err = at.Post("/track/upload/"+sl.Skylink, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sleep for a short time in order to make sure that the background
+	// goroutine that updates user's quotas has had time to run.
+	time.Sleep(2 * time.Second)
+	// We expect to get TierAnonymous.
+	_, b, err = at.Get("/user/limits", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &ul)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ul.TierName != database.UserLimits[database.TierAnonymous].TierName {
+		t.Fatalf("Expected tier '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, ul.TierName)
+	}
+	// Delete the uploaded file, so the user's quota recovers.
+	// This call should invalidate the tier cache.
+	_, _, err = at.Delete("/user/uploads/"+sl.Skylink, nil)
+	time.Sleep(2 * time.Second)
+	// We expect to get TierPremium20.
+	_, b, err = at.Get("/user/limits", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &ul)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+		t.Fatalf("Expected tier '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
 	}
 }

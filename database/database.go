@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/NebulousLabs/skynet-accounts/lib"
+	"github.com/SkynetLabs/skynet-accounts/lib"
 
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"

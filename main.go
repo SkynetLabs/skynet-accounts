@@ -9,12 +9,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/NebulousLabs/skynet-accounts/api"
-	"github.com/NebulousLabs/skynet-accounts/build"
-	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/email"
-	"github.com/NebulousLabs/skynet-accounts/jwt"
-	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+	"github.com/SkynetLabs/skynet-accounts/api"
+	"github.com/SkynetLabs/skynet-accounts/build"
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/email"
+	"github.com/SkynetLabs/skynet-accounts/jwt"
+	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/joho/godotenv"

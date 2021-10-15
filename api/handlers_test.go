@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/jwt"
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/crypto"
 	"golang.org/x/crypto/ed25519"
