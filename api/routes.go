@@ -2,13 +2,11 @@ package api
 
 import (
 	"net/http"
-	"reflect"
 	"strings"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/jwt"
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/jwt"
 
-	jwt2 "github.com/dgrijalva/jwt-go"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -19,24 +17,32 @@ func (api *API) buildHTTPRoutes() {
 
 	api.staticRouter.GET("/limits", api.noValidate(api.limitsGET))
 
-	api.staticRouter.POST("/login", api.noValidate(api.loginPOST))
-	api.staticRouter.POST("/logout", api.validate(api.logoutPOST))
+	api.staticRouter.POST("/login", api.WithDBSession(api.noValidate(api.loginPOST)))
+	api.staticRouter.POST("/logout", api.WithDBSession(api.validate(api.logoutPOST)))
 
-	api.staticRouter.POST("/track/upload/:skylink", api.validate(api.trackUploadPOST))
-	api.staticRouter.POST("/track/download/:skylink", api.validate(api.trackDownloadPOST))
-	api.staticRouter.POST("/track/registry/read", api.validate(api.trackRegistryReadPOST))
-	api.staticRouter.POST("/track/registry/write", api.validate(api.trackRegistryWritePOST))
+	api.staticRouter.POST("/track/upload/:skylink", api.WithDBSession(api.validate(api.trackUploadPOST)))
+	api.staticRouter.POST("/track/download/:skylink", api.WithDBSession(api.validate(api.trackDownloadPOST)))
+	api.staticRouter.POST("/track/registry/read", api.WithDBSession(api.validate(api.trackRegistryReadPOST)))
+	api.staticRouter.POST("/track/registry/write", api.WithDBSession(api.validate(api.trackRegistryWritePOST)))
 
-	api.staticRouter.GET("/user", api.validate(api.userGET))
-	api.staticRouter.PUT("/user", api.validate(api.userPUT))
+	api.staticRouter.POST("/user", api.WithDBSession(api.noValidate(api.userPOST)))
+	api.staticRouter.GET("/user", api.WithDBSession(api.validate(api.userGET)))
+	api.staticRouter.PUT("/user", api.WithDBSession(api.validate(api.userPUT)))
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsGET))
-	api.staticRouter.GET("/user/uploads", api.validate(api.userUploadsGET))
-	api.staticRouter.DELETE("/user/uploads/:skylink", api.validate(api.userUploadsDELETE))
-	api.staticRouter.GET("/user/downloads", api.validate(api.userDownloadsGET))
+	api.staticRouter.GET("/user/uploads", api.WithDBSession(api.validate(api.userUploadsGET)))
+	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.validate(api.userUploadsDELETE)))
+	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
 
-	api.staticRouter.POST("/stripe/webhook", api.noValidate(api.stripeWebhookPOST))
+	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET)))
+	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.validate(api.userReconfirmPOST)))
+	api.staticRouter.GET("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverGET)))
+	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverPOST)))
+
+	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noValidate(api.stripeWebhookPOST)))
 	api.staticRouter.GET("/stripe/prices", api.noValidate(api.stripePricesGET))
+
+	api.staticRouter.GET("/.well-known/jwks.json", api.noValidate(api.wellKnownJwksGET))
 }
 
 // noValidate is a pass-through method used for decorating the request and
@@ -58,7 +64,7 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
-		token, err := jwt.ValidateToken(api.staticLogger, tokenStr)
+		token, err := jwt.ValidateToken(tokenStr)
 		if err != nil {
 			api.staticLogger.Traceln("Error validating token:", err)
 			api.WriteError(w, err, http.StatusUnauthorized)
@@ -110,18 +116,19 @@ func (api *API) userFromRequest(r *http.Request) *database.User {
 	if err != nil {
 		return nil
 	}
-	token, err := jwt.ValidateToken(api.staticLogger, t)
+	token, err := jwt.ValidateToken(t)
 	if err != nil {
 		return nil
 	}
-	if reflect.ValueOf(token.Claims).Kind() != reflect.ValueOf(jwt2.MapClaims{}).Kind() {
+	tokenMap, err := token.AsMap(r.Context())
+	if err != nil {
 		return nil
 	}
-	claims := token.Claims.(jwt2.MapClaims)
-	if reflect.ValueOf(claims["sub"]).Kind() != reflect.String {
+	sub, exists := tokenMap["sub"]
+	if !exists {
 		return nil
 	}
-	u, err := api.staticDB.UserBySub(r.Context(), claims["sub"].(string), false)
+	u, err := api.staticDB.UserBySub(r.Context(), sub.(string), false)
 	if err != nil {
 		return nil
 	}

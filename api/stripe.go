@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/database"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/stripe/stripe-go/v71"
@@ -40,7 +40,7 @@ var (
 	// stripePlansTest maps Stripe plans to specific tiers.
 	// DO NOT USE THESE DIRECTLY! Use stripePlans() instead.
 	stripePlansTest = map[string]int{
-		//"prod_J2FBsxvEl4VoUK": database.TierFree,
+		// "prod_J2FBsxvEl4VoUK": database.TierFree,
 		"prod_J3m6xMfDiz2LGE": database.TierPremium5,
 		"prod_J3m6ioQg90kZj5": database.TierPremium20,
 		"prod_J3m6IuVyh3XOc5": database.TierPremium80,
@@ -48,7 +48,7 @@ var (
 	// stripePricesTest maps Stripe plan prices to specific tiers.
 	// DO NOT USE THESE DIRECTLY! Use stripePrices() instead.
 	stripePricesTest = map[string]int{
-		//"price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
+		// "price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
 		"price_1IReXpIzjULiPWN66PvsxHL4": database.TierPremium5,
 		"price_1IReY5IzjULiPWN6AxPytHEG": database.TierPremium20,
 		"price_1IReYFIzjULiPWN6DqN2DwjN": database.TierPremium80,
@@ -232,9 +232,9 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		// It seems weird that the Plan.ID is actually a price id but this
 		// is what we get from Stripe.
 		u.Tier = stripePrices()[mostRecentSub.Plan.ID]
-		u.SubscribedUntil = time.Unix(mostRecentSub.CurrentPeriodEnd, 0).UTC()
+		u.SubscribedUntil = time.Unix(mostRecentSub.CurrentPeriodEnd, 0).UTC().Truncate(time.Millisecond)
 		u.SubscriptionStatus = string(mostRecentSub.Status)
-		u.SubscriptionCancelAt = time.Unix(mostRecentSub.CancelAt, 0)
+		u.SubscriptionCancelAt = time.Unix(mostRecentSub.CancelAt, 0).UTC().Truncate(time.Millisecond)
 		u.SubscriptionCancelAtPeriodEnd = mostRecentSub.CancelAtPeriodEnd
 	}
 	// Cancel all subs aside from the latest one.
@@ -260,6 +260,8 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	if err == nil {
 		api.staticLogger.Tracef("Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
 	}
+	// Re-set the tier cache for this user, in case their tier changed.
+	api.staticUserTierCache.Set(u)
 	return err
 }
 
@@ -271,7 +273,7 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 	cp := &stripe.CustomerParams{
 		Plan: &plan,
 	}
-	_, err := customer.Update(u.StripeId, cp)
+	_, err := customer.Update(u.StripeID, cp)
 	if err != nil {
 		return errors.AddContext(err, "failed to update customer on Stripe")
 	}
@@ -283,7 +285,7 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 		cp = &stripe.CustomerParams{
 			Plan: &plan,
 		}
-		_, err2 := customer.Update(u.StripeId, cp)
+		_, err2 := customer.Update(u.StripeID, cp)
 		if err2 != nil {
 			err2 = errors.AddContext(err2, "failed to revert the change on Stripe")
 		}

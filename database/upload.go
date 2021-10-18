@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/skynet"
+	"github.com/SkynetLabs/skynet-accounts/skynet"
 
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"

@@ -2,21 +2,6 @@
 
 ## General terms
 
-### ORY, Kratos, Oathkeeper, and JWx
-
-While `skynet-accounts` handles account information in the context of a Skynet portal, the baseline account management (
-account CRUD, email verification, password resets, etc.) is handled by [ORY](https://www.ory.sh/)
-([Kratos](https://www.ory.sh/kratos/) and [Oathkeeper](https://www.ory.sh/oathkeeper/))
-to which we often refer to as "Kratos". This also covers the login/logout process and the issuance of JTW tokens. When
-we talk about JWT (or JWK, or JWKS)
-we mean the tokens issued by ORY.
-
-The workflow of verification follows a simple pattern:
-
-* Oathkeeper exposes a public link on which it shares the public keys with which anyone can verify the validity of the
-  JWT tokens it issues.
-* `skynet-accounts` fetches those keys and uses them to validate the JWTs it receives in requests.
-
 ### User tiers
 
 The tiers communicated by the API are numeric. This is the mapping:
@@ -27,6 +12,21 @@ The tiers communicated by the API are numeric. This is the mapping:
 3. Premium 20.
 4. Premium 80.
 
+## Health
+
+### GET `/health`
+
+Returns the health of the service
+
+* Requires a valid JWT: `false`
+* Returns:
+ - 200 JSON object
+  ```json
+  {
+    "dbAlive": "true"
+  }
+  ```
+
 ## Auth endpoints
 
 ### POST `/login`
@@ -34,8 +34,7 @@ The tiers communicated by the API are numeric. This is the mapping:
 Sets the `skynet-jwt` cookie.
 
 * Requires valid JWT: `true`
-* GET params: none
-* POST params: none
+* POST params: `email`, `password`
 * Returns:
   - 204
   - 400
@@ -47,8 +46,6 @@ Sets the `skynet-jwt` cookie.
 Removes the `skynet-jwt` cookie.
 
 * Requires valid JWT: `true`
-* GET params: none
-* POST params: none
 * Returns:
   - 204
   - 400
@@ -57,6 +54,17 @@ Removes the `skynet-jwt` cookie.
 
 ## User endpoints
 
+### POST `/user`
+
+Creates a new user.
+
+* Requires a valid JWT: `false`
+* POST params: `email`, `password`
+* Returns:
+  - 200 JSON object - the user object
+  - 400 (invalid email, missing password, email already used)
+  - 500
+
 ### GET `/user`
 
 This request combines the "get user data" and "create user" requests - if the users exists in the DB, their data will be
@@ -64,33 +72,78 @@ returned. If they don't exist in the DB, an account will be created on the Free 
 
 * Requires valid JWT: `true`
 * Returns:
-    - 200 JSON object
-  ```json
-  {
-    "tier": 1
-  }
-  ```
-    - 401 (missing JWT)
-    - 424 (when there is no such user, and we fail to create it)
-    - 500 (on any other error)
+  - 200 JSON object - the user object
+  - 401 (missing JWT)
+  - 404 (when there is no such user, and we fail to create it)
+  - 500 (on any other error)
 
-### PUT `/user` (TODO)
+### PUT `/user`
 
-This endpoint allows us to update the user's tier, membership expiration dates, etc.
+This endpoint allows us to update the user's email or set their StripeID. If the
+user's StripeID is already set and you try to update it you will get a 409 
+Conflict.
+
+* POST params:
+  - JSON object (all fields are optional)
+    ```json
+    {
+      "email": "user@siasky.net",
+      "stripeCustomerId": "someStripeId"
+    }
+    ```
 
 * Requires valid JWT: `true`
-* POST params:
-    - TBD
 * Returns:
-    - 200 JSON object
+  - 200 JSON object - the user object
+  - 400
+  - 401 (missing JWT)
+  - 404
+  - 409 Conflict (StripeID is already set)
+  - 500
+
+### GET `/user/limits`
+
+Returns the portal limits of the current user. Returns the values for 
+`anonymous` if there is no valid JWT.
+
+* Requires a valid JWT: `false`
+* Returns:
+ - 200 JSON object
   ```json
   {
-    "tier": 1
+    "tierName": "anonymous",
+    "upload": 123,
+    "download": 123,
+    "maxUploadSize": 123,
+    "registry": 123
   }
   ```
-    - 400
-    - 401 (missing JWT)
-    - 500
+
+### GET `/user/stats`
+
+Returns statistical information about the user.
+
+* Requires a valid JWT: `true`
+* Returns:
+ - 200 JSON object
+  ```json
+  {
+    "rawStorageUsed": 123,
+    "numRegReads": 123,
+    "numRegWrites": 123,
+    "numUploads": 123,
+    "numDownloads": 123,
+    "totalUploadsSize": 123,
+    "totalDownloadsSize": 123,
+    "bwUploads": 123,
+    "bwDownloads":  123,
+    "bwRegReads": 123,
+    "bwRegWrites":  123
+  }
+  ```
+ - 401
+ - 404
+ - 500
 
 ### GET `/user/uploads`
 
@@ -98,10 +151,21 @@ Returns a list of all skylinks uploaded by the user.
 
 * Requires valid JWT: `true`
 * Returns:
-    - 200 JSON Array (TBD)
-    - 401 (missing JWT)
-    - 424 (when there is no such user, and we fail to create it)
-    - 500 (on any other error)
+  - 200 JSON Array (TBD)
+  - 401 (missing JWT)
+  - 424 (when there is no such user, and we fail to create it)
+  - 500 (on any other error)
+
+### DELETE `/user/uploads/:skylink`
+
+Deletes all uploads of this skylink made by the current user.
+
+* Requires a valid JWT: `true`
+* Returns:
+ - 204
+ - 400 (invalid skylink)
+ - 401
+ - 500
 
 ### GET `/user/downloads`
 
@@ -109,10 +173,55 @@ Returns a list of all skylinks downloads by the user.
 
 * Requires valid JWT: `true`
 * Returns:
-    - 200 JSON Array (TBD)
-    - 401 (missing JWT)
-    - 424 (when there is no such user, and we fail to create it)
-    - 500 (on any other error)
+  - 200 JSON Array (TBD)
+  - 401 (missing JWT)
+  - 424 (when there is no such user, and we fail to create it)
+  - 500 (on any other error)
+
+### GET `/user/confirm`
+
+Validates the given `token` against the database and marks the respective email 
+address as confirmed.
+
+* Requires a valid JWT token: `false`
+* GET params: `token`
+* Returns:
+- 200
+- 400
+- 500
+
+### POST `/user/reconfirm`
+
+Requests another confirmation email sent to the account's email address.
+
+* Requires a valid JWT token: `true`
+* Returns:
+ - 204
+ - 401
+ - 500
+
+### GET `/user/recover`
+
+Requests a recovery token to be sent to given email. The email needs to be 
+confirmed for the action to be performed.
+
+* Requires a valid JWT token: `false`
+* GET params: `email`
+* Returns:
+- 204
+- 400
+- 500
+
+### POST `/user/recover`
+
+Changes the user's password without them being logged in.
+
+* Requires a valid JWT token: `false`
+* POST params: `token`, `password`, `confirmPassword`
+* Returns:
+- 200
+- 400
+- 500
 
 ## Reports endpoints
 
@@ -120,13 +229,12 @@ Returns a list of all skylinks downloads by the user.
 
 * Requires valid JWT: `true`
 * GET params:
-    - skylink: just the skylink hash, no path, no protocol
-* POST params: none
+  - skylink: just the skylink hash, no path, no protocol
 * Returns:
-    - 204
-    - 400
-    - 401 (missing JWT)
-    - 500
+  - 204
+  - 400
+  - 401 (missing JWT)
+  - 500
 
 ### POST `/track/download/:skylink`
 
@@ -135,10 +243,10 @@ Returns a list of all skylinks downloads by the user.
     - skylink: just the skylink hash, no path, no protocol
 * POST params: none
 * Returns:
-    - 204
-    - 400
-    - 401 (missing JWT)
-    - 500
+  - 204
+  - 400
+  - 401 (missing JWT)
+  - 500
 
 ### POST `/track/registry/read`
 
@@ -146,10 +254,10 @@ Returns a list of all skylinks downloads by the user.
 * GET params: none
 * POST params: none
 * Returns:
-    - 204
-    - 400
-    - 401 (missing JWT)
-    - 500
+  - 204
+  - 400
+  - 401 (missing JWT)
+  - 500
 
 ### POST `/track/registry/write`
 
@@ -157,7 +265,7 @@ Returns a list of all skylinks downloads by the user.
 * GET params: none
 * POST params: none
 * Returns:
-    - 204
-    - 400
-    - 401 (missing JWT)
-    - 500
+  - 204
+  - 400
+  - 401 (missing JWT)
+  - 500
