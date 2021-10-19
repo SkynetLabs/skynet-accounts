@@ -15,6 +15,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 	"go.mongodb.org/mongo-driver/bson"
@@ -317,6 +318,11 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	if err != nil || r.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
 	}
+	// Make sure the use doesn't exist anymore.
+	_, err = at.DB.UserByEmail(at.Ctx, u.Email, false)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
+	}
 	// Create the user again.
 	u, c, err = test.CreateUserAndLogin(at, t.Name())
 	if err != nil {
@@ -351,6 +357,11 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	r, _, err = at.Delete("/user", nil)
 	if err != nil || r.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
+	}
+	// Make sure the use doesn't exist anymore.
+	_, err = at.DB.UserByEmail(at.Ctx, u.Email, false)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
 	}
 	// Make sure that the data is gone.
 	stats, err := at.DB.UserStats(at.Ctx, *u.User)
