@@ -101,6 +101,17 @@ Conflict.
   - 409 Conflict (StripeID is already set)
   - 500
 
+### DELETE `/user`
+
+Deletes the user and all of their data.
+
+* Requires valid JWT: `true`
+* Returns:
+  - 204
+  - 401 (missing JWT)
+  - 404 (when there is no such user)
+  - 500 (on any other error)
+
 ### GET `/user/limits`
 
 Returns the portal limits of the current user. Returns the values for 

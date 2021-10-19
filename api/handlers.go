@@ -266,6 +266,35 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 	api.WriteJSON(w, us)
 }
 
+// userDELETE deletes the user and all of their data.
+func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	ctx := req.Context()
+	sub, _, _, err := jwt.TokenFromContext(ctx)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(ctx, sub, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, database.ErrUserNotFound, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	err = api.staticDB.UserDelete(ctx, u)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, database.ErrUserNotFound, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	email := req.PostFormValue("email")

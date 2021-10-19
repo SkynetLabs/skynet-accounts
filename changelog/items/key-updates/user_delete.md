@@ -1,0 +1,1 @@
+- Add an endpoint where a user can delete their own account. 
