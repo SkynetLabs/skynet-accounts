@@ -310,7 +310,18 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Failed to create a user and log in:", err)
 	}
-
+	// Delete the user.
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+	r, _, err := at.Delete("/user", nil)
+	if err != nil || r.StatusCode != http.StatusNoContent {
+		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
+	}
+	// Create the user again.
+	u, c, err = test.CreateUserAndLogin(at, t.Name())
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
 	// Create some data for this user.
 	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128)
 	if err != nil {
@@ -330,7 +341,7 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try to delete the user without a cookie.
 	at.Cookie = nil
-	r, _, _ := at.Delete("/user", nil)
+	r, _, _ = at.Delete("/user", nil)
 	if r.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("Expected %d, got %d", http.StatusUnauthorized, r.StatusCode)
 	}

@@ -276,7 +276,7 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 	}
 	u, err := api.staticDB.UserBySub(ctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, database.ErrUserNotFound, http.StatusNotFound)
+		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -285,7 +285,7 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 	}
 	err = api.staticDB.UserDelete(ctx, u)
 	if errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, database.ErrUserNotFound, http.StatusNotFound)
+		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
