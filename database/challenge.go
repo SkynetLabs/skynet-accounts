@@ -21,15 +21,23 @@ const (
 	// challenge
 	ChallengeSize = 32
 	// ChallengeTypeLogin is the type of the login challenge.
-	ChallengeTypeLogin = "login"
+	ChallengeTypeLogin = "skynet-portal-login"
 	// ChallengeTypeRegister is the type of the registration challenge.
-	ChallengeTypeRegister = "register"
+	ChallengeTypeRegister = "skynet-portal-register"
 
 	// PubKeyLen defines the length of the public key in bytes.
 	PubKeyLen = 32
 
 	// challengeTTL defines how long we accept responses to this challenge.
-	challengeTTL = 30 * time.Second
+	challengeTTL = 10 * time.Minute
+)
+
+var (
+	// PortalName is the name this portal uses to announce itself to the world.
+	// It's possible that users access it via other names or via more specific
+	// names, e.g. eu-ger-1.siasky.net instead of siasky.net. This name does not
+	// have a protocol prefix.
+	PortalName = "siasky.net"
 )
 
 type (
@@ -81,6 +89,8 @@ func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, typ string) (*Cha
 // Challenge format: challenge + type + recipient
 func (db *DB) ValidateChallengeResponse(ctx context.Context, chr *ChallengeResponse) (PubKey, error) {
 	resp := chr.Response
+	// Get the challenge type which sits right after the challenge in the
+	// response.
 	var typ string
 	if strings.HasPrefix(string(resp[ChallengeSize:]), ChallengeTypeLogin) {
 		typ = ChallengeTypeLogin
@@ -89,6 +99,13 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr *ChallengeRespo
 	} else {
 		return nil, errors.New("invalid challenge type")
 	}
+	// Now that we know the challenge type, we can get the recipient as well.
+	recipientOffset := ChallengeSize + len([]byte(typ))
+	recipient := string(resp[recipientOffset:])
+	if !strings.Contains(recipient, PortalName) {
+		return nil, errors.New("invalid recipient " + recipient)
+	}
+	// Fetch the challenge from the DB.
 	filter := bson.M{
 		"challenge": hex.EncodeToString(resp[:ChallengeSize]),
 		"type":      typ,
@@ -105,6 +122,9 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr *ChallengeRespo
 	if !verifySignature(ch.PubKey, resp, chr.Signature) {
 		return nil, errors.New("invalid signature")
 	}
+	// Now that the challenge has been used, we delete it from the DB. If this
+	// errors out we'll log the error but we will still return success to the
+	// caller.
 	_, err = db.staticChallenges.DeleteOne(ctx, bson.M{"_id": ch.ID})
 	if err != nil {
 		db.staticLogger.Debugln("Failed to delete challenge from DB:", err)

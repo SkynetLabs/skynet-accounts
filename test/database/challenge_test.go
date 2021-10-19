@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
-	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/crypto"
@@ -38,7 +37,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 	}
 
 	// Try to solve it with the wrong type.
-	response := append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(jwt.JWTPortalName)...)...)
+	response := append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(database.PortalName)...)...)
 	chr := &database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(sk[:], response),
@@ -49,7 +48,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 	}
 
 	// Try to solve it with an invalid type.
-	response = append(chBytes, append([]byte("invalid_type"), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte("invalid_type"), []byte(database.PortalName)...)...)
 	chr = &database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(sk[:], response),
@@ -60,7 +59,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 	}
 
 	// Try to solve it with the wrong secret key.
-	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	chr = &database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(fastrand.Bytes(64), response),
@@ -70,9 +69,20 @@ func TestValidateChallengeResponse(t *testing.T) {
 		t.Fatalf("Expected error 'invalid signature', got '%v'.", err)
 	}
 
+	// Try to solve it with a bad recipient.
+	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte("bad-recipient.net")...)...)
+	chr = &database.ChallengeResponse{
+		Response:  response,
+		Signature: ed25519.Sign(fastrand.Bytes(64), response),
+	}
+	_, err = db.ValidateChallengeResponse(ctx, chr)
+	if err == nil || !strings.Contains(err.Error(), "invalid recipient") {
+		t.Fatalf("Expected error 'invalid recipient', got '%v'.", err)
+	}
+
 	// Try to solve the wrong challenge.
 	wrongBytes := fastrand.Bytes(database.ChallengeSize)
-	response = append(wrongBytes, append([]byte(database.ChallengeTypeRegister), []byte(jwt.JWTPortalName)...)...)
+	response = append(wrongBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	chr = &database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(sk[:], response),
@@ -83,7 +93,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 	}
 
 	// Solve the challenge.
-	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	chr = &database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(sk[:], response),

@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
-	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/crypto"
@@ -53,7 +52,7 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to solve it with the wrong type.
-	response := append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(jwt.JWTPortalName)...)...)
+	response := append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
@@ -64,7 +63,7 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to solve it with an invalid type.
-	response = append(chBytes, append([]byte("invalid_type"), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte("invalid_type"), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
@@ -75,7 +74,7 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to solve it with the wrong secret key.
-	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(fastrand.Bytes(64), response)))
@@ -87,7 +86,7 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 
 	// Try to solve the wrong challenge.
 	wrongBytes := fastrand.Bytes(database.ChallengeSize)
-	response = append(wrongBytes, append([]byte(database.ChallengeTypeRegister), []byte(jwt.JWTPortalName)...)...)
+	response = append(wrongBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(fastrand.Bytes(64), response)))
@@ -98,7 +97,7 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Solve the challenge.
-	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
@@ -154,7 +153,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Invalid challenge:", err)
 	}
-	response := append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(jwt.JWTPortalName)...)...)
+	response := append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
@@ -187,7 +186,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to solve it with the wrong type.
-	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
@@ -198,7 +197,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to solve it with an invalid type.
-	response = append(chBytes, append([]byte("invalid_type"), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte("invalid_type"), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
@@ -209,7 +208,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to solve it with the wrong secret key.
-	response = append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(fastrand.Bytes(64), response)))
@@ -221,7 +220,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 
 	// Try to solve the wrong challenge.
 	wrongBytes := fastrand.Bytes(database.ChallengeSize)
-	response = append(wrongBytes, append([]byte(database.ChallengeTypeLogin), []byte(jwt.JWTPortalName)...)...)
+	response = append(wrongBytes, append([]byte(database.ChallengeTypeLogin), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(fastrand.Bytes(64), response)))
@@ -232,7 +231,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Solve the challenge.
-	response = append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(jwt.JWTPortalName)...)...)
+	response = append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(database.PortalName)...)...)
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))

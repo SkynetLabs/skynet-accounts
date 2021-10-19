@@ -140,8 +140,8 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to parse portal name"))
 	}
-	email.PortalAddress = portalAddr
 	jwt.JWTPortalName = portalAddr
+	email.PortalAddress = portalAddr
 	email.ServerLockID = os.Getenv(envServerDomain)
 	if email.ServerLockID == "" {
 		email.ServerLockID = jwt.JWTPortalName
@@ -149,6 +149,7 @@ func main() {
 			is set to the default '%s' value. That is OK only if this server is running on its own 
 			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
 	}
+	database.PortalName = strings.TrimPrefix(strings.TrimPrefix(portalAddr, "https://"), "http://")
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
