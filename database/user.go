@@ -49,8 +49,6 @@ const (
 var (
 	// True is a helper for when we need to pass a *bool to MongoDB.
 	True = true
-	// False is a helper for when we need to pass a *bool to MongoDB.
-	False = false
 	// UserLimits defines the speed limits for each tier.
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
