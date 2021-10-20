@@ -153,22 +153,9 @@ type (
 	}
 )
 
-// UserByEmail returns the user with the given username. If `create` is `true`
-// it will create the user if it doesn't exist.
-func (db *DB) UserByEmail(ctx context.Context, email string, create bool) (*User, error) {
+// UserByEmail returns the user with the given username.
+func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "email", email)
-	if create && errors.Contains(err, ErrUserNotFound) {
-		u, err := db.UserCreate(ctx, email, "", "", TierFree)
-		// If we're successful or hit any error, other than a duplicate key we
-		// want to just return. Hitting a duplicate key error means we ran into
-		// a race condition and we can easily recover from that.
-		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-			return u, err
-		}
-		// Recover from the race condition by fetching the existing user from
-		// the DB.
-		users, err = db.managedUsersByField(ctx, "email", email)
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -317,10 +304,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		return nil, ErrUserAlreadyExists
 	}
 	if sub == "" {
-		sub, err = lib.GenerateUUID()
-		if err != nil {
-			return nil, errors.AddContext(err, "failed to generate user sub")
-		}
+		return nil, errors.New("empty sub is not allowed")
 	}
 	// Check for an existing user with this sub.
 	users, err = db.managedUsersBySub(ctx, sub)

@@ -86,7 +86,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 // loginPOSTCredentials is a helper that handles logins with credentials.
 func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
 	// Fetch the user with that email, if they exist.
-	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
+	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if err != nil {
 		api.staticLogger.Tracef("Error fetching a user with email '%s': %+v\n", email, err)
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -282,7 +282,17 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserCreate(req.Context(), email, pw, "", database.TierFree)
+	// We are generating the sub here and not in UserCreate because there are
+	// many reasons to call UserCreate but this handler is the only place (so
+	// far) that should be allowed to call it without a sub. The reason for that
+	// is that the users created here are the only users we do not need to link
+	// to CockroachDB via their subs.
+	sub, err := lib.GenerateUUID()
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to generate user sub"), http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserCreate(req.Context(), email, pw, sub, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -372,7 +382,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		// Strip any names from the email and leave just the address.
 		payload.Email = a.Address
 		// Check if another user already has this email address.
-		eu, err := api.staticDB.UserByEmail(req.Context(), payload.Email, false)
+		eu, err := api.staticDB.UserByEmail(req.Context(), payload.Email)
 		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
 			api.WriteError(w, err, http.StatusInternalServerError)
 			return
@@ -550,7 +560,7 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, errors.New("missing required parameter 'email'"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
+	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if errors.Contains(err, database.ErrUserNotFound) {
 		// Someone tried to recover an account with an email that's not in our
 		// database. It's possible that this is a user who forgot which email
