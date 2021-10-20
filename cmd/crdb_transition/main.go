@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/NebulousLabs/skynet-accounts/database"
@@ -116,14 +117,49 @@ func listAllUsersCockroachDB(creds database.DBCredentials) map[string]cru {
 	return users
 }
 
-func cleanMongoDB(creds database.DBCredentials) {
-	ctx := context.Background()
-	mgr, err := rawConnMongoDB(ctx, creds)
-	if err != nil {
-		panic(err)
-	}
-	deleteUserDataByID(ctx, mgr, "605325e9afc2f60129d1d109")
-	deleteUserDataByID(ctx, mgr, "605334c89dfb881b847bf289")
+/*
+Emails with more than one user:
+db.getCollection('users').aggregate([
+    {"$group" : { "_id": "$email", "count": { "$sum": 1 } } },
+    {"$match": {"_id" :{ "$ne" : null } , "count" : {"$gt": 1} } },
+    {"$sort": {"count" : -1} },
+    {"$project": {"email" : "$_id", "_id" : 0} }
+]);
+
+*/
+func cleanMongoDB(ctx context.Context, mgr *mongo.Database) {
+	// group := bson.D{{"$group", bson.D{
+	// 	{"_id", "$email"},
+	// 	{"count", bson.D{{"$sum", 1}}},
+	// }}}
+	// match := bson.D{{"$match", bson.D{
+	// 	{"_id", bson.D{{"$ne", primitive.Null{}}}},
+	// 	{"count", bson.D{{"$gt", 1}}},
+	// }}}
+	// sort := bson.D{{"$sort", bson.D{{"$created_at", -1}}}}
+	// project := bson.D{{"$project", bson.D{
+	// 	{"email", "$_id"},
+	// 	{"_id", 0},
+	// }}}
+	// pipe := mongo.Pipeline{group, match, sort, project}
+	// fmt.Println(pipe)
+	// c, err := mgr.Collection("users").Aggregate(ctx, pipe)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// users := make([]database.User, c.RemainingBatchLength())
+	// err = c.All(ctx, &users)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// fmt.Println(users)
+
+	// TODO collect all emails with multiple accounts
+	// TODO foreach grab the accounts and move all the data under the newest one or just delete the older ones
+	// TODO maybe do it locally because it will be faster and easier
+
+	// deleteUserDataByID(ctx, mgr, "605325e9afc2f60129d1d109")
+	// deleteUserDataByID(ctx, mgr, "605334c89dfb881b847bf289")
 }
 
 func deleteUserDataByID(ctx context.Context, db *mongo.Database, id string) {
@@ -136,9 +172,6 @@ func deleteUserDataByID(ctx context.Context, db *mongo.Database, id string) {
 		panic(err)
 	}
 	filter = bson.M{"user_id": uid}
-	if _, err = db.Collection("skylinks").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
 	if _, err = db.Collection("uploads").DeleteOne(ctx, filter); err != nil {
 		panic(err)
 	}
@@ -161,8 +194,16 @@ func updateUsersMongoDB(users map[string]cru, creds database.DBCredentials) {
 	}
 	for sub, ucr := range users {
 		u, err := mg.UserBySub(ctx, sub, false)
+		if errors.Contains(err, database.ErrUserNotFound) {
+			u, err = mg.UserCreate(ctx, ucr.Email, "", ucr.Sub, database.TierFree)
+		}
 		if err != nil {
-			panic(err)
+			fmt.Println("err:", err)
+			u, err := json.Marshal(ucr)
+			if err == nil {
+				fmt.Println(string(u))
+			}
+			continue
 		}
 		u.Email = ucr.Email
 		u.PasswordHash = ucr.PassHash
@@ -171,6 +212,7 @@ func updateUsersMongoDB(users map[string]cru, creds database.DBCredentials) {
 		if err != nil {
 			panic(err)
 		}
+		fmt.Print(".")
 	}
 }
 
@@ -192,12 +234,38 @@ func dbCredsCockroachDB() database.DBCredentials {
 	}
 }
 
+func mongoEmailsNotUnique(ctx context.Context, db *mongo.Database) error {
+	_, err := db.Collection("users").Indexes().DropOne(ctx, "email_unique")
+	if err == nil || strings.Contains(err.Error(), "index not found with name") {
+		return nil
+	}
+	return err
+}
+
+func mongoEmailsUnique(ctx context.Context, db *mongo.Database) error {
+	im := mongo.IndexModel{
+		Keys:    bson.D{{"email", 1}},
+		Options: options.Index().SetName("email_unique").SetUnique(true),
+	}
+	_, err := db.Collection("users").Indexes().CreateOne(ctx, im)
+	return err
+}
+
 func main() {
 	_ = godotenv.Load()
+	ctx := context.Background()
 
 	mongoCreds := dbCredsMongoDB()
-	cleanMongoDB(mongoCreds)
-	println("MongoDB cleaned.")
+	mgr, err := rawConnMongoDB(ctx, mongoCreds)
+	if err != nil {
+		panic(err)
+	}
+
+	// Make sure email addresses are not unique.
+	err = mongoEmailsNotUnique(ctx, mgr)
+	if err != nil {
+		panic(err)
+	}
 
 	// Get all users from CockroachDB:
 	users := listAllUsersCockroachDB(dbCredsCockroachDB())
@@ -206,4 +274,14 @@ func main() {
 	// Update all users:
 	updateUsersMongoDB(users, mongoCreds)
 	println("Moved data from CockroachDB to MongoDB.")
+
+	// // Clean all duplicated emails.
+	// cleanMongoDB(ctx, mgr)
+	// println("MongoDB cleaned.")
+
+	// // Make email addresses unique.
+	// err = mongoEmailsUnique(ctx, mgr)
+	// if err != nil {
+	// 	panic(err)
+	// }
 }
