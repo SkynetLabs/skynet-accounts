@@ -117,49 +117,51 @@ func listAllUsersCockroachDB(creds database.DBCredentials) map[string]cru {
 	return users
 }
 
-/*
-Emails with more than one user:
-db.getCollection('users').aggregate([
-    {"$group" : { "_id": "$email", "count": { "$sum": 1 } } },
-    {"$match": {"_id" :{ "$ne" : null } , "count" : {"$gt": 1} } },
-    {"$sort": {"count" : -1} },
-    {"$project": {"email" : "$_id", "_id" : 0} }
-]);
-
-*/
-func cleanMongoDB(ctx context.Context, mgr *mongo.Database) {
-	// group := bson.D{{"$group", bson.D{
-	// 	{"_id", "$email"},
-	// 	{"count", bson.D{{"$sum", 1}}},
-	// }}}
-	// match := bson.D{{"$match", bson.D{
-	// 	{"_id", bson.D{{"$ne", primitive.Null{}}}},
-	// 	{"count", bson.D{{"$gt", 1}}},
-	// }}}
-	// sort := bson.D{{"$sort", bson.D{{"$created_at", -1}}}}
-	// project := bson.D{{"$project", bson.D{
-	// 	{"email", "$_id"},
-	// 	{"_id", 0},
-	// }}}
-	// pipe := mongo.Pipeline{group, match, sort, project}
-	// fmt.Println(pipe)
-	// c, err := mgr.Collection("users").Aggregate(ctx, pipe)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// users := make([]database.User, c.RemainingBatchLength())
-	// err = c.All(ctx, &users)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Println(users)
-
-	// TODO collect all emails with multiple accounts
-	// TODO foreach grab the accounts and move all the data under the newest one or just delete the older ones
-	// TODO maybe do it locally because it will be faster and easier
-
+// cleanMongoDB removes all known accounts that re-use an email address. We do
+// not expect to have other accounts like this but we need to check. That's why
+// the function returns a list of duplicate users
+func cleanMongoDB(ctx context.Context, mgr *mongo.Database) ([]string, error) {
+	// // Remove known duplicates that are not in use:
 	// deleteUserDataByID(ctx, mgr, "605325e9afc2f60129d1d109")
 	// deleteUserDataByID(ctx, mgr, "605334c89dfb881b847bf289")
+
+	/*
+	   Emails with more than one user:
+	   db.getCollection('users').aggregate([
+	       {"$group" : { "_id": "$email", "count": { "$sum": 1 } } },
+	       {"$match": {"_id" :{ "$ne" : null } , "count" : {"$gt": 1} } },
+	       {"$sort": {"count" : -1} },
+	       {"$project": {"email" : "$_id", "_id" : 0} }
+	   ]);
+	*/
+	group := bson.D{{"$group", bson.D{
+		{"_id", "$email"},
+		{"count", bson.D{{"$sum", 1}}},
+	}}}
+	match := bson.D{{"$match", bson.D{
+		{"_id", bson.D{{"$ne", primitive.Null{}}}},
+		{"count", bson.D{{"$gt", 1}}},
+	}}}
+	sort := bson.D{{"$sort", bson.D{{"created_at", -1}}}}
+	project := bson.D{{"$project", bson.D{
+		{"email", "$_id"},
+		{"_id", 0},
+	}}}
+	pipe := mongo.Pipeline{group, match, sort, project}
+	c, err := mgr.Collection("users").Aggregate(ctx, pipe)
+	if err != nil {
+		return nil, err
+	}
+	var emails []string
+	var dup struct{ Email string }
+	for c.Next(ctx) {
+		err = c.Decode(&dup)
+		if err != nil {
+			return nil, err
+		}
+		emails = append(emails, dup.Email)
+	}
+	return emails, nil
 }
 
 func deleteUserDataByID(ctx context.Context, db *mongo.Database, id string) {
@@ -275,13 +277,21 @@ func main() {
 	updateUsersMongoDB(users, mongoCreds)
 	println("Moved data from CockroachDB to MongoDB.")
 
-	// // Clean all duplicated emails.
-	// cleanMongoDB(ctx, mgr)
-	// println("MongoDB cleaned.")
+	// Clean all duplicated emails.
+	dups, err := cleanMongoDB(ctx, mgr)
+	if err != nil {
+		panic(err)
+	}
+	if len(dups) > 0 {
+		fmt.Println("Duplicate emails found in MongoDB. Manual intervention required.\nNOT making emails unique.")
+		fmt.Println("Duplicates: '" + strings.Join(dups, "', '") + "'")
+		return
+	}
+	println("MongoDB cleaned.")
 
-	// // Make email addresses unique.
-	// err = mongoEmailsUnique(ctx, mgr)
-	// if err != nil {
-	// 	panic(err)
-	// }
+	// Make email addresses unique.
+	err = mongoEmailsUnique(ctx, mgr)
+	if err != nil {
+		panic(err)
+	}
 }
