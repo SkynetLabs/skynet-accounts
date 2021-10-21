@@ -49,15 +49,15 @@ func CockroachUserByEmail(db *sql.DB, email string) (*CockroachUser, error) {
 	if db == nil {
 		return nil, errors.New("missing cockroachdb connection")
 	}
-	query := `
-	SELECT i.id as sub, traits as email, i.created_at, config as pass_hash
-	FROM identities AS i LEFT JOIN identity_credentials AS ic ON i.id = ic.identity_id
-	WHERE traits @> '{"email":"%s"}';`
 	// Input validation.
 	e, err := mail.ParseAddress(email)
 	if err != nil {
 		return nil, errors.AddContext(err, "invalid email address")
 	}
+	query := `
+		SELECT i.id as sub, traits as email, i.created_at, config as pass_hash
+		FROM identities AS i LEFT JOIN identity_credentials AS ic ON i.id = ic.identity_id
+		WHERE traits @> '{"email":"%s"}';`
 	row := db.QueryRow(fmt.Sprintf(query, e.Address))
 	if row.Err() != nil {
 		return nil, row.Err()

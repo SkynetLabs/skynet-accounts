@@ -19,7 +19,6 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type (
@@ -105,24 +104,22 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 			api.WriteError(w, database.ErrUserNotFound, http.StatusUnauthorized)
 			return
 		}
-		// We need to generate an ID for the user because UserSave won't be able
-		// to create one for us.
-		var id primitive.ObjectID
-		copy(id[:], fastrand.Bytes(12))
 		u = &database.User{
-			ID:           id,
 			Email:        cru.Email,
 			PasswordHash: cru.PassHash,
 			Sub:          cru.Sub,
 			CreatedAt:    cru.CreatedAt,
 		}
+		// We need to generate an ID for the user because UserSave won't be able
+		// to create one for us.
+		copy(u.ID[:], fastrand.Bytes(len(u.ID)))
 		err = api.staticDB.UserSave(req.Context(), u)
 		if err != nil {
 			api.staticLogger.Warnf("Failed to move user from CockroachDB: %s", err)
 			api.WriteError(w, database.ErrUserNotFound, http.StatusUnauthorized)
 			return
 		}
-		api.staticLogger.Debugf("User with email %s moved from CockroachDB.", u.Email)
+		api.staticLogger.Debugf("User with email '%s' moved from CockroachDB.", u.Email)
 	}
 	// Check if we somehow have an empty password hash and try to fill that.
 	if u.PasswordHash == "" {
