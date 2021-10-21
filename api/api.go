@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/NebulousLabs/skynet-accounts/build"
-	"github.com/NebulousLabs/skynet-accounts/database"
-	"github.com/NebulousLabs/skynet-accounts/email"
-	"github.com/NebulousLabs/skynet-accounts/metafetcher"
+	"github.com/SkynetLabs/skynet-accounts/build"
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/email"
+	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"
@@ -18,11 +18,13 @@ import (
 type (
 	// API is the central struct which gives us access to all subsystems.
 	API struct {
-		staticDB     *database.DB
-		staticMF     *metafetcher.MetaFetcher
-		staticRouter *httprouter.Router
-		staticLogger *logrus.Logger
-		staticMailer *email.Mailer
+		staticDB            *database.DB
+		staticMF            *metafetcher.MetaFetcher
+		staticRouter        *httprouter.Router
+		staticLogger        *logrus.Logger
+		staticMailer        *email.Mailer
+		staticTierLimits    []TierLimitsPublic
+		staticUserTierCache *userTierCache
 	}
 
 	// errorWrap is a helper type for converting an `error` struct to JSON.
@@ -42,12 +44,27 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 	router := httprouter.New()
 	router.RedirectTrailingSlash = true
 
+	tierLimits := make([]TierLimitsPublic, len(database.UserLimits))
+	for i, t := range database.UserLimits {
+		tierLimits[i] = TierLimitsPublic{
+			TierName:          t.TierName,
+			UploadBandwidth:   t.UploadBandwidth * 8,   // convert from bytes
+			DownloadBandwidth: t.DownloadBandwidth * 8, // convert from bytes
+			MaxUploadSize:     t.MaxUploadSize,
+			MaxNumberUploads:  t.MaxNumberUploads,
+			RegistryDelay:     t.RegistryDelay,
+			Storage:           t.Storage,
+		}
+	}
+
 	api := &API{
-		staticDB:     db,
-		staticMF:     mf,
-		staticRouter: router,
-		staticLogger: logger,
-		staticMailer: mailer,
+		staticDB:            db,
+		staticMF:            mf,
+		staticRouter:        router,
+		staticLogger:        logger,
+		staticMailer:        mailer,
+		staticTierLimits:    tierLimits,
+		staticUserTierCache: newUserTierCache(),
 	}
 	api.buildHTTPRoutes()
 	return api, nil

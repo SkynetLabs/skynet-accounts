@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/build"
+	"github.com/SkynetLabs/skynet-accounts/build"
 
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"

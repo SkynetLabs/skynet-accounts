@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq" // Import postgres driver.
 	"github.com/sirupsen/logrus"

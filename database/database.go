@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/NebulousLabs/skynet-accounts/lib"
+	"github.com/SkynetLabs/skynet-accounts/lib"
 
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -177,10 +177,6 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Keys:    bson.D{{"sub", 1}},
 				Options: options.Index().SetName("sub_unique").SetUnique(true),
 			},
-			// {
-			// 	Keys:    bson.D{{"email", 1}},
-			// 	Options: options.Index().SetName("email_unique").SetUnique(true),
-			// },
 		},
 		dbSkylinksCollection: {
 			{
