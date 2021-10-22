@@ -1,0 +1,1 @@
+- Allow updating user's pubKey via the PUT /users endpoint. 
