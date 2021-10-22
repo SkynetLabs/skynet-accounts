@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -41,7 +42,7 @@ func TestHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer at.Close()
+	defer func() { _ = at.Close() }()
 
 	// Specify subtests to run
 	tests := []subtest{
@@ -53,6 +54,8 @@ func TestHandlers(t *testing.T) {
 		{name: "LoginLogout", test: testHandlerLoginPOST},
 		// PUT /user
 		{name: "UserEdit", test: testUserPUT},
+		// PUT /user
+		{name: "UserEditPubKey", test: testUserPUTPubKey},
 		// GET /user/limits
 		{name: "UserLimits", test: testUserLimits},
 		// DELETE /user/uploads/:skylink, GET /user/uploads
@@ -103,7 +106,7 @@ func testHandlerHealthGET(t *testing.T, at *test.AccountsTester) {
 func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	// Use the test's name as an email-compatible identifier.
 	name := strings.ReplaceAll(t.Name(), "/", "_")
-	email := name + "@siasky.net"
+	emailAddr := name + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	// Try to create a user with a missing email.
 	params := url.Values{}
@@ -124,18 +127,18 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try to create a user with an empty password.
 	params = url.Values{}
-	params.Add("email", email)
+	params.Add("email", emailAddr)
 	_, _, err = at.Post("/user", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
 	// Create a user.
-	_, _, err = at.CreateUserPost(email, password)
+	_, _, err = at.CreateUserPost(emailAddr, password)
 	if err != nil {
 		t.Fatal("User creation failed. Error ", err.Error())
 	}
 	// Make sure the user exists in the DB.
-	u, err := at.DB.UserByEmail(at.Ctx, email, false)
+	u, err := at.DB.UserByEmail(at.Ctx, emailAddr, false)
 	if err != nil {
 		t.Fatal("Error while fetching the user from the DB. Error ", err.Error())
 	}
@@ -149,14 +152,14 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	}(u)
 	// Log in with that user in order to make sure it exists.
 	params = url.Values{}
-	params.Add("email", email)
+	params.Add("email", emailAddr)
 	params.Add("password", password)
 	_, _, err = at.Post("/login", nil, params)
 	if err != nil {
 		t.Fatal("Login failed. Error ", err.Error())
 	}
 	// try to create a user with an already taken email
-	_, _, err = at.CreateUserPost(email, "password")
+	_, _, err = at.CreateUserPost(emailAddr, "password")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
@@ -164,17 +167,17 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 
 // testHandlerLoginPOST tests the /login endpoint.
 func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
-	email := strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
+	emailAddr := strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	params := url.Values{}
-	params.Add("email", email)
+	params.Add("email", emailAddr)
 	params.Add("password", password)
 	// Try logging in with a non-existent user.
 	_, _, err := at.Post("/login", nil, params)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
-	u, err := test.CreateUser(at, email, password)
+	u, err := test.CreateUser(at, emailAddr, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +200,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	at.Cookie = c
 	defer func() { at.Cookie = nil }()
 	_, b, err := at.Get("/user", nil)
-	if err != nil || !strings.Contains(string(b), email) {
+	if err != nil || !strings.Contains(string(b), emailAddr) {
 		t.Fatal("Expected to be able to fetch the user with this cookie.")
 	}
 	// test /logout while we're here.
@@ -225,7 +228,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try logging in with a bad password.
 	badPassParams := url.Values{}
-	badPassParams.Add("email", email)
+	badPassParams.Add("email", emailAddr)
 	badPassParams.Add("password", "bad password")
 	_, _, err = at.Post("/login", nil, badPassParams)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
@@ -236,7 +239,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 // testUserPUT tests the PUT /user endpoint.
 func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	name := strings.ReplaceAll(t.Name(), "/", "_")
-	u, c, err := test.CreateUserAndLogin(at, t.Name())
+	u, c, err := test.CreateUserAndLogin(at, name)
 	if err != nil {
 		t.Fatal("Failed to create a user and log in:", err)
 	}
@@ -258,7 +261,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	at.Cookie = c
 	// Update the user's Stripe ID.
 	stripeID := name + "_stripe_id"
-	_, b, err := at.UserPUT("", stripeID)
+	_, b, err := at.UserPUT("", "", stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,38 +274,110 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected the user to have StripeID %s, got %s", stripeID, u2.StripeID)
 	}
 	// Try to update the StripeID again. Expect this to fail.
-	r, _, err := at.UserPUT("", stripeID)
+	r, _, err := at.UserPUT("", "", stripeID)
 	if err == nil || !strings.Contains(err.Error(), "409 Conflict") || r.StatusCode != http.StatusConflict {
 		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d", err, r.StatusCode)
 	}
 
 	// Update the user's email.
-	email := name + "_new@siasky.net"
-	_, _, err = at.UserPUT(email, "")
+	emailAddr := name + "_new@siasky.net"
+	_, _, err = at.UserPUT(emailAddr, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Fetch the user from the DB because we want to be sure that their email
 	// is marked as unconfirmed which is not reflected in the JSON
 	// representation of the object.
-	u3, err := at.DB.UserByEmail(at.Ctx, email, false)
+	u3, err := at.DB.UserByEmail(at.Ctx, emailAddr, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u3.Email != email {
-		t.Fatalf("Expected the user to have email %s, got %s", email, u3.Email)
+	if u3.Email != emailAddr {
+		t.Fatalf("Expected the user to have email %s, got %s", emailAddr, u3.Email)
 	}
 	if u3.EmailConfirmationToken == "" {
 		t.Fatalf("Expected the user to have a non-empty confirmation token, got '%s'", u3.EmailConfirmationToken)
 	}
 	// Expect to find a confirmation email queued for sending.
-	filer := bson.M{"to": email}
+	filer := bson.M{"to": emailAddr}
 	_, msgs, err := at.DB.FindEmails(at.Ctx, filer, &options.FindOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(msgs) != 1 || msgs[0].Subject != "Please verify your email address" {
 		t.Fatal("Expected to find a confirmation email but didn't.")
+	}
+}
+
+// testUserPUTPubKey tests the ability of the PUT /user endpoint to set the
+// user's public key.
+func testUserPUTPubKey(t *testing.T, at *test.AccountsTester) {
+	name := strings.ReplaceAll(t.Name(), "/", "_")
+	u, c, err := test.CreateUserAndLogin(at, name)
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer func() {
+		if err = u.Delete(at.Ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+
+	// Set the user's public key.
+	pk := fastrand.Bytes(database.PubKeyLen)
+	pkHex := hex.EncodeToString(pk)
+	_, _, err = at.UserPUT("", pkHex, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make sure the update took place.
+	pku, err := at.DB.UserByPubKey(at.Ctx, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subtle.ConstantTimeCompare(pku.PubKey, pk) != 1 {
+		t.Fatalf("Expected pubKey '%s', got '%s'", pkHex, hex.EncodeToString(pku.PubKey))
+	}
+	// Set the same key again, making sure we're not going to get "this pubkey
+	// is already in use" error.
+	_, _, err = at.UserPUT("", pkHex, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Update the pubKey to a new one in order to check whether we can change
+	// it once it's set.
+	pk = fastrand.Bytes(database.PubKeyLen)
+	pkHex = hex.EncodeToString(pk)
+	_, _, err = at.UserPUT("", pkHex, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make sure the update took place.
+	pku, err = at.DB.UserByPubKey(at.Ctx, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subtle.ConstantTimeCompare(pku.PubKey, pk) != 1 {
+		t.Fatalf("Expected pubKey '%s', got '%s'", pkHex, hex.EncodeToString(pku.PubKey))
+	}
+	// Try to set the pubKey to one that's already in use by another user.
+	nu, nc, err := test.CreateUserAndLogin(at, name+"_new")
+	if err != nil {
+		t.Fatal("Failed to create a user:", err)
+	}
+	defer func() {
+		if err = nu.Delete(at.Ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+	// Set the cookie to the one that belongs to the new user.
+	at.Cookie = nc
+	r, b, _ := at.UserPUT("", pkHex, "")
+	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "this pubKey already belongs to another user") {
+		t.Fatalf("Expected %d '%s', got %d '%s'",
+			http.StatusBadRequest, "this pubKey already belongs to another user", r.StatusCode, string(b))
 	}
 }
 
@@ -841,7 +916,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	// Change the user's email.
 	newEmail := name + "_new@siasky.net"
-	r, b, err := at.UserPUT(newEmail, "")
+	r, b, err := at.UserPUT(newEmail, "", "")
 	if err != nil {
 		t.Fatalf("Failed to update user. Error: %s. Body: %s", err.Error(), string(b))
 	}

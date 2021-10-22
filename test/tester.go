@@ -169,10 +169,11 @@ func (at *AccountsTester) CreateUserPost(email, password string) (r *http.Respon
 }
 
 // UserPUT is a helper.
-func (at *AccountsTester) UserPUT(email, stipeID string) (*http.Response, []byte, error) {
+func (at *AccountsTester) UserPUT(email, pubKey, stipeID string) (*http.Response, []byte, error) {
 	serviceURL := testPortalAddr + ":" + testPortalPort + "/user"
 	b, err := json.Marshal(map[string]string{
 		"email":            email,
+		"pubKey":           pubKey,
 		"stripeCustomerId": stipeID,
 	})
 	if err != nil {
