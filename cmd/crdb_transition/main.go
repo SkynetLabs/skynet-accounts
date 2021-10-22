@@ -71,7 +71,7 @@ func rawConnMongoDB(ctx context.Context, mongoCreds database.DBCredentials) (*mo
 	return c.Database("skynet"), nil
 }
 
-func listAllUsersCockroachDB(creds database.DBCredentials) map[string]cru {
+func listAllUsersCockroachDB(creds database.DBCredentials, t time.Time) map[string]cru {
 	cr, err := connCockroachDB(creds)
 	if err != nil {
 		panic(err)
@@ -82,8 +82,8 @@ func listAllUsersCockroachDB(creds database.DBCredentials) map[string]cru {
 	SELECT i.id as sub, traits as email, i.created_at, config as pass_hash FROM identities AS i
 	LEFT JOIN identity_credentials AS ic
 	ON i.id = ic.identity_id
-	WHERE 1=1`
-	rows, err := cr.Query(string(query))
+	WHERE ic.updated_at > TIMESTAMP '%s'`
+	rows, err := cr.Query(fmt.Sprintf(query, t.Format("2006-01-02 15:04:05")))
 	if err != nil {
 		panic(err)
 	}
@@ -210,6 +210,7 @@ func updateUsersMongoDB(users map[string]cru, creds database.DBCredentials) {
 		u.Email = ucr.Email
 		u.PasswordHash = ucr.PassHash
 		u.CreatedAt = ucr.CreatedAt
+		u.MigratedAt = time.Now().UTC().Truncate(time.Millisecond)
 		err = mg.UserSave(ctx, u)
 		if err != nil {
 			panic(err)
@@ -253,6 +254,41 @@ func mongoEmailsUnique(ctx context.Context, db *mongo.Database) error {
 	return err
 }
 
+func latestMigrationTS(ctx context.Context, mgr *mongo.Database) (time.Time, error) {
+	coll := mgr.Collection("migration_crdb")
+	// Fetch the time of the start of the latest migration run.
+	filter := bson.M{"timestamp": bson.M{"$gt": 0}}
+	sr := coll.FindOne(ctx, filter)
+	var oldTimestamp time.Time
+	if sr.Err() != nil && sr.Err() != mongo.ErrNoDocuments {
+		return oldTimestamp, sr.Err()
+	}
+	ts := struct {
+		Timestamp time.Time `bson:"timestamp"`
+	}{}
+	// If there is something in the DB - extract it. If not - that's OK, we'll
+	// just return the time zero value.
+	if sr.Err() == nil {
+		err := sr.Decode(&ts)
+		if err != nil {
+			return oldTimestamp, err
+		}
+		oldTimestamp = ts.Timestamp
+	}
+	return oldTimestamp, nil
+}
+
+func setLatestMigrationTS(ctx context.Context, mgr *mongo.Database, t time.Time) error {
+	coll := mgr.Collection("migration_crdb")
+	filter := bson.M{}
+	update := bson.M{"$set": bson.M{"timestamp": t}}
+	opts := &options.UpdateOptions{Upsert: &database.True}
+	// There should be just one field but in case there are more, we want them
+	// all updated.
+	_, err := coll.UpdateMany(ctx, filter, update, opts)
+	return err
+}
+
 func main() {
 	_ = godotenv.Load()
 	ctx := context.Background()
@@ -263,6 +299,13 @@ func main() {
 		panic(err)
 	}
 
+	lmTime, err := latestMigrationTS(ctx, mgr)
+	if err != nil {
+		panic(errors.AddContext(err, "failed to fetch the latest migration timestamp"))
+	}
+	// We'll note the current timestamp, so we can set it as latest migration time after we're done.
+	currentMigrationStart := time.Now().UTC()
+
 	// Make sure email addresses are not unique.
 	err = mongoEmailsNotUnique(ctx, mgr)
 	if err != nil {
@@ -270,7 +313,7 @@ func main() {
 	}
 
 	// Get all users from CockroachDB:
-	users := listAllUsersCockroachDB(dbCredsCockroachDB())
+	users := listAllUsersCockroachDB(dbCredsCockroachDB(), lmTime)
 	println("Got users from cockroach: " + strconv.Itoa(len(users)))
 
 	// Update all users:
@@ -293,5 +336,10 @@ func main() {
 	err = mongoEmailsUnique(ctx, mgr)
 	if err != nil {
 		panic(err)
+	}
+
+	err = setLatestMigrationTS(ctx, mgr, currentMigrationStart)
+	if err != nil {
+		fmt.Println("WARN: We failed to set the latest migration time:", err)
 	}
 }
