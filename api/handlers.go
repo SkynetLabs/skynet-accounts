@@ -98,7 +98,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 
 	// Check for a challenge response in the request.
 	chr, err := challengeResponseFromRequest(req)
-	if err == nil && chr != nil {
+	if err == nil {
 		api.loginPOSTChallengeResponse(w, req, chr)
 		return
 	}
