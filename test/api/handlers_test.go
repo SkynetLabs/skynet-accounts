@@ -359,7 +359,7 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	if err != nil || r.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
 	}
-	// Make sure the use doesn't exist anymore.
+	// Make sure the user doesn't exist anymore.
 	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
