@@ -134,7 +134,7 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("User creation failed. Error ", err.Error())
 	}
 	// Make sure the user exists in the DB.
-	u, err := at.DB.UserByEmail(at.Ctx, email)
+	u, err := at.DB.UserByEmail(at.Ctx, emailAddr)
 	if err != nil {
 		t.Fatal("Error while fetching the user from the DB. Error ", err.Error())
 	}
@@ -284,7 +284,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	// Fetch the user from the DB because we want to be sure that their email
 	// is marked as unconfirmed which is not reflected in the JSON
 	// representation of the object.
-	u3, err := at.DB.UserByEmail(at.Ctx, email)
+	u3, err := at.DB.UserByEmail(at.Ctx, emailAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,9 +318,8 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	if err != nil || r.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
 	}
-	// Make sure the user doesn't exist anymore.
-	_, err = at.DB.
-  (at.Ctx, u.Email, false)
+	// Make sure the use doesn't exist anymore.
+	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
 	}
