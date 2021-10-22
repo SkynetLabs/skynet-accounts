@@ -171,7 +171,7 @@ func TokenFromContext(ctx context.Context) (sub string, email string, token jwt.
 		return
 	}
 	s, ok := t.Get("sub")
-	if !ok {
+	if !ok || s.(string) == "" {
 		err = errors.New("sub field missing")
 		return
 	}
