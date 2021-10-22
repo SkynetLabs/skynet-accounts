@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"net/mail"
 	"strings"
 	"sync"
 	"time"
@@ -125,6 +126,7 @@ type (
 		SubscriptionCancelAtPeriodEnd    bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
 		StripeID                         string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                    bool               `bson:"quota_exceeded" json:"quotaExceeded"`
+		PubKey                           PubKey             `bson:"pub_key" json:"-"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
@@ -199,6 +201,17 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	err = c.Decode(&u)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse value from DB")
+	}
+	return &u, nil
+}
+
+// UserByPubKey returns the user with the given pubkey.
+func (db *DB) UserByPubKey(ctx context.Context, pk PubKey) (*User, error) {
+	sr := db.staticUsers.FindOne(ctx, bson.M{"pub_key": pk})
+	var u User
+	err := sr.Decode(&u)
+	if err != nil {
+		return nil, ErrUserNotFound
 	}
 	return &u, nil
 }
@@ -299,6 +312,8 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 
 // UserCreate creates a new user in the DB.
 //
+// The `sub` field is optional.
+//
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier int) (*User, error) {
@@ -339,12 +354,12 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	if pass != "" {
 		passHash, err = hash.Generate(pass)
 		if err != nil {
-			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
+			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to hash password")
 		}
 	}
 	emailConfToken, err := lib.GenerateUUID()
 	if err != nil {
-		return nil, errors.AddContext(err, "failed to generate an emil confirmation token")
+		return nil, errors.AddContext(err, "failed to generate an email confirmation token")
 	}
 	u := &User{
 		ID:                               primitive.ObjectID{},
@@ -354,6 +369,76 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		PasswordHash:                     string(passHash),
 		Sub:                              sub,
 		Tier:                             tier,
+	}
+	// Insert the user.
+	fields, err := bson.Marshal(u)
+	if err != nil {
+		return nil, err
+	}
+	ir, err := db.staticUsers.InsertOne(ctx, fields)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to Insert")
+	}
+	u.ID = ir.InsertedID.(primitive.ObjectID)
+	return u, nil
+}
+
+// UserCreatePK creates a new user with a pubkey in the DB.
+//
+// The `pass` and `sub` fields are optional.
+//
+// The new user is created as "unconfirmed" and a confirmation email is sent to
+// the address they provided.
+func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk PubKey, tier int) (*User, error) {
+	e, err := mail.ParseAddress(emailAddr)
+	if err != nil {
+		return nil, errors.AddContext(err, "invalid email address")
+	}
+	emailAddr = e.Address
+	// Check for an existing user with this email.
+	users, err := db.managedUsersByField(ctx, "email", emailAddr)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if len(users) > 0 {
+		return nil, ErrUserAlreadyExists
+	}
+	if sub == "" {
+		sub, err = lib.GenerateUUID()
+		if err != nil {
+			return nil, errors.AddContext(err, "failed to generate user sub")
+		}
+	}
+	// Check for an existing user with this sub.
+	users, err = db.managedUsersBySub(ctx, sub)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if len(users) > 0 {
+		return nil, ErrUserAlreadyExists
+	}
+	// Generate a password hash, if a password is provided. A password might not
+	// be provided if the user intends to only use pubkey authentication.
+	var passHash []byte
+	if pass != "" {
+		passHash, err = hash.Generate(pass)
+		if err != nil {
+			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to hash password")
+		}
+	}
+	emailConfToken, err := lib.GenerateUUID()
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to generate an email confirmation token")
+	}
+	u := &User{
+		ID:                               primitive.ObjectID{},
+		Email:                            emailAddr,
+		EmailConfirmationToken:           emailConfToken,
+		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
+		PasswordHash:                     string(passHash),
+		Sub:                              sub,
+		Tier:                             tier,
+		PubKey:                           pk,
 	}
 	// Insert the user.
 	fields, err := bson.Marshal(u)
@@ -441,7 +526,7 @@ func (db *DB) Ping(ctx context.Context) error {
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
-	filter := bson.D{{fieldName, fieldValue}}
+	filter := bson.M{fieldName: fieldValue}
 	c, err := db.staticUsers.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to find user")

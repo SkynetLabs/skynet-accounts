@@ -38,6 +38,9 @@ var (
 	// dbEmails defines the name of the "emails" collection within skynet's
 	// database.
 	dbEmails = "emails"
+	// dbChallenges defines the name of the "challenges" collection within
+	// skynet's database.
+	dbChallenges = "challenges"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -81,6 +84,7 @@ type (
 		staticRegistryReads  *mongo.Collection
 		staticRegistryWrites *mongo.Collection
 		staticEmails         *mongo.Collection
+		staticChallenges     *mongo.Collection
 		staticDeps           lib.Dependencies
 		staticLogger         *logrus.Logger
 	}
@@ -128,6 +132,7 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
 		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
 		staticEmails:         database.Collection(dbEmails),
+		staticChallenges:     database.Collection(dbChallenges),
 		staticLogger:         logger,
 	}
 	return db, nil
@@ -232,6 +237,16 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 			{
 				Keys:    bson.D{{"sent_by", 1}},
 				Options: options.Index().SetName("sent_by"),
+			},
+		},
+		dbChallenges: {
+			{
+				Keys:    bson.D{{"pub_key", 1}},
+				Options: options.Index().SetName("pub_key"),
+			},
+			{
+				Keys:    bson.D{{"challenge", 1}},
+				Options: options.Index().SetName("challenge"),
 			},
 		},
 	}

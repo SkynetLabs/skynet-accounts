@@ -101,6 +101,9 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	}
 	client := http.Client{}
 	res, err := client.Do(&req)
+	if err == nil {
+		defer res.Body.Close()
+	}
 	if err != nil || res.StatusCode > 399 {
 		var statusCode int
 		if res != nil {
