@@ -72,7 +72,7 @@ func TestWithDBSession(t *testing.T) {
 			t.Fatal("Failed to create user.", err)
 		}
 		// Make sure the user exists while we're still in the txn.
-		u, err := db.UserByEmail(sctx, emailSuccess, false)
+		u, err := db.UserByEmail(sctx, emailSuccess)
 		if err != nil {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
@@ -92,7 +92,7 @@ func TestWithDBSession(t *testing.T) {
 			t.Fatal("Failed to create user.", err)
 		}
 		// Make sure the user exists while we're still in the txn.
-		u, err := db.UserByEmail(sctx, emailSuccessJSON, false)
+		u, err := db.UserByEmail(sctx, emailSuccessJSON)
 		if err != nil {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
@@ -112,7 +112,7 @@ func TestWithDBSession(t *testing.T) {
 			t.Fatal("Failed to create user.", err)
 		}
 		// Make sure the user exists while we're still in the txn.
-		u, err := db.UserByEmail(sctx, emailFailure, false)
+		u, err := db.UserByEmail(sctx, emailFailure)
 		if err != nil {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
@@ -131,7 +131,7 @@ func TestWithDBSession(t *testing.T) {
 	// Call the success handler.
 	testAPI.WithDBSession(successHandler)(rw, req, ps)
 	// Make sure the success user exists after the handler has returned.
-	u, err := db.UserByEmail(ctx, emailSuccess, false)
+	u, err := db.UserByEmail(ctx, emailSuccess)
 	if err != nil {
 		t.Fatal("Failed to fetch user from DB.", err)
 	}
@@ -142,7 +142,7 @@ func TestWithDBSession(t *testing.T) {
 	// Call the success JSON handler.
 	testAPI.WithDBSession(successHandlerJSON)(rw, req, ps)
 	// Make sure the success user exists after the handler has returned.
-	u, err = db.UserByEmail(ctx, emailSuccessJSON, false)
+	u, err = db.UserByEmail(ctx, emailSuccessJSON)
 	if err != nil {
 		t.Fatal("Failed to fetch user from DB.", err)
 	}
@@ -153,7 +153,7 @@ func TestWithDBSession(t *testing.T) {
 	// Call the failure handler.
 	testAPI.WithDBSession(failHandler)(rw, req, ps)
 	// Make sure the failure user does not exist after the handler has returned.
-	u, err = db.UserByEmail(ctx, emailFailure, false)
+	u, err = db.UserByEmail(ctx, emailFailure)
 	if err == nil {
 		t.Fatal("Fetched a user that shouldn't have existed")
 	}

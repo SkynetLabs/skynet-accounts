@@ -59,7 +59,7 @@ func CreateUser(at *AccountsTester, email, password string) (*User, error) {
 		return nil, errors.AddContext(err, "user creation failed")
 	}
 	// Fetch the user from the DB, so we can delete it later.
-	u, err := at.DB.UserByEmail(at.Ctx, email, false)
+	u, err := at.DB.UserByEmail(at.Ctx, email)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to fetch user from the DB")
 	}
