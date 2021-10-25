@@ -27,14 +27,16 @@ func TestUserByEmail(t *testing.T) {
 	}
 
 	email := t.Name() + "@siasky.net"
+	pass := t.Name() + "password"
+	sub := t.Name() + "sub"
 	// Ensure we don't have a user with this email and the method handles that
 	// correctly.
-	_, err = db.UserByEmail(ctx, email, false)
+	_, err = db.UserByEmail(ctx, email)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error %v, got %v.\n", database.ErrUserNotFound, err)
 	}
-	// Ensure creating a user via this method works as expected.
-	u, err := db.UserByEmail(ctx, email, true)
+	// Create a user to fetch.
+	u, err := db.UserCreate(ctx, email, pass, sub, database.TierFree)
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}
@@ -45,7 +47,7 @@ func TestUserByEmail(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Ensure that once the user exists, we'll fetch it correctly.
-	u2, err := db.UserByEmail(ctx, email, false)
+	u2, err := db.UserByEmail(ctx, email)
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}

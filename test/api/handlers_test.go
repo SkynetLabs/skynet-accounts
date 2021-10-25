@@ -138,7 +138,7 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("User creation failed. Error ", err.Error())
 	}
 	// Make sure the user exists in the DB.
-	u, err := at.DB.UserByEmail(at.Ctx, emailAddr, false)
+	u, err := at.DB.UserByEmail(at.Ctx, emailAddr)
 	if err != nil {
 		t.Fatal("Error while fetching the user from the DB. Error ", err.Error())
 	}
@@ -288,7 +288,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	// Fetch the user from the DB because we want to be sure that their email
 	// is marked as unconfirmed which is not reflected in the JSON
 	// representation of the object.
-	u3, err := at.DB.UserByEmail(at.Ctx, emailAddr, false)
+	u3, err := at.DB.UserByEmail(at.Ctx, emailAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,7 +507,7 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// Make sure the user's email address is confirmed now.
-	u2, err := at.DB.UserByEmail(at.Ctx, u.Email, false)
+	u2, err := at.DB.UserByEmail(at.Ctx, u.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,7 +529,7 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// Make sure the user's email address is unconfirmed now.
-	u3, err := at.DB.UserByEmail(at.Ctx, u.Email, false)
+	u3, err := at.DB.UserByEmail(at.Ctx, u.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -731,7 +731,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err, string(b))
 	}
 	// Make sure the reset token is removed from the user.
-	u2, err := at.DB.UserByEmail(at.Ctx, u.Email, false)
+	u2, err := at.DB.UserByEmail(at.Ctx, u.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
