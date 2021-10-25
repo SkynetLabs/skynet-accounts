@@ -42,7 +42,11 @@ func TestHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = at.Close() }()
+	defer func() {
+		if errClose := at.Close(); errClose != nil {
+			t.Error(errClose)
+		}
+	}()
 
 	// Specify subtests to run
 	tests := []subtest{

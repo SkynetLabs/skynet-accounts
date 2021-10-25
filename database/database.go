@@ -241,12 +241,16 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 		},
 		dbChallenges: {
 			{
-				Keys:    bson.D{{"pub_key", 1}},
-				Options: options.Index().SetName("pub_key"),
-			},
-			{
 				Keys:    bson.D{{"challenge", 1}},
 				Options: options.Index().SetName("challenge"),
+			},
+			{
+				Keys:    bson.D{{"type", 1}},
+				Options: options.Index().SetName("type"),
+			},
+			{
+				Keys:    bson.D{{"expires_at", 1}},
+				Options: options.Index().SetName("expires_at"),
 			},
 		},
 	}

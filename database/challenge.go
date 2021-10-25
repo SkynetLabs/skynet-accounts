@@ -129,6 +129,11 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr *ChallengeRespo
 	if err != nil {
 		db.staticLogger.Debugln("Failed to delete challenge from DB:", err)
 	}
+	// Clean up all expired challenges as well.
+	_, err = db.staticChallenges.DeleteMany(ctx, bson.M{"expires_at": bson.M{"$lt": time.Now().UTC()}})
+	if err != nil {
+		db.staticLogger.Debugln("Failed to delete expired challenges from DB:", err)
+	}
 	return ch.PubKey, nil
 }
 
