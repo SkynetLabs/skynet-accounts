@@ -355,7 +355,26 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if u.ID.IsZero() {
 		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
 	}
-	filter := bson.D{{"_id", u.ID}}
+	// Delete all data associated with this user.
+	filter := bson.D{{"user_id", u.ID}}
+	_, err := db.staticDownloads.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user downloads")
+	}
+	_, err = db.staticUploads.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user uploads")
+	}
+	_, err = db.staticRegistryReads.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user registry reads")
+	}
+	_, err = db.staticRegistryWrites.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user registry writes")
+	}
+	// Delete the actual user.
+	filter = bson.D{{"_id", u.ID}}
 	dr, err := db.staticUsers.DeleteOne(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to Delete")
