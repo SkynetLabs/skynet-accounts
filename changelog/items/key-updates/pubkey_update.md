@@ -1,1 +1,1 @@
-- Allow updating user's pubKey via the PUT /users endpoint. 
+- Allow updating user's pubKey via two new endpoints - GET /user/updatepubkey and POST /user/updatepubkey. 

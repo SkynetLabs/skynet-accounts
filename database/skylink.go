@@ -72,7 +72,7 @@ func (db *DB) SkylinkByID(ctx context.Context, id primitive.ObjectID) (*Skylink,
 	return &sl, nil
 }
 
-// SkylinkUpdate updates the meta data about the given skylink. If any of the
+// SkylinkUpdate updates the metadata about the given skylink. If any of the
 // parameters is empty they won't be used in the update operation.
 func (db *DB) SkylinkUpdate(ctx context.Context, id primitive.ObjectID, name string, size int64) error {
 	filter := bson.M{"_id": id}

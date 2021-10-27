@@ -41,6 +41,10 @@ var (
 	// dbChallenges defines the name of the "challenges" collection within
 	// skynet's database.
 	dbChallenges = "challenges"
+	// dbUnconfirmedUserUpdates defines the name of the collection which holds
+	// all user pubKey updates until their respective challenge has been
+	// responded to and they are applied.
+	dbUnconfirmedUserUpdates = "unconfirmed_user_updates"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -76,17 +80,18 @@ var (
 type (
 	// DB represents a MongoDB database connection.
 	DB struct {
-		staticDB             *mongo.Database
-		staticUsers          *mongo.Collection
-		staticSkylinks       *mongo.Collection
-		staticUploads        *mongo.Collection
-		staticDownloads      *mongo.Collection
-		staticRegistryReads  *mongo.Collection
-		staticRegistryWrites *mongo.Collection
-		staticEmails         *mongo.Collection
-		staticChallenges     *mongo.Collection
-		staticDeps           lib.Dependencies
-		staticLogger         *logrus.Logger
+		staticDB                     *mongo.Database
+		staticUsers                  *mongo.Collection
+		staticSkylinks               *mongo.Collection
+		staticUploads                *mongo.Collection
+		staticDownloads              *mongo.Collection
+		staticRegistryReads          *mongo.Collection
+		staticRegistryWrites         *mongo.Collection
+		staticEmails                 *mongo.Collection
+		staticChallenges             *mongo.Collection
+		staticUnconfirmedUserUpdates *mongo.Collection
+		staticDeps                   lib.Dependencies
+		staticLogger                 *logrus.Logger
 	}
 
 	// DBCredentials is a helper struct that binds together all values needed for
@@ -124,16 +129,17 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 		return nil, err
 	}
 	db := &DB{
-		staticDB:             database,
-		staticUsers:          database.Collection(dbUsersCollection),
-		staticSkylinks:       database.Collection(dbSkylinksCollection),
-		staticUploads:        database.Collection(dbUploadsCollection),
-		staticDownloads:      database.Collection(dbDownloadsCollection),
-		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
-		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
-		staticEmails:         database.Collection(dbEmails),
-		staticChallenges:     database.Collection(dbChallenges),
-		staticLogger:         logger,
+		staticDB:                     database,
+		staticUsers:                  database.Collection(dbUsersCollection),
+		staticSkylinks:               database.Collection(dbSkylinksCollection),
+		staticUploads:                database.Collection(dbUploadsCollection),
+		staticDownloads:              database.Collection(dbDownloadsCollection),
+		staticRegistryReads:          database.Collection(dbRegistryReadsCollection),
+		staticRegistryWrites:         database.Collection(dbRegistryWritesCollection),
+		staticEmails:                 database.Collection(dbEmails),
+		staticChallenges:             database.Collection(dbChallenges),
+		staticUnconfirmedUserUpdates: database.Collection(dbUnconfirmedUserUpdates),
+		staticLogger:                 logger,
 	}
 	return db, nil
 }
@@ -247,6 +253,16 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 			{
 				Keys:    bson.D{{"type", 1}},
 				Options: options.Index().SetName("type"),
+			},
+			{
+				Keys:    bson.D{{"expires_at", 1}},
+				Options: options.Index().SetName("expires_at"),
+			},
+		},
+		dbUnconfirmedUserUpdates: {
+			{
+				Keys:    bson.D{{"challenge_id", 1}},
+				Options: options.Index().SetName("challenge_id"),
 			},
 			{
 				Keys:    bson.D{{"expires_at", 1}},

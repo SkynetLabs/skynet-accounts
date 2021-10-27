@@ -75,7 +75,7 @@ start-mongo:
      -v $(shell pwd)/test/fixtures/mongo_keyfile:/data/mgkey \
 	mongo:4.4.1 mongod --port=17017 --replSet=skynet --keyFile=/data/mgkey 1>/dev/null 2>&1
 	# wait for mongo to start before we try to configure it
-	sleep 3
+	sleep 4
 	# Initialise a single node replica set.
 	docker exec skynet-accounts-mongo-test-db mongo -u admin -p aO4tV5tC1oU3oQ7u --port 17017 --eval "rs.initiate({_id: \"skynet\", members: [{ _id: 0, host: \"localhost:17017\" }]})" 1>/dev/null 2>&1
 

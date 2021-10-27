@@ -43,7 +43,6 @@ type (
 	// externally, e.g. by calling `PUT /user`.
 	userUpdateData struct {
 		Email    string `json:"email,omitempty"`
-		PubKey   string `json:"pubKey,omitempty"`
 		StripeID string `json:"stripeCustomerId,omitempty"`
 	}
 )
@@ -112,7 +111,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 // loginPOSTChallengeResponse is a helper that handles logins with a challenge.
 func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Request, chr *database.ChallengeResponse) {
 	ctx := req.Context()
-	pk, err := api.staticDB.ValidateChallengeResponse(ctx, chr)
+	pk, _, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeLogin)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusUnauthorized)
 		return
@@ -244,7 +243,7 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		return
 	}
 	ctx := req.Context()
-	pk, err := api.staticDB.ValidateChallengeResponse(ctx, chr)
+	pk, _, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeRegister)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusBadRequest)
 		return
@@ -436,7 +435,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	if payload.Email == "" && payload.StripeID == "" && payload.PubKey == "" {
+	if payload.Email == "" && payload.StripeID == "" {
 		// The payload is empty, nothing to do.
 		api.WriteSuccess(w)
 		return
@@ -451,27 +450,6 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
-	}
-
-	var pk database.PubKey
-	if payload.PubKey != "" {
-		pk, err = hex.DecodeString(payload.PubKey)
-		if err != nil {
-			api.WriteError(w, errors.AddContext(err, "invalid pubKey"), http.StatusBadRequest)
-			return
-		}
-		// Check if this pubkey is already associated with a user.
-		pku, err := api.staticDB.UserByPubKey(ctx, pk)
-		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
-			err = errors.AddContext(err, "failed to verify that the pubKey is not already in use")
-			api.WriteError(w, err, http.StatusInternalServerError)
-			return
-		}
-		if err == nil && pku.Sub != u.Sub {
-			api.WriteError(w, errors.New("this pubKey already belongs to another user"), http.StatusBadRequest)
-			return
-		}
-		u.PubKey = pk
 	}
 
 	if payload.StripeID != "" {
@@ -540,6 +518,109 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		if err != nil {
 			api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 		}
+	}
+	api.loginUser(w, u, true)
+}
+
+// userUpdatePubKeyGET generates an update challenge for the caller.
+func (api *API) userUpdatePubKeyGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	ctx := req.Context()
+	pk, err := hex.DecodeString(req.FormValue("pubKey"))
+	if err != nil || len(pk) != database.PubKeyLen {
+		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
+		return
+	}
+	_, err = api.staticDB.UserByPubKey(ctx, pk)
+	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, errors.New("failed to fetch user from the DB"), http.StatusInternalServerError)
+		return
+	}
+	if err == nil {
+		api.WriteError(w, errors.New("pubkey already registered"), http.StatusBadRequest)
+		return
+	}
+	ch, err := api.staticDB.NewChallenge(ctx, pk, database.ChallengeTypeUpdate)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	uu := &database.UnconfirmedUserUpdate{
+		Sub:         sub,
+		ChallengeID: ch.ID,
+		ExpiresAt:   ch.ExpiresAt.Truncate(time.Millisecond),
+	}
+	err = api.staticDB.StoreUnconfirmedUserUpdate(ctx, uu)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to store unconfirmed user update"), http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, ch)
+}
+
+// userUpdatePubKeyPOST updates the user's pubKey based on a challenge-response.
+func (api *API) userUpdatePubKeyPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	ctx := req.Context()
+	// Get the challenge response.
+	chr, err := challengeResponseFromRequest(req)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
+		return
+	}
+	pk, chID, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeUpdate)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusBadRequest)
+		return
+	}
+	// Check if the pubkey from the UnconfirmedUserUpdate is already associated
+	// with a user. That might have happened between the challenge creation and
+	// the current moment.
+	pku, err := api.staticDB.UserByPubKey(ctx, pk)
+	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
+		err = errors.AddContext(err, "failed to verify that the pubKey is not already in use")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if err == nil && pku.Sub != sub {
+		api.WriteError(w, errors.New("this pubKey already belongs to another user"), http.StatusBadRequest)
+		return
+	}
+	uu, err := api.staticDB.FetchUnconfirmedUserUpdate(ctx, chID)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to fetch unconfirmed user update"), http.StatusInternalServerError)
+		return
+	}
+	if uu.Sub != sub {
+		api.staticLogger.Warnf("Potential attempt to modify another user's pubKey. Sub of challenge requester '%s', sub of response submitter '%s'", uu.Sub, sub)
+		api.WriteError(w, errors.New("user's sub doesn't match update sub"), http.StatusBadRequest)
+		return
+	}
+	u, err := api.staticDB.UserBySub(ctx, sub, false)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u.PubKey = pk
+	err = api.staticDB.UserSave(ctx, u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	err = api.staticDB.DeleteUnconfirmedUserUpdate(ctx, chID)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
 	}
 	api.loginUser(w, u, true)
 }

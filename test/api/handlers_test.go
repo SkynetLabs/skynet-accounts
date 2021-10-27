@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -59,7 +58,7 @@ func TestHandlers(t *testing.T) {
 		// PUT /user
 		{name: "UserEdit", test: testUserPUT},
 		// PUT /user
-		{name: "UserEditPubKey", test: testUserPUTPubKey},
+		{name: "UserUpdatePubKey", test: testUserUpdatePubKey},
 		// GET /user/limits
 		{name: "UserLimits", test: testUserLimits},
 		// DELETE /user/uploads/:skylink, GET /user/uploads
@@ -265,7 +264,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	at.Cookie = c
 	// Update the user's Stripe ID.
 	stripeID := name + "_stripe_id"
-	_, b, err := at.UserPUT("", "", stripeID)
+	_, b, err := at.UserPUT("", stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,14 +277,14 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected the user to have StripeID %s, got %s", stripeID, u2.StripeID)
 	}
 	// Try to update the StripeID again. Expect this to fail.
-	r, _, err := at.UserPUT("", "", stripeID)
+	r, _, err := at.UserPUT("", stripeID)
 	if err == nil || !strings.Contains(err.Error(), "409 Conflict") || r.StatusCode != http.StatusConflict {
 		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d", err, r.StatusCode)
 	}
 
 	// Update the user's email.
 	emailAddr := name + "_new@siasky.net"
-	_, _, err = at.UserPUT(emailAddr, "", "")
+	_, _, err = at.UserPUT(emailAddr, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,78 +309,6 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	}
 	if len(msgs) != 1 || msgs[0].Subject != "Please verify your email address" {
 		t.Fatal("Expected to find a confirmation email but didn't.")
-	}
-}
-
-// testUserPUTPubKey tests the ability of the PUT /user endpoint to set the
-// user's public key.
-func testUserPUTPubKey(t *testing.T, at *test.AccountsTester) {
-	name := strings.ReplaceAll(t.Name(), "/", "_")
-	u, c, err := test.CreateUserAndLogin(at, name)
-	if err != nil {
-		t.Fatal("Failed to create a user and log in:", err)
-	}
-	defer func() {
-		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
-		}
-	}()
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
-
-	// Set the user's public key.
-	pk := fastrand.Bytes(database.PubKeyLen)
-	pkHex := hex.EncodeToString(pk)
-	_, _, err = at.UserPUT("", pkHex, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Make sure the update took place.
-	pku, err := at.DB.UserByPubKey(at.Ctx, pk)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if subtle.ConstantTimeCompare(pku.PubKey, pk) != 1 {
-		t.Fatalf("Expected pubKey '%s', got '%s'", pkHex, hex.EncodeToString(pku.PubKey))
-	}
-	// Set the same key again, making sure we're not going to get "this pubkey
-	// is already in use" error.
-	_, _, err = at.UserPUT("", pkHex, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Update the pubKey to a new one in order to check whether we can change
-	// it once it's set.
-	pk = fastrand.Bytes(database.PubKeyLen)
-	pkHex = hex.EncodeToString(pk)
-	_, _, err = at.UserPUT("", pkHex, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Make sure the update took place.
-	pku, err = at.DB.UserByPubKey(at.Ctx, pk)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if subtle.ConstantTimeCompare(pku.PubKey, pk) != 1 {
-		t.Fatalf("Expected pubKey '%s', got '%s'", pkHex, hex.EncodeToString(pku.PubKey))
-	}
-	// Try to set the pubKey to one that's already in use by another user.
-	nu, nc, err := test.CreateUserAndLogin(at, name+"_new")
-	if err != nil {
-		t.Fatal("Failed to create a user:", err)
-	}
-	defer func() {
-		if err = nu.Delete(at.Ctx); err != nil {
-			t.Error(err)
-		}
-	}()
-	// Set the cookie to the one that belongs to the new user.
-	at.Cookie = nc
-	r, b, _ := at.UserPUT("", pkHex, "")
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "this pubKey already belongs to another user") {
-		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, "this pubKey already belongs to another user", r.StatusCode, string(b))
 	}
 }
 
@@ -920,7 +847,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	// Change the user's email.
 	newEmail := name + "_new@siasky.net"
-	r, b, err := at.UserPUT(newEmail, "", "")
+	r, b, err := at.UserPUT(newEmail, "")
 	if err != nil {
 		t.Fatalf("Failed to update user. Error: %s. Body: %s", err.Error(), string(b))
 	}

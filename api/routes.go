@@ -33,6 +33,8 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.PUT("/user", api.WithDBSession(api.validate(api.userPUT)))
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsGET))
+	api.staticRouter.GET("/user/updatepubkey", api.validate(api.userUpdatePubKeyGET))
+	api.staticRouter.POST("/user/updatepubkey", api.validate(api.userUpdatePubKeyPOST))
 	api.staticRouter.GET("/user/uploads", api.WithDBSession(api.validate(api.userUploadsGET)))
 	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.validate(api.userUploadsDELETE)))
 	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
