@@ -15,6 +15,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 	"go.mongodb.org/mongo-driver/bson"
@@ -57,6 +58,8 @@ func TestHandlers(t *testing.T) {
 		{name: "LoginLogout", test: testHandlerLoginPOST},
 		// PUT /user
 		{name: "UserEdit", test: testUserPUT},
+		// DELETE /user
+		{name: "UserDelete", test: testUserDELETE},
 		// GET /user/limits
 		{name: "UserLimits", test: testUserLimits},
 		// DELETE /user/uploads/:skylink, GET /user/uploads
@@ -107,7 +110,7 @@ func testHandlerHealthGET(t *testing.T, at *test.AccountsTester) {
 func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	// Use the test's name as an email-compatible identifier.
 	name := strings.ReplaceAll(t.Name(), "/", "_")
-	email := name + "@siasky.net"
+	emailAddr := name + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	// Try to create a user with a missing email.
 	params := url.Values{}
@@ -128,18 +131,18 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try to create a user with an empty password.
 	params = url.Values{}
-	params.Add("email", email)
+	params.Add("email", emailAddr)
 	_, _, err = at.Post("/user", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
 	// Create a user.
-	_, _, err = at.CreateUserPost(email, password)
+	_, _, err = at.CreateUserPost(emailAddr, password)
 	if err != nil {
 		t.Fatal("User creation failed. Error ", err.Error())
 	}
 	// Make sure the user exists in the DB.
-	u, err := at.DB.UserByEmail(at.Ctx, email)
+	u, err := at.DB.UserByEmail(at.Ctx, emailAddr)
 	if err != nil {
 		t.Fatal("Error while fetching the user from the DB. Error ", err.Error())
 	}
@@ -153,14 +156,14 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	}(u)
 	// Log in with that user in order to make sure it exists.
 	params = url.Values{}
-	params.Add("email", email)
+	params.Add("email", emailAddr)
 	params.Add("password", password)
 	_, _, err = at.Post("/login", nil, params)
 	if err != nil {
 		t.Fatal("Login failed. Error ", err.Error())
 	}
 	// try to create a user with an already taken email
-	_, _, err = at.CreateUserPost(email, "password")
+	_, _, err = at.CreateUserPost(emailAddr, "password")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
@@ -168,17 +171,17 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 
 // testHandlerLoginPOST tests the /login endpoint.
 func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
-	email := strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
+	emailAddr := strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	params := url.Values{}
-	params.Add("email", email)
+	params.Add("email", emailAddr)
 	params.Add("password", password)
 	// Try logging in with a non-existent user.
 	_, _, err := at.Post("/login", nil, params)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
-	u, err := test.CreateUser(at, email, password)
+	u, err := test.CreateUser(at, emailAddr, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +204,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	at.Cookie = c
 	defer func() { at.Cookie = nil }()
 	_, b, err := at.Get("/user", nil)
-	if err != nil || !strings.Contains(string(b), email) {
+	if err != nil || !strings.Contains(string(b), emailAddr) {
 		t.Fatal("Expected to be able to fetch the user with this cookie.")
 	}
 	// test /logout while we're here.
@@ -229,7 +232,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try logging in with a bad password.
 	badPassParams := url.Values{}
-	badPassParams.Add("email", email)
+	badPassParams.Add("email", emailAddr)
 	badPassParams.Add("password", "bad password")
 	_, _, err = at.Post("/login", nil, badPassParams)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
@@ -281,32 +284,106 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Update the user's email.
-	email := name + "_new@siasky.net"
-	_, _, err = at.UserPUT(email, "")
+	emailAddr := name + "_new@siasky.net"
+	_, _, err = at.UserPUT(emailAddr, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Fetch the user from the DB because we want to be sure that their email
 	// is marked as unconfirmed which is not reflected in the JSON
 	// representation of the object.
-	u3, err := at.DB.UserByEmail(at.Ctx, email)
+	u3, err := at.DB.UserByEmail(at.Ctx, emailAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u3.Email != email {
-		t.Fatalf("Expected the user to have email %s, got %s", email, u3.Email)
+	if u3.Email != emailAddr {
+		t.Fatalf("Expected the user to have email %s, got %s", emailAddr, u3.Email)
 	}
 	if u3.EmailConfirmationToken == "" {
 		t.Fatalf("Expected the user to have a non-empty confirmation token, got '%s'", u3.EmailConfirmationToken)
 	}
 	// Expect to find a confirmation email queued for sending.
-	filer := bson.M{"to": email}
+	filer := bson.M{"to": emailAddr}
 	_, msgs, err := at.DB.FindEmails(at.Ctx, filer, &options.FindOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(msgs) != 1 || msgs[0].Subject != "Please verify your email address" {
 		t.Fatal("Expected to find a confirmation email but didn't.")
+	}
+}
+
+// testUserDELETE tests the DELETE /user endpoint.
+func testUserDELETE(t *testing.T, at *test.AccountsTester) {
+	u, c, err := test.CreateUserAndLogin(at, t.Name())
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	// Delete the user.
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+	r, _, err := at.Delete("/user", nil)
+	if err != nil || r.StatusCode != http.StatusNoContent {
+		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
+	}
+	// Make sure the use doesn't exist anymore.
+	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
+	}
+	// Create the user again.
+	u, c, err = test.CreateUserAndLogin(at, t.Name())
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	// Create some data for this user.
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = at.DB.DownloadCreate(at.Ctx, *u.User, *sl, 128)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = at.DB.RegistryWriteCreate(at.Ctx, *u.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = at.DB.RegistryReadCreate(at.Ctx, *u.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Try to delete the user without a cookie.
+	at.Cookie = nil
+	r, _, _ = at.Delete("/user", nil)
+	if r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected %d, got %d", http.StatusUnauthorized, r.StatusCode)
+	}
+	// Delete the user.
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+	r, _, err = at.Delete("/user", nil)
+	if err != nil || r.StatusCode != http.StatusNoContent {
+		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
+	}
+	// Make sure the user doesn't exist anymore.
+	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
+	}
+	// Make sure that the data is gone.
+	stats, err := at.DB.UserStats(at.Ctx, *u.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.NumUploads != 0 || stats.NumDownloads != 0 || stats.NumRegReads != 0 || stats.NumRegWrites != 0 {
+		t.Fatalf("Expected all user stats to be zero, got uploads %d, downloads %d, registry reads %d, registry writes %d,",
+			stats.NumUploads, stats.NumDownloads, stats.NumRegReads, stats.NumRegWrites)
+	}
+	// Try to delete the same user again.
+	r, _, _ = at.Delete("/user", nil)
+	if r.StatusCode != http.StatusNotFound {
+		t.Fatalf("Expected %d Not Found, got %d.", http.StatusNotFound, r.StatusCode)
 	}
 }
 

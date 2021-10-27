@@ -31,6 +31,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/user", api.WithDBSession(api.noValidate(api.userPOST))) // This will be removed in the future.
 	api.staticRouter.GET("/user", api.WithDBSession(api.validate(api.userGET)))
 	api.staticRouter.PUT("/user", api.WithDBSession(api.validate(api.userPUT)))
+	api.staticRouter.DELETE("/user", api.WithDBSession(api.validate(api.userDELETE)))
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsGET))
 	api.staticRouter.GET("/user/uploads", api.WithDBSession(api.validate(api.userUploadsGET)))
