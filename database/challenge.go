@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -28,8 +29,8 @@ const (
 	// we change the user's pubKey.
 	ChallengeTypeUpdate = "skynet-portal-update"
 
-	// PubKeyLen defines the length of the public key in bytes.
-	PubKeyLen = 32
+	// PubKeySize defines the length of the public key in bytes.
+	PubKeySize = ed25519.PublicKeySize
 
 	// challengeTTL defines how long we accept responses to this challenge.
 	challengeTTL = 10 * time.Minute
@@ -37,9 +38,8 @@ const (
 
 var (
 	// PortalName is the name this portal uses to announce itself to the world.
-	// It's possible that users access it via other names or via more specific
-	// names, e.g. eu-ger-1.siasky.net instead of siasky.net. This name does not
-	// have a protocol prefix.
+	// Its value is controlled by the PORTAL_DOMAIN environment variable.
+	// This name does not have a protocol prefix.
 	PortalName = "siasky.net"
 )
 
@@ -76,13 +76,13 @@ type (
 )
 
 // NewChallenge creates a new challenge with the given type and pubKey.
-func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, typ string) (*Challenge, error) {
-	if typ != ChallengeTypeLogin && typ != ChallengeTypeRegister && typ != ChallengeTypeUpdate {
-		return nil, errors.New(fmt.Sprintf("invalid challenge type '%s'", typ))
+func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, cType string) (*Challenge, error) {
+	if cType != ChallengeTypeLogin && cType != ChallengeTypeRegister && cType != ChallengeTypeUpdate {
+		return nil, errors.New(fmt.Sprintf("invalid challenge type '%s'", cType))
 	}
 	ch := &Challenge{
 		Challenge: hex.EncodeToString(fastrand.Bytes(ChallengeSize)),
-		Type:      typ,
+		Type:      cType,
 		PubKey:    pubKey,
 		ExpiresAt: time.Now().UTC().Add(challengeTTL),
 	}
@@ -99,33 +99,33 @@ func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, typ string) (*Cha
 // in the database and that the signature is valid.
 //
 // Challenge format: challenge + type + recipient
-func (db *DB) ValidateChallengeResponse(ctx context.Context, chr *ChallengeResponse, expType string) (PubKey, primitive.ObjectID, error) {
+func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeResponse, expType string) (PubKey, primitive.ObjectID, error) {
 	resp := chr.Response
 	// Get the challenge type which sits right after the challenge in the
 	// response.
-	var typ string
+	var cType string
 	if strings.HasPrefix(string(resp[ChallengeSize:]), ChallengeTypeLogin) {
-		typ = ChallengeTypeLogin
+		cType = ChallengeTypeLogin
 	} else if strings.HasPrefix(string(resp[ChallengeSize:]), ChallengeTypeRegister) {
-		typ = ChallengeTypeRegister
+		cType = ChallengeTypeRegister
 	} else if strings.HasPrefix(string(resp[ChallengeSize:]), ChallengeTypeUpdate) {
-		typ = ChallengeTypeUpdate
+		cType = ChallengeTypeUpdate
 	} else {
 		return nil, primitive.ObjectID{}, errors.New("invalid challenge type")
 	}
-	if typ != expType {
+	if cType != expType {
 		return nil, primitive.ObjectID{}, errors.New("unexpected challenge type")
 	}
 	// Now that we know the challenge type, we can get the recipient as well.
-	recipientOffset := ChallengeSize + len([]byte(typ))
+	recipientOffset := ChallengeSize + len([]byte(cType))
 	recipient := string(resp[recipientOffset:])
-	if !strings.Contains(recipient, PortalName) {
+	if recipient != PortalName {
 		return nil, primitive.ObjectID{}, errors.New("invalid recipient " + recipient)
 	}
 	// Fetch the challenge from the DB.
 	filter := bson.M{
 		"challenge": hex.EncodeToString(resp[:ChallengeSize]),
-		"type":      typ,
+		"type":      cType,
 	}
 	sr := db.staticChallenges.FindOne(ctx, filter)
 	var ch Challenge
@@ -180,6 +180,46 @@ func (db *DB) DeleteUnconfirmedUserUpdate(ctx context.Context, chID primitive.Ob
 	// Do some cleanup while we're here and remove all expired updates.
 	_, _ = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.M{"expires_at": bson.M{"$lt": time.Now().UTC()}})
 	return err
+}
+
+// LoadFromRequest loads a ChallengeResponse by extracting its string form from
+// http.Request.
+func (cr *ChallengeResponse) LoadFromRequest(req *http.Request) error {
+	resp, err := hex.DecodeString(req.PostFormValue("response"))
+	if err != nil {
+		return errors.AddContext(err, "failed to parse the response")
+	}
+	if len(resp) < ChallengeSize {
+		return errors.New("invalid response")
+	}
+	sig, err := hex.DecodeString(req.PostFormValue("signature"))
+	if err != nil {
+		return errors.AddContext(err, "failed to parse the response signature")
+	}
+	if len(sig) != ChallengeSignatureSize {
+		return errors.New("invalid signature")
+	}
+	cr.Response = resp
+	cr.Signature = sig
+	return nil
+}
+
+// LoadString loads a PubKey from its hex-encoded string form.
+func (pk *PubKey) LoadString(s string) error {
+	bytes, err := hex.DecodeString(s)
+	if err != nil {
+		return errors.AddContext(err, "invalid pubKey provided")
+	}
+	if len(bytes) != PubKeySize {
+		return errors.New("invalid pubKey provided")
+	}
+	*pk = bytes[:]
+	return nil
+}
+
+// String converts a PubKey to its hex-encoded string form.
+func (pk PubKey) String() string {
+	return hex.EncodeToString(pk)
 }
 
 // verifySignature is a helper method.

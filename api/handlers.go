@@ -67,12 +67,21 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 
 // loginGET generates a login challenge for the caller.
 func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	pk, err := hex.DecodeString(req.FormValue("pubKey"))
-	if err != nil || len(pk) != database.PubKeyLen {
+	var pk database.PubKey
+	err := pk.LoadString(req.FormValue("pubKey"))
+	if err != nil {
 		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
 		return
 	}
-	// TODO Should we check if the pubkey is not yet registered with a user?
+	_, err = api.staticDB.UserByPubKey(req.Context(), pk)
+	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, errors.New("no user with this pubkey"), http.StatusBadRequest)
+		return
+	}
 	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeLogin)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -97,7 +106,8 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	}
 
 	// Check for a challenge response in the request.
-	chr, err := challengeResponseFromRequest(req)
+	var chr database.ChallengeResponse
+	err := chr.LoadFromRequest(req)
 	if err == nil {
 		api.loginPOSTChallengeResponse(w, req, chr)
 		return
@@ -109,7 +119,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 }
 
 // loginPOSTChallengeResponse is a helper that handles logins with a challenge.
-func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Request, chr *database.ChallengeResponse) {
+func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Request, chr database.ChallengeResponse) {
 	ctx := req.Context()
 	pk, _, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeLogin)
 	if err != nil {
@@ -215,8 +225,9 @@ func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httproute
 
 // registerGET generates a registration challenge for the caller.
 func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	pk, err := hex.DecodeString(req.FormValue("pubKey"))
-	if err != nil || len(pk) != database.PubKeyLen {
+	var pk database.PubKey
+	err := pk.LoadString(req.FormValue("pubKey"))
+	if err != nil {
 		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
 		return
 	}
@@ -237,7 +248,8 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 // registerPOST registers a new user based on a challenge-response.
 func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Get the challenge response.
-	chr, err := challengeResponseFromRequest(req)
+	var chr database.ChallengeResponse
+	err := chr.LoadFromRequest(req)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -367,6 +379,35 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 		return
 	}
 	api.WriteJSON(w, us)
+}
+
+// userDELETE deletes the user and all of their data.
+func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	ctx := req.Context()
+	sub, _, _, err := jwt.TokenFromContext(ctx)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(ctx, sub, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	err = api.staticDB.UserDelete(ctx, u)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
 }
 
 // userPOST creates a new user.
@@ -532,7 +573,7 @@ func (api *API) userUpdatePubKeyGET(w http.ResponseWriter, req *http.Request, _ 
 
 	ctx := req.Context()
 	pk, err := hex.DecodeString(req.FormValue("pubKey"))
-	if err != nil || len(pk) != database.PubKeyLen {
+	if err != nil || len(pk) != database.PubKeySize {
 		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
 		return
 	}
@@ -573,7 +614,8 @@ func (api *API) userUpdatePubKeyPOST(w http.ResponseWriter, req *http.Request, _
 
 	ctx := req.Context()
 	// Get the challenge response.
-	chr, err := challengeResponseFromRequest(req)
+	var chr database.ChallengeResponse
+	err = chr.LoadFromRequest(req)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -1080,30 +1122,6 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	api.WriteJSON(w, jwt.AccountsPublicJWKS)
-}
-
-// challengeResponseFromRequest reads a challenge response from the request's
-// body.
-func challengeResponseFromRequest(req *http.Request) (*database.ChallengeResponse, error) {
-	resp, err := hex.DecodeString(req.PostFormValue("response"))
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to parse the response")
-	}
-	if len(resp) < database.ChallengeSize {
-		return nil, errors.New("invalid response")
-	}
-	sig, err := hex.DecodeString(req.PostFormValue("signature"))
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to parse the response signature")
-	}
-	if len(sig) < database.ChallengeSignatureSize {
-		println(len(sig))
-		return nil, errors.New("invalid signature")
-	}
-	return &database.ChallengeResponse{
-		Response:  resp,
-		Signature: sig,
-	}, nil
 }
 
 // fetchOffset extracts the offset from the params and validates its value.

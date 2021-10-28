@@ -40,7 +40,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 
 	// Try to solve it with the wrong type.
 	response := append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(database.PortalName)...)...)
-	chr := &database.ChallengeResponse{
+	chr := database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(sk[:], response),
 	}
@@ -59,7 +59,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 
 	// Try to solve it with an invalid type.
 	response = append(chBytes, append([]byte("invalid_type"), []byte(database.PortalName)...)...)
-	chr = &database.ChallengeResponse{
+	chr = database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(sk[:], response),
 	}
@@ -70,7 +70,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 
 	// Try to solve it with the wrong secret key.
 	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
-	chr = &database.ChallengeResponse{
+	chr = database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(fastrand.Bytes(64), response),
 	}
@@ -81,7 +81,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 
 	// Try to solve it with a bad recipient.
 	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte("bad-recipient.net")...)...)
-	chr = &database.ChallengeResponse{
+	chr = database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(fastrand.Bytes(64), response),
 	}
@@ -93,7 +93,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 	// Try to solve the wrong challenge.
 	wrongBytes := fastrand.Bytes(database.ChallengeSize)
 	response = append(wrongBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
-	chr = &database.ChallengeResponse{
+	chr = database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(sk[:], response),
 	}
@@ -104,7 +104,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 
 	// Solve the challenge.
 	response = append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
-	chr = &database.ChallengeResponse{
+	chr = database.ChallengeResponse{
 		Response:  response,
 		Signature: ed25519.Sign(sk[:], response),
 	}

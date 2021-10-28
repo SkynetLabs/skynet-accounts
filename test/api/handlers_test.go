@@ -15,6 +15,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 	"go.mongodb.org/mongo-driver/bson"
@@ -59,6 +60,8 @@ func TestHandlers(t *testing.T) {
 		{name: "UserEdit", test: testUserPUT},
 		// PUT /user
 		{name: "UserUpdatePubKey", test: testUserUpdatePubKey},
+		// DELETE /user
+		{name: "UserDelete", test: testUserDELETE},
 		// GET /user/limits
 		{name: "UserLimits", test: testUserLimits},
 		// DELETE /user/uploads/:skylink, GET /user/uploads
@@ -309,6 +312,80 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	}
 	if len(msgs) != 1 || msgs[0].Subject != "Please verify your email address" {
 		t.Fatal("Expected to find a confirmation email but didn't.")
+	}
+}
+
+// testUserDELETE tests the DELETE /user endpoint.
+func testUserDELETE(t *testing.T, at *test.AccountsTester) {
+	u, c, err := test.CreateUserAndLogin(at, t.Name())
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	// Delete the user.
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+	r, _, err := at.Delete("/user", nil)
+	if err != nil || r.StatusCode != http.StatusNoContent {
+		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
+	}
+	// Make sure the use doesn't exist anymore.
+	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
+	}
+	// Create the user again.
+	u, c, err = test.CreateUserAndLogin(at, t.Name())
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	// Create some data for this user.
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = at.DB.DownloadCreate(at.Ctx, *u.User, *sl, 128)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = at.DB.RegistryWriteCreate(at.Ctx, *u.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = at.DB.RegistryReadCreate(at.Ctx, *u.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Try to delete the user without a cookie.
+	at.Cookie = nil
+	r, _, _ = at.Delete("/user", nil)
+	if r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected %d, got %d", http.StatusUnauthorized, r.StatusCode)
+	}
+	// Delete the user.
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+	r, _, err = at.Delete("/user", nil)
+	if err != nil || r.StatusCode != http.StatusNoContent {
+		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
+	}
+	// Make sure the user doesn't exist anymore.
+	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
+	}
+	// Make sure that the data is gone.
+	stats, err := at.DB.UserStats(at.Ctx, *u.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.NumUploads != 0 || stats.NumDownloads != 0 || stats.NumRegReads != 0 || stats.NumRegWrites != 0 {
+		t.Fatalf("Expected all user stats to be zero, got uploads %d, downloads %d, registry reads %d, registry writes %d,",
+			stats.NumUploads, stats.NumDownloads, stats.NumRegReads, stats.NumRegWrites)
+	}
+	// Try to delete the same user again.
+	r, _, _ = at.Delete("/user", nil)
+	if r.StatusCode != http.StatusNotFound {
+		t.Fatalf("Expected %d Not Found, got %d.", http.StatusNotFound, r.StatusCode)
 	}
 }
 

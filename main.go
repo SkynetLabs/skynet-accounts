@@ -109,19 +109,19 @@ func logLevel() logrus.Level {
 
 // portal is a helper that fetches the portal name and scheme from the config
 // or takes the default value. It then validates it and returns a usable value.
-func portal() (string, error) {
+func portal() (string, string, error) {
 	pVal, ok := os.LookupEnv(envPortal)
 	if !ok {
 		pVal = defaultPortal
 	}
 	p, err := url.Parse(pVal)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if p.Scheme == "" {
 		p.Scheme = "https"
 	}
-	return p.Scheme + "://" + p.Host, nil
+	return p.Scheme, p.Host, nil
 }
 
 func main() {
@@ -136,10 +136,12 @@ func main() {
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
 
-	portalAddr, err := portal()
+	portalScheme, portalHost, err := portal()
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to parse portal name"))
 	}
+	database.PortalName = portalHost
+	portalAddr := portalScheme + "://" + portalHost
 	jwt.JWTPortalName = portalAddr
 	email.PortalAddress = portalAddr
 	email.ServerLockID = os.Getenv(envServerDomain)
@@ -149,7 +151,6 @@ func main() {
 			is set to the default '%s' value. That is OK only if this server is running on its own 
 			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
 	}
-	database.PortalName = strings.TrimPrefix(strings.TrimPrefix(portalAddr, "https://"), "http://")
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
