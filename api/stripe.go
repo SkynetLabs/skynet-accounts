@@ -75,7 +75,7 @@ func (api *API) stripeWebhookPOST(w http.ResponseWriter, req *http.Request, _ ht
 		api.WriteError(w, err, code)
 		return
 	}
-	api.staticLogger.Debugf("Webhook event: %+v", event)
+	api.staticLogger.Tracef("Webhook event: %+v", event)
 
 	// Here we handle the entire class of subscription events.
 	// https://stripe.com/docs/billing/subscriptions/overview#build-your-own-handling-for-recurring-charge-failures

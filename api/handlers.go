@@ -88,7 +88,7 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 	// Fetch the user with that email, if they exist.
 	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if err != nil {
-		api.staticLogger.Tracef("Error fetching a user with email '%s': %+v\n", email, err)
+		api.staticLogger.Debugf("Error fetching a user with email '%s': %+v\n", email, err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
@@ -108,13 +108,13 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	// is and until when their current session is going to stay valid.
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
-		api.staticLogger.Traceln("Error fetching token from request:", err)
+		api.staticLogger.Debugln("Error fetching token from request:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	token, err := jwt.ValidateToken(tokenStr)
 	if err != nil {
-		api.staticLogger.Traceln("Error validating token:", err)
+		api.staticLogger.Debugln("Error validating token:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
@@ -123,7 +123,7 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	// requesting their credentials or accessing the DB.
 	err = writeCookie(w, tokenStr, token.Expiration().UTC().Unix())
 	if err != nil {
-		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.staticLogger.Debugln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -136,7 +136,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 	// Generate a JWT.
 	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
 	if err != nil {
-		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
+		api.staticLogger.Debugf("Error creating a token for user: %+v\n", err)
 		err = errors.AddContext(err, "failed to create a token for user")
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -144,7 +144,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 	// Write the JWT to an encrypted cookie.
 	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
 	if err != nil {
-		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.staticLogger.Debugln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -159,13 +159,13 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	_, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
-		api.staticLogger.Traceln("Error fetching token from context:", err)
+		api.staticLogger.Debugln("Error fetching token from context:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	err = writeCookie(w, "", time.Now().UTC().Unix()-1)
 	if err != nil {
-		api.staticLogger.Traceln("Error deleting cookie:", err)
+		api.staticLogger.Debugln("Error deleting cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -192,13 +192,13 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// to the user, e.g. on the Dashboard.
 	_, email, err := jwt.UserDetailsFromJWT(req.Context())
 	if err != nil {
-		api.staticLogger.Debugln("Failed to get user details from JWT:", err)
+		api.staticLogger.Traceln("Failed to get user details from JWT:", err)
 	}
 	if err == nil && email != u.Email {
 		u.Email = email
 		err = api.staticDB.UserSave(req.Context(), u)
 		if err != nil {
-			api.staticLogger.Debugln("Failed to update user in DB:", err)
+			api.staticLogger.Traceln("Failed to update user in DB:", err)
 		}
 	}
 	api.WriteJSON(w, u)
@@ -893,7 +893,7 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 		u.QuotaExceeded = quotaExceeded
 		err = api.staticDB.UserSave(ctx, u)
 		if err != nil {
-			api.staticLogger.Infof("Failed to save user. User: %+v, err: %s", u, err.Error())
+			api.staticLogger.Warnf("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
 		api.staticUserTierCache.Set(u)
 	}

@@ -143,7 +143,7 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 
