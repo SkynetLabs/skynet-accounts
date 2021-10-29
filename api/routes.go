@@ -61,13 +61,13 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 		api.logRequest(req)
 		tokenStr, err := tokenFromRequest(req)
 		if err != nil {
-			api.staticLogger.Traceln("Error fetching token from request:", err)
+			api.staticLogger.Debugln("Error fetching token from request:", err)
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
 		token, err := jwt.ValidateToken(tokenStr)
 		if err != nil {
-			api.staticLogger.Traceln("Error validating token:", err)
+			api.staticLogger.Debugln("Error validating token:", err)
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}

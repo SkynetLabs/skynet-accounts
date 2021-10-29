@@ -141,5 +141,5 @@ func (api *API) WriteJSON(w http.ResponseWriter, obj interface{}) {
 // requested action succeeded AND there is no data to return.
 func (api *API) WriteSuccess(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
-	api.staticLogger.Debugln(http.StatusNoContent)
+	api.staticLogger.Traceln(http.StatusNoContent)
 }

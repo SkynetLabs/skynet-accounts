@@ -169,7 +169,7 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 	// Get the first result.
@@ -206,7 +206,7 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 	// Get the first result.
@@ -449,7 +449,7 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 
@@ -479,7 +479,7 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 	var errs []error
 	var errsMux sync.Mutex
 	regErr := func(msg string, e error) {
-		db.staticLogger.Info(msg, e)
+		db.staticLogger.Infoln(msg, e)
 		errsMux.Lock()
 		errs = append(errs, e)
 		errsMux.Unlock()
