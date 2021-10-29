@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
@@ -105,6 +106,11 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 			_ = srv.Shutdown(context.TODO())
 		}
 	}()
+
+	// Sometimes we manage to hit the test endpoints before the goroutine which
+	// runs ListenAndServe manages to start the server. So, we'll wait for a
+	// moment here.
+	time.Sleep(10 * time.Millisecond)
 
 	return &AccountsTester{
 		Ctx:    ctxWithCancel,

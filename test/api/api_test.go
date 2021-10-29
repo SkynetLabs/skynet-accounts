@@ -168,7 +168,12 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer at.Close()
+	defer func() {
+		if errClose := at.Close(); errClose != nil {
+			t.Error(errClose)
+		}
+	}()
+
 	email := strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	u, err := test.CreateUser(at, email, password)

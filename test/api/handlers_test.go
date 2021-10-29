@@ -42,7 +42,11 @@ func TestHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = at.Close() }()
+	defer func() {
+		if errClose := at.Close(); errClose != nil {
+			t.Error(errClose)
+		}
+	}()
 
 	// Specify subtests to run
 	tests := []subtest{
@@ -68,6 +72,10 @@ func TestHandlers(t *testing.T) {
 		{name: "StandardTrackingFlow", test: testTrackingAndStats},
 		// POST /user, POST /login, PUT /user, GET /user, POST /logout
 		{name: "StandardUserFlow", test: testUserFlow},
+		// GET /register, POST /register
+		{name: "Challenge-Response/Registration", test: testRegistration},
+		// GET /register, POST /register, GET /login, POST /login
+		{name: "Challenge-Response/Login", test: testLogin},
 	}
 
 	// Run subtests

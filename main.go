@@ -109,19 +109,19 @@ func logLevel() logrus.Level {
 
 // portal is a helper that fetches the portal name and scheme from the config
 // or takes the default value. It then validates it and returns a usable value.
-func portal() (string, error) {
+func portal() (string, string, error) {
 	pVal, ok := os.LookupEnv(envPortal)
 	if !ok {
 		pVal = defaultPortal
 	}
 	p, err := url.Parse(pVal)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if p.Scheme == "" {
 		p.Scheme = "https"
 	}
-	return p.Scheme + "://" + p.Host, nil
+	return p.Scheme, p.Host, nil
 }
 
 func main() {
@@ -136,12 +136,14 @@ func main() {
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
 
-	portalAddr, err := portal()
+	portalScheme, portalHost, err := portal()
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to parse portal name"))
 	}
-	email.PortalAddress = portalAddr
+	database.PortalName = portalHost
+	portalAddr := portalScheme + "://" + portalHost
 	jwt.JWTPortalName = portalAddr
+	email.PortalAddress = portalAddr
 	email.ServerLockID = os.Getenv(envServerDomain)
 	if email.ServerLockID == "" {
 		email.ServerLockID = jwt.JWTPortalName
