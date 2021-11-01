@@ -19,7 +19,7 @@ import (
 // TestValidateChallengeResponse is a unit test using a database.
 func TestValidateChallengeResponse(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 // updates works as expected.
 func TestUnconfirmedUserUpdate(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)

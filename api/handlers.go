@@ -563,8 +563,8 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	api.loginUser(w, u, true)
 }
 
-// userAddPubKeyGET generates an update challenge for the caller.
-func (api *API) userAddPubKeyGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// userPubKeyRegisterGET generates an update challenge for the caller.
+func (api *API) userPubKeyRegisterGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -604,8 +604,8 @@ func (api *API) userAddPubKeyGET(w http.ResponseWriter, req *http.Request, _ htt
 	api.WriteJSON(w, ch)
 }
 
-// userAddPubKeyPOST updates the user's pubKey based on a challenge-response.
-func (api *API) userAddPubKeyPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// userPubKeyRegisterPOST updates the user's pubKey based on a challenge-response.
+func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)

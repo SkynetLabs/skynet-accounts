@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +20,7 @@ import (
 // This method also tests UserCreate.
 func TestUserByEmail(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +63,7 @@ func TestUserByEmail(t *testing.T) {
 // TestUserByID ensures UserByID works as expected.
 func TestUserByID(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +102,7 @@ func TestUserByID(t *testing.T) {
 // single and multiple pubkeys attached to a user.
 func TestUserByPubKey(t *testing.T) {
 	ctx := context.Background()
-	name := strings.ReplaceAll(t.Name(), "/", "_")
+	name := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, name, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +153,7 @@ func TestUserByPubKey(t *testing.T) {
 // This method also tests UserCreate and UserSetStripeID.
 func TestUserByStripeID(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +197,7 @@ func TestUserByStripeID(t *testing.T) {
 // This method also tests UserCreate.
 func TestUserBySub(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +239,7 @@ func TestUserBySub(t *testing.T) {
 // including resecting the expiration of tokens.
 func TestUserConfirmEmail(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal("Failed to connect to the DB:", err)
@@ -278,7 +277,7 @@ func TestUserConfirmEmail(t *testing.T) {
 // TestUserCreate ensures UserCreate works as expected.
 func TestUserCreate(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -328,7 +327,7 @@ func TestUserCreate(t *testing.T) {
 // TestUserDelete ensures UserDelete works as expected.
 func TestUserDelete(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -366,7 +365,7 @@ func TestUserDelete(t *testing.T) {
 // TestUserSave ensures that UserSave works as expected.
 func TestUserSave(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -412,7 +411,7 @@ func TestUserSave(t *testing.T) {
 // TestUserSetStripeID ensures that UserSetStripeID works as expected.
 func TestUserSetStripeID(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -443,7 +442,7 @@ func TestUserSetStripeID(t *testing.T) {
 // TestUserSetTier ensures that UserSetTier works as expected.
 func TestUserSetTier(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -472,7 +471,7 @@ func TestUserSetTier(t *testing.T) {
 // TestUserStats ensures we report accurate statistics for users.
 func TestUserStats(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)

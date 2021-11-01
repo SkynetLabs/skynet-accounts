@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -48,7 +47,7 @@ func TestWithDBSession(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -163,7 +162,7 @@ func TestWithDBSession(t *testing.T) {
 func TestUserTierCache(t *testing.T) {
 	t.Parallel()
 
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	at, err := test.NewAccountsTester(dbName)
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +173,7 @@ func TestUserTierCache(t *testing.T) {
 		}
 	}()
 
-	email := strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
+	email := test.DBNameForTest(t.Name()) + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	u, err := test.CreateUser(at, email, password)
 	if err != nil {
