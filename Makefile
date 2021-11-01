@@ -55,6 +55,17 @@ ifneq ("$(OS)","Windows_NT")
 	go mod tidy
 endif
 
+# Credentials and port we are going to use for our test MongoDB instance.
+MONGO_USER=admin
+MONGO_PASSWORD=aO4tV5tC1oU3oQ7u
+MONGO_PORT=17017
+
+# call_mongo is a helper function that executes a query in an `eval` call to the
+# test mongo instance.
+define call_mongo
+    docker exec skynet-accounts-mongo-test-db mongo -u $(MONGO_USER) -p $(MONGO_PASSWORD) --port $(MONGO_PORT) --eval $(1)
+endef
+
 # start-mongo starts a local mongoDB container with no persistence.
 # We first prepare for the start of the container by making sure the test
 # keyfile has the right permissions, then we clear any potential leftover
@@ -69,15 +80,19 @@ start-mongo:
      --rm \
      --detach \
      --name skynet-accounts-mongo-test-db \
-     -p 17017:17017 \
-     -e MONGO_INITDB_ROOT_USERNAME=admin \
-     -e MONGO_INITDB_ROOT_PASSWORD=aO4tV5tC1oU3oQ7u \
+     -p $(MONGO_PORT):$(MONGO_PORT) \
+     -e MONGO_INITDB_ROOT_USERNAME=$(MONGO_USER) \
+     -e MONGO_INITDB_ROOT_PASSWORD=$(MONGO_PASSWORD) \
      -v $(shell pwd)/test/fixtures/mongo_keyfile:/data/mgkey \
-	mongo:4.4.1 mongod --port=17017 --replSet=skynet --keyFile=/data/mgkey 1>/dev/null 2>&1
+	mongo:4.4.1 mongod --port=$(MONGO_PORT) --replSet=skynet --keyFile=/data/mgkey 1>/dev/null 2>&1
 	# wait for mongo to start before we try to configure it
-	sleep 4
+	status=1 ; while [[ $$status -gt 0 ]]; do \
+		sleep 1 ; \
+		$(call call_mongo,"") 1>/dev/null 2>&1 ; \
+		status=$$? ; \
+	done
 	# Initialise a single node replica set.
-	docker exec skynet-accounts-mongo-test-db mongo -u admin -p aO4tV5tC1oU3oQ7u --port 17017 --eval "rs.initiate({_id: \"skynet\", members: [{ _id: 0, host: \"localhost:17017\" }]})" 1>/dev/null 2>&1
+	$(call call_mongo,"rs.initiate({_id: \"skynet\", members: [{ _id: 0, host: \"localhost:$(MONGO_PORT)\" }]})") 1>/dev/null 2>&1
 
 stop-mongo:
 	-docker stop skynet-accounts-mongo-test-db
