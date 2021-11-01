@@ -59,7 +59,7 @@ func TestHandlers(t *testing.T) {
 		// PUT /user
 		{name: "UserEdit", test: testUserPUT},
 		// PUT /user
-		{name: "UserUpdatePubKey", test: testUserUpdatePubKey},
+		{name: "UserAddPubKey", test: testUserAddPubKey},
 		// DELETE /user
 		{name: "UserDelete", test: testUserDELETE},
 		// GET /user/limits

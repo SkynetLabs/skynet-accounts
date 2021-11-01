@@ -179,8 +179,8 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	}
 }
 
-// testUserUpdatePubKey tests the ability of update user's pubKey.
-func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
+// testUserAddPubKey tests the ability of update user's pubKey.
+func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	name := strings.ReplaceAll(t.Name(), "/", "_")
 	u, c, err := test.CreateUserAndLogin(at, name)
 	if err != nil {
@@ -195,7 +195,7 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 	defer func() { at.Cookie = nil }()
 
 	// Request a challenge without a pubkey.
-	r, b, _ := at.Get("/user/updatepubkey", nil)
+	r, b, _ := at.Get("/user/addpubkey", nil)
 	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "invalid pubKey provided") {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
 			http.StatusBadRequest, "invalid pubKey provided", r.StatusCode, string(b))
@@ -204,7 +204,7 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 	// Request a challenge with an invalid pubkey.
 	params := url.Values{}
 	params.Add("pubKey", hex.EncodeToString(fastrand.Bytes(10)))
-	r, b, _ = at.Get("/user/updatepubkey", params)
+	r, b, _ = at.Get("/user/addpubkey", params)
 	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "invalid pubKey provided") {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
 			http.StatusBadRequest, "invalid pubKey provided", r.StatusCode, string(b))
@@ -218,7 +218,7 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 	}
 	params = url.Values{}
 	params.Add("pubKey", hex.EncodeToString(pk2[:]))
-	r, b, _ = at.Get("/user/updatepubkey", params)
+	r, b, _ = at.Get("/user/addpubkey", params)
 	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "pubkey already registered") {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
 			http.StatusBadRequest, "pubkey already registered", r.StatusCode, string(b))
@@ -228,7 +228,7 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 	sk, pk := crypto.GenerateKeyPair()
 	params = url.Values{}
 	params.Add("pubKey", hex.EncodeToString(pk[:]))
-	r, b, err = at.Get("/user/updatepubkey", params)
+	r, b, err = at.Get("/user/addpubkey", params)
 	var ch database.Challenge
 	err = json.Unmarshal(b, &ch)
 	if err != nil || r.StatusCode != http.StatusOK {
@@ -240,7 +240,7 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to solve it without passing the solution.
-	r, b, _ = at.Post("/user/updatepubkey", nil, params)
+	r, b, _ = at.Post("/user/addpubkey", nil, params)
 	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "missing or invalid challenge response") {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
 			http.StatusBadRequest, "missing or invalid challenge response", r.StatusCode, string(b))
@@ -252,7 +252,7 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
-	r, b, _ = at.Post("/user/updatepubkey", nil, params)
+	r, b, _ = at.Post("/user/addpubkey", nil, params)
 	if r.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("Expected %d , got %d '%s', error '%s'",
 			http.StatusUnauthorized, r.StatusCode, string(b), err)
@@ -266,7 +266,7 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(r.Status, err)
 	}
 	at.Cookie = test.ExtractCookie(r)
-	r, b, _ = at.Post("/user/updatepubkey", nil, params)
+	r, b, _ = at.Post("/user/addpubkey", nil, params)
 	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "user's sub doesn't match update sub") {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
 			http.StatusBadRequest, "user's sub doesn't match update sub", r.StatusCode, string(b))
@@ -276,7 +276,7 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 	at.Cookie = c
 	params = url.Values{}
 	params.Add("pubKey", hex.EncodeToString(pk[:]))
-	r, b, err = at.Get("/user/updatepubkey", params)
+	r, b, err = at.Get("/user/addpubkey", params)
 	err = json.Unmarshal(b, &ch)
 	if err != nil || r.StatusCode != http.StatusOK {
 		t.Fatal("Failed to get a challenge:", err, r.Status, string(b))
@@ -291,7 +291,7 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 	params = url.Values{}
 	params.Add("response", hex.EncodeToString(response))
 	params.Add("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
-	r, b, err = at.Post("/user/updatepubkey", nil, params)
+	r, b, err = at.Post("/user/addpubkey", nil, params)
 	if err != nil {
 		t.Fatalf("Failed to confirm the update. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
 	}
@@ -301,7 +301,10 @@ func testUserUpdatePubKey(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if subtle.ConstantTimeCompare(u3.PubKey, pk[:]) != 1 {
-		t.Fatalf("Expected pubKey '%s', got '%s',", hex.EncodeToString(pk[:]), hex.EncodeToString(u3.PubKey))
+	if len(u3.PubKeys) == 0 {
+		t.Fatal("Expected at least one pubkey assigned, got none.")
+	}
+	if subtle.ConstantTimeCompare(u3.PubKeys[0], pk[:]) != 1 {
+		t.Fatalf("Expected pubKey '%s', got '%s',", hex.EncodeToString(pk[:]), hex.EncodeToString(u3.PubKeys[0]))
 	}
 }

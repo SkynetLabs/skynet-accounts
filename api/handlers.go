@@ -563,8 +563,8 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	api.loginUser(w, u, true)
 }
 
-// userUpdatePubKeyGET generates an update challenge for the caller.
-func (api *API) userUpdatePubKeyGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// userAddPubKeyGET generates an update challenge for the caller.
+func (api *API) userAddPubKeyGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -604,8 +604,8 @@ func (api *API) userUpdatePubKeyGET(w http.ResponseWriter, req *http.Request, _ 
 	api.WriteJSON(w, ch)
 }
 
-// userUpdatePubKeyPOST updates the user's pubKey based on a challenge-response.
-func (api *API) userUpdatePubKeyPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// userAddPubKeyPOST updates the user's pubKey based on a challenge-response.
+func (api *API) userAddPubKeyPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -653,7 +653,8 @@ func (api *API) userUpdatePubKeyPOST(w http.ResponseWriter, req *http.Request, _
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u.PubKey = pk
+	// We add the pubkey at first position as the active one.
+	u.PubKeys = append([]database.PubKey{pk}, u.PubKeys...)
 	err = api.staticDB.UserSave(ctx, u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)

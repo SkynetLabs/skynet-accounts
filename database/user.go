@@ -124,7 +124,10 @@ type (
 		SubscriptionCancelAtPeriodEnd    bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
 		StripeID                         string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                    bool               `bson:"quota_exceeded" json:"quotaExceeded"`
-		PubKey                           PubKey             `bson:"pub_key" json:"-"`
+		// The currently active (or default) key is going to be the first one in
+		// the list. If we want to activate a new pubkey, we'll just move it to
+		// the first position in the list.
+		PubKeys []PubKey `bson:"pub_keys" json:"-"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
@@ -192,7 +195,7 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 
 // UserByPubKey returns the user with the given pubkey.
 func (db *DB) UserByPubKey(ctx context.Context, pk PubKey) (*User, error) {
-	sr := db.staticUsers.FindOne(ctx, bson.M{"pub_key": pk})
+	sr := db.staticUsers.FindOne(ctx, bson.M{"pub_keys": pk})
 	var u User
 	err := sr.Decode(&u)
 	if err != nil {
@@ -420,7 +423,7 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		PasswordHash:                     string(passHash),
 		Sub:                              sub,
 		Tier:                             tier,
-		PubKey:                           pk,
+		PubKeys:                          []PubKey{pk},
 	}
 	// Insert the user.
 	fields, err := bson.Marshal(u)
