@@ -653,8 +653,7 @@ func (api *API) userAddPubKeyPOST(w http.ResponseWriter, req *http.Request, _ ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	// We add the pubkey at first position as the active one.
-	u.PubKeys = append([]database.PubKey{pk}, u.PubKeys...)
+	u.PubKeys = append(u.PubKeys, pk)
 	err = api.staticDB.UserSave(ctx, u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
