@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/SkynetLabs/skynet-accounts/lib"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -314,8 +315,6 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 // data about each download.
 func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
 	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
-	skipStage := bson.D{{"$skip", offset}}
-	limitStage := bson.D{{"$limit", pageSize}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
@@ -324,6 +323,19 @@ func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipe
 			{"as", "fromSkylinks"},
 		}},
 	}
+	// Do not select skylinks with names starting with "dk:".
+	// In MongoDB this looks like this: { $match: { "fromSkylinks.name": /^(?!dk:)/}},
+	filterStage := bson.D{
+		{"$match", bson.D{
+			{"fromSkylinks.name", bson.D{
+				{"$regex", primitive.Regex{
+					Pattern: "^(?!dk:)",
+					Options: "i",
+				}},
+			}},
+		}}}
+	skipStage := bson.D{{"$skip", offset}}
+	limitStage := bson.D{{"$limit", pageSize}}
 	replaceStage := bson.D{
 		{"$replaceRoot", bson.D{
 			{"newRoot", bson.D{
@@ -334,7 +346,7 @@ func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipe
 		}},
 	}
 	projectStage := bson.D{{"$project", bson.D{{"fromSkylinks", 0}}}}
-	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+	return mongo.Pipeline{matchStage, sortStage, lookupStage, filterStage, skipStage, limitStage, replaceStage, projectStage}
 }
 
 // generateDownloadsPipeline is similar to generateUploadsPipeline. The only
@@ -342,8 +354,6 @@ func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipe
 // `downloads` collection.
 func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
 	sortStage := bson.D{{"$sort", bson.D{{"created_at", -1}}}}
-	skipStage := bson.D{{"$skip", offset}}
-	limitStage := bson.D{{"$limit", pageSize}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
@@ -352,6 +362,19 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 			{"as", "fromSkylinks"},
 		}},
 	}
+	// Do not select skylinks with names starting with "dk:".
+	// In MongoDB this looks like this: { $match: { "fromSkylinks.name": /^(?!dk:)/}},
+	filterStage := bson.D{
+		{"$match", bson.D{
+			{"fromSkylinks.name", bson.D{
+				{"$regex", primitive.Regex{
+					Pattern: "^(?!dk:)",
+					Options: "i",
+				}},
+			}},
+		}}}
+	skipStage := bson.D{{"$skip", offset}}
+	limitStage := bson.D{{"$limit", pageSize}}
 	replaceStage := bson.D{
 		{"$replaceRoot", bson.D{
 			{"newRoot", bson.D{
@@ -378,7 +401,7 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 			}},
 		}},
 	}}}
-	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+	return mongo.Pipeline{matchStage, sortStage, lookupStage, filterStage, skipStage, limitStage, replaceStage, projectStage}
 }
 
 // count returns the number of documents in the given collection that match the
