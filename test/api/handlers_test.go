@@ -37,7 +37,7 @@ type subtest struct {
 // TestHandlers is a meta test that sets up a test instance of accounts and runs
 // a suite of tests that ensure all handlers behave as expected.
 func TestHandlers(t *testing.T) {
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	at, err := test.NewAccountsTester(dbName)
 	if err != nil {
 		t.Fatal(err)
@@ -58,6 +58,8 @@ func TestHandlers(t *testing.T) {
 		{name: "LoginLogout", test: testHandlerLoginPOST},
 		// PUT /user
 		{name: "UserEdit", test: testUserPUT},
+		// PUT /user
+		{name: "UserAddPubKey", test: testUserAddPubKey},
 		// DELETE /user
 		{name: "UserDelete", test: testUserDELETE},
 		// GET /user/limits
@@ -109,7 +111,7 @@ func testHandlerHealthGET(t *testing.T, at *test.AccountsTester) {
 // testHandlerUserPOST tests user creation and login.
 func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	// Use the test's name as an email-compatible identifier.
-	name := strings.ReplaceAll(t.Name(), "/", "_")
+	name := test.DBNameForTest(t.Name())
 	emailAddr := name + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	// Try to create a user with a missing email.
@@ -171,7 +173,7 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 
 // testHandlerLoginPOST tests the /login endpoint.
 func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
-	emailAddr := strings.ReplaceAll(t.Name(), "/", "_") + "@siasky.net"
+	emailAddr := test.DBNameForTest(t.Name()) + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	params := url.Values{}
 	params.Add("email", emailAddr)
@@ -242,8 +244,8 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 
 // testUserPUT tests the PUT /user endpoint.
 func testUserPUT(t *testing.T, at *test.AccountsTester) {
-	name := strings.ReplaceAll(t.Name(), "/", "_")
-	u, c, err := test.CreateUserAndLogin(at, t.Name())
+	name := test.DBNameForTest(t.Name())
+	u, c, err := test.CreateUserAndLogin(at, name)
 	if err != nil {
 		t.Fatal("Failed to create a user and log in:", err)
 	}
@@ -894,7 +896,7 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 // per-handler tests.
 func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	// Use the test's name as an email-compatible identifier.
-	name := strings.ReplaceAll(t.Name(), "/", "_")
+	name := test.DBNameForTest(t.Name())
 	params := url.Values{}
 	params.Add("email", name+"@siasky.net")
 	params.Add("password", hex.EncodeToString(fastrand.Bytes(16)))

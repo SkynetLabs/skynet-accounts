@@ -41,6 +41,12 @@ func (tu *User) Delete(ctx context.Context) error {
 	return tu.staticDB.UserDelete(ctx, tu.User)
 }
 
+// DBNameForTest sanitizes the input string, so it can be used as an email or
+// sub.
+func DBNameForTest(s string) string {
+	return strings.ReplaceAll(s, "/", "_")
+}
+
 // DBTestCredentials sets the environment variables to what we have defined in Makefile.
 func DBTestCredentials() database.DBCredentials {
 	return database.DBCredentials{
@@ -72,7 +78,7 @@ func CreateUser(at *AccountsTester, email, password string) (*User, error) {
 func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, error) {
 	// Use the test's name as an email-compatible identifier.
 	params := url.Values{}
-	params.Add("email", strings.ReplaceAll(name, "/", "_")+"@siasky.net")
+	params.Add("email", DBNameForTest(name)+"@siasky.net")
 	params.Add("password", hex.EncodeToString(fastrand.Bytes(16)))
 	// Create a user.
 	u, err := CreateUser(at, params.Get("email"), params.Get("password"))

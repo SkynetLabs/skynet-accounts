@@ -18,6 +18,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
+	"go.sia.tech/siad/build"
 )
 
 var (
@@ -107,17 +108,21 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 		}
 	}()
 
-	// Sometimes we manage to hit the test endpoints before the goroutine which
-	// runs ListenAndServe manages to start the server. So, we'll wait for a
-	// moment here.
-	time.Sleep(10 * time.Millisecond)
-
-	return &AccountsTester{
+	at := &AccountsTester{
 		Ctx:    ctxWithCancel,
 		DB:     db,
 		Logger: logger,
 		cancel: cancel,
-	}, nil
+	}
+	// Wait for the accounts tester to be fully ready.
+	err = build.Retry(50, time.Millisecond, func() error {
+		_, _, err = at.Get("/health", nil)
+		return err
+	})
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to start accounts tester in the given time")
+	}
+	return at, nil
 }
 
 // Get executes a GET request against the test service.

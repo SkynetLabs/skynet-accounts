@@ -25,6 +25,9 @@ const (
 	ChallengeTypeLogin = "skynet-portal-login"
 	// ChallengeTypeRegister is the type of the registration challenge.
 	ChallengeTypeRegister = "skynet-portal-register"
+	// ChallengeTypeUpdate is the type of the update challenge which we use when
+	// we change the user's pubKey.
+	ChallengeTypeUpdate = "skynet-portal-update"
 
 	// PubKeySize defines the length of the public key in bytes.
 	PubKeySize = ed25519.PublicKeySize
@@ -62,11 +65,19 @@ type (
 	// PubKey represents a public key. It's a helper type used to make function
 	// signatures more readable.
 	PubKey ed25519.PublicKey
+
+	// UnconfirmedUserUpdate contains a user update that should be applied once
+	// the respective challenge has been successfully responded to.
+	UnconfirmedUserUpdate struct {
+		Sub         string             `bson:"sub"`
+		ChallengeID primitive.ObjectID `bson:"challenge_id"`
+		ExpiresAt   time.Time          `bson:"expires_at"`
+	}
 )
 
 // NewChallenge creates a new challenge with the given type and pubKey.
 func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, cType string) (*Challenge, error) {
-	if cType != ChallengeTypeLogin && cType != ChallengeTypeRegister {
+	if cType != ChallengeTypeLogin && cType != ChallengeTypeRegister && cType != ChallengeTypeUpdate {
 		return nil, errors.New(fmt.Sprintf("invalid challenge type '%s'", cType))
 	}
 	ch := &Challenge{
@@ -75,10 +86,11 @@ func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, cType string) (*C
 		PubKey:    pubKey,
 		ExpiresAt: time.Now().UTC().Add(challengeTTL),
 	}
-	_, err := db.staticChallenges.InsertOne(ctx, ch)
+	ior, err := db.staticChallenges.InsertOne(ctx, ch)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to create challenge DB record")
 	}
+	ch.ID = ior.InsertedID.(primitive.ObjectID)
 	return ch, nil
 }
 
@@ -87,7 +99,7 @@ func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, cType string) (*C
 // in the database and that the signature is valid.
 //
 // Challenge format: challenge + type + recipient
-func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeResponse) (PubKey, error) {
+func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeResponse, expType string) (PubKey, primitive.ObjectID, error) {
 	resp := chr.Response
 	// Get the challenge type which sits right after the challenge in the
 	// response.
@@ -96,14 +108,19 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 		cType = ChallengeTypeLogin
 	} else if strings.HasPrefix(string(resp[ChallengeSize:]), ChallengeTypeRegister) {
 		cType = ChallengeTypeRegister
+	} else if strings.HasPrefix(string(resp[ChallengeSize:]), ChallengeTypeUpdate) {
+		cType = ChallengeTypeUpdate
 	} else {
-		return nil, errors.New("invalid challenge type")
+		return nil, primitive.ObjectID{}, errors.New("invalid challenge type")
+	}
+	if cType != expType {
+		return nil, primitive.ObjectID{}, errors.New("unexpected challenge type")
 	}
 	// Now that we know the challenge type, we can get the recipient as well.
 	recipientOffset := ChallengeSize + len([]byte(cType))
 	recipient := string(resp[recipientOffset:])
 	if recipient != PortalName {
-		return nil, errors.New("invalid recipient " + recipient)
+		return nil, primitive.ObjectID{}, errors.New("invalid recipient " + recipient)
 	}
 	// Fetch the challenge from the DB.
 	filter := bson.M{
@@ -114,13 +131,13 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 	var ch Challenge
 	err := sr.Decode(&ch)
 	if err != nil {
-		return nil, errors.AddContext(err, "challenge not found")
+		return nil, primitive.ObjectID{}, errors.AddContext(err, "challenge not found")
 	}
 	if ch.ExpiresAt.Before(time.Now().UTC()) {
-		return nil, errors.New("challenge expired")
+		return nil, primitive.ObjectID{}, errors.New("challenge expired")
 	}
 	if !verifySignature(ch.PubKey, resp, chr.Signature) {
-		return nil, errors.New("invalid signature")
+		return nil, primitive.ObjectID{}, errors.New("invalid signature")
 	}
 	// Now that the challenge has been used, we delete it from the DB. If this
 	// errors out we'll log the error but we will still return success to the
@@ -134,7 +151,35 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 	if err != nil {
 		db.staticLogger.Debugln("Failed to delete expired challenges from DB:", err)
 	}
-	return ch.PubKey, nil
+	return ch.PubKey, ch.ID, nil
+}
+
+// StoreUnconfirmedUserUpdate stores an UnconfirmedUserUpdate in the DB.
+func (db *DB) StoreUnconfirmedUserUpdate(ctx context.Context, uu *UnconfirmedUserUpdate) error {
+	_, err := db.staticUnconfirmedUserUpdates.InsertOne(ctx, uu)
+	return err
+}
+
+// FetchUnconfirmedUserUpdate fetches an UnconfirmedUserUpdate from the DB.
+func (db *DB) FetchUnconfirmedUserUpdate(ctx context.Context, chID primitive.ObjectID) (*UnconfirmedUserUpdate, error) {
+	sr := db.staticUnconfirmedUserUpdates.FindOne(ctx, bson.M{"challenge_id": chID})
+	if sr.Err() != nil {
+		return nil, sr.Err()
+	}
+	uu := &UnconfirmedUserUpdate{}
+	err := sr.Decode(uu)
+	if err != nil {
+		return nil, err
+	}
+	return uu, nil
+}
+
+// DeleteUnconfirmedUserUpdate deletes an UnconfirmedUserUpdate from the DB.
+func (db *DB) DeleteUnconfirmedUserUpdate(ctx context.Context, chID primitive.ObjectID) error {
+	_, err := db.staticUnconfirmedUserUpdates.DeleteOne(ctx, bson.M{"challenge_id": chID})
+	// Do some cleanup while we're here and remove all expired updates.
+	_, _ = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.M{"expires_at": bson.M{"$lt": time.Now().UTC()}})
+	return err
 }
 
 // LoadFromRequest loads a ChallengeResponse by extracting its string form from
