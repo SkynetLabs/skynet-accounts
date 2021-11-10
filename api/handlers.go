@@ -43,6 +43,7 @@ type (
 	// externally, e.g. by calling `PUT /user`.
 	userUpdateData struct {
 		Email    string `json:"email,omitempty"`
+		Password string `json:"password,omitempty"`
 		StripeID string `json:"stripeCustomerId,omitempty"`
 	}
 )
@@ -476,7 +477,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	if payload.Email == "" && payload.StripeID == "" {
+	if payload.Email == "" && payload.StripeID == "" && payload.Password == "" {
 		// The payload is empty, nothing to do.
 		api.WriteSuccess(w)
 		return
@@ -491,6 +492,15 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
+	}
+
+	if payload.Password != "" {
+		pwHash, err := hash.Generate(payload.Password)
+		if err != nil {
+			api.WriteError(w, errors.AddContext(err, "failed to hash password"), http.StatusInternalServerError)
+			return
+		}
+		u.PasswordHash = string(pwHash)
 	}
 
 	if payload.StripeID != "" {

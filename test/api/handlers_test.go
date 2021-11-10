@@ -267,7 +267,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	at.Cookie = c
 	// Update the user's Stripe ID.
 	stripeID := name + "_stripe_id"
-	_, b, err := at.UserPUT("", stripeID)
+	_, b, err := at.UserPUT("", "", stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,14 +280,53 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected the user to have StripeID %s, got %s", stripeID, u2.StripeID)
 	}
 	// Try to update the StripeID again. Expect this to fail.
-	r, _, err := at.UserPUT("", stripeID)
+	r, _, err := at.UserPUT("", "", stripeID)
 	if err == nil || !strings.Contains(err.Error(), "409 Conflict") || r.StatusCode != http.StatusConflict {
 		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d", err, r.StatusCode)
 	}
 
+	// Update the user's password with an empty one. Expect this to succeed but
+	// not change anything.
+	_, b, err = at.UserPUT("", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Fetch the user from the DB again and make sure their password hash hasn't
+	// changed.
+	uSamePassHash, err := at.DB.UserByID(at.Ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uSamePassHash.PasswordHash != u.PasswordHash {
+		t.Fatal("Expected the user's password to not change but it did.")
+	}
+	pw := hex.EncodeToString(fastrand.Bytes(12))
+	_, b, err = at.UserPUT("", pw, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Fetch the user from the DB again and make sure their password hash has
+	// changed.
+	uNewPassHash, err := at.DB.UserByID(at.Ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uNewPassHash.PasswordHash == u.PasswordHash {
+		t.Fatal("Expected the user's password to change but it did not.")
+	}
+	// Check if we can login with the new password.
+	params := url.Values{}
+	params.Add("email", u.Email)
+	params.Add("password", pw)
+	// Try logging in with a non-existent user.
+	_, _, err = at.Post("/login", nil, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Update the user's email.
 	emailAddr := name + "_new@siasky.net"
-	_, _, err = at.UserPUT(emailAddr, "")
+	_, _, err = at.UserPUT(emailAddr, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -924,7 +963,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	// Change the user's email.
 	newEmail := name + "_new@siasky.net"
-	r, b, err := at.UserPUT(newEmail, "")
+	r, b, err := at.UserPUT(newEmail, "", "")
 	if err != nil {
 		t.Fatalf("Failed to update user. Error: %s. Body: %s", err.Error(), string(b))
 	}
