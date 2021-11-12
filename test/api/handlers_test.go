@@ -588,7 +588,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// // TEST REQUESTING RECOVERY // //
 
 	// Request recovery without supplying an email.
-	_, _, err = at.Get("/user/recover", nil)
+	_, _, err = at.Post("/user/recover/request", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
 	}
@@ -603,7 +603,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	attemptedEmail := hex.EncodeToString(fastrand.Bytes(16)) + "@siasky.net"
 	params := url.Values{}
 	params.Add("email", attemptedEmail)
-	_, b, err := at.Get("/user/recover", params)
+	_, b, err := at.Post("/user/recover/request", nil, params)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
@@ -619,7 +619,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// Request recovery with a valid but unconfirmed email.
 	params = url.Values{}
 	params.Add("email", u.Email)
-	_, _, err = at.Get("/user/recover", params)
+	_, _, err = at.Post("/user/recover/request", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
 	}
@@ -634,7 +634,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// with the recovery token.
 	params = url.Values{}
 	params.Add("email", u.Email)
-	_, b, err = at.Get("/user/recover", params)
+	_, b, err = at.Post("/user/recover/request", nil, params)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}

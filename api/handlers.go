@@ -837,16 +837,16 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 	api.WriteSuccess(w)
 }
 
-// userRecoverGET allows the user to request an account recovery. This creates
-// a password-reset token that allows the user to change their password without
-// logging in.
+// userRecoverRequestPOST allows the user to request an account recovery. This
+// creates a password-reset token that allows the user to change their password
+// without logging in.
 // The user doesn't need to be logged in.
-func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	if err := req.ParseForm(); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	email := req.Form.Get("email")
+	email := req.PostFormValue("email")
 	if email == "" {
 		api.WriteError(w, errors.New("missing required parameter 'email'"), http.StatusBadRequest)
 		return
