@@ -26,7 +26,7 @@ Hi, please verify your account by clicking the following link:
 
 <a href="{{.ConfirmEndpoint}}?token={{.Token}}">{{.ConfirmEndpoint}}?token={{.Token}}</a>
 
---e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a
+--e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a--
 `
 
 	recoverAccountSubject = "Recover access to your account"
