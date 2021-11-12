@@ -1,10 +1,12 @@
 package database
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -22,33 +24,72 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 	sk, _ := crypto.GenerateKeyPair()
 	response := append(fastrand.Bytes(ChallengeSize), append([]byte(ChallengeTypeLogin), []byte(jwt.JWTPortalName)...)...)
 	signature := ed25519.Sign(sk[:], response)
-	r := &http.Request{PostForm: url.Values{}}
+	payload := challengeResponseDTO{
+		Signature: hex.EncodeToString(fastrand.Bytes(16)),
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &http.Request{
+		Body: ioutil.NopCloser(bytes.NewReader(payloadBytes)),
+	}
 	// No "response" field.
-	err := chr.LoadFromRequest(r)
+	err = chr.LoadFromRequest(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid response") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid response", err)
 	}
 	// Invalid response.
-	r.PostForm.Set("response", hex.EncodeToString(fastrand.Bytes(16)))
-	err = chr.LoadFromRequest(r)
+	payload = challengeResponseDTO{
+		Response: hex.EncodeToString(fastrand.Bytes(16)),
+	}
+	payloadBytes, err = json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
+	err = chr.LoadFromRequest(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid response") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid response", err)
 	}
 	// Missing signature.
-	r.PostForm.Set("response", hex.EncodeToString(response))
-	err = chr.LoadFromRequest(r)
+	payload = challengeResponseDTO{
+		Response: hex.EncodeToString(response),
+	}
+	payloadBytes, err = json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
+	err = chr.LoadFromRequest(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid signature") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid signature", err)
 	}
 	// Invalid signature.
-	r.PostForm.Set("signature", hex.EncodeToString(fastrand.Bytes(16)))
-	err = chr.LoadFromRequest(r)
+	payload = challengeResponseDTO{
+		Response:  hex.EncodeToString(response),
+		Signature: hex.EncodeToString(fastrand.Bytes(16)),
+	}
+	payloadBytes, err = json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
+	err = chr.LoadFromRequest(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid signature") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid signature", err)
 	}
 	// Valid response and valid signature.
-	r.PostForm.Set("signature", hex.EncodeToString(signature))
-	err = chr.LoadFromRequest(r)
+	payload = challengeResponseDTO{
+		Response:  hex.EncodeToString(response),
+		Signature: hex.EncodeToString(signature),
+	}
+	payloadBytes, err = json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
+	err = chr.LoadFromRequest(r.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,12 +109,12 @@ func TestPubKey_String(t *testing.T) {
 		t.Fatalf("Expected '%s', got '%s'.", "0000000000000000000000000000000000000000000000000000000000000000", pkStr)
 	}
 	// Initialise the pubkey.
-	bytes := fastrand.Bytes(PubKeySize)
-	copy(pk[:], bytes)
+	b := fastrand.Bytes(PubKeySize)
+	copy(pk[:], b)
 	// Expect the string representation of a pubkey to be its hex-encoded bytes.
 	pkStr = pk.String()
-	if pkStr != hex.EncodeToString(bytes) {
-		t.Fatalf("Expected '%s', got '%s'.", hex.EncodeToString(bytes), pkStr)
+	if pkStr != hex.EncodeToString(b) {
+		t.Fatalf("Expected '%s', got '%s'.", hex.EncodeToString(b), pkStr)
 	}
 }
 

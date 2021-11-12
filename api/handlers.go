@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -39,9 +40,23 @@ type (
 		Storage           int64  `json:"storageLimit"`
 	}
 
-	// userUpdateData defines the fields of the User record that can be changed
+	// accountRecoveryDTO defines the payload we expect when a user is trying to
+	// change their password.
+	accountRecoveryDTO struct {
+		Token           string `json:"token"`
+		Password        string `json:"password"`
+		ConfirmPassword string `json:"confirmPassword"`
+	}
+
+	// credentialsDTO defines the standard credentials package we expect.
+	credentialsDTO struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	// userUpdateDTO defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
-	userUpdateData struct {
+	userUpdateDTO struct {
 		Email    string `json:"email,omitempty"`
 		StripeID string `json:"stripeCustomerId,omitempty"`
 	}
@@ -92,22 +107,29 @@ func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Get the body, we might need to use it several times.
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "empty request body"), http.StatusBadRequest)
+		return
+	}
+
 	// Since we don't want to have separate endpoints for logging in with
 	// credentials and token, we'll do both here.
 	//
 	// Check whether credentials are provided. Those trump the token because a
 	// user with a valid token might want to relog. No need to force them to
 	// log out first.
-	email := req.PostFormValue("email")
-	pw := req.PostFormValue("password")
-	if email != "" && pw != "" {
-		api.loginPOSTCredentials(w, req, email, pw)
+	var payload credentialsDTO
+	err = json.Unmarshal(body, &payload)
+	if err == nil && payload.Email != "" && payload.Password != "" {
+		api.loginPOSTCredentials(w, req, payload.Email, payload.Password)
 		return
 	}
 
 	// Check for a challenge response in the request.
 	var chr database.ChallengeResponse
-	err := chr.LoadFromRequest(req)
+	err = chr.LoadFromRequest(bytes.NewBuffer(body))
 	if err == nil {
 		api.loginPOSTChallengeResponse(w, req, chr)
 		return
@@ -247,9 +269,15 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 
 // registerPOST registers a new user based on a challenge-response.
 func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Get the body, we might need to use it several times.
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "empty request body"), http.StatusBadRequest)
+		return
+	}
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err := chr.LoadFromRequest(req)
+	err = chr.LoadFromRequest(bytes.NewBuffer(body))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -260,18 +288,23 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusBadRequest)
 		return
 	}
+	// Parse the request's body.
+	var payload credentialsDTO
+	err = json.Unmarshal(body, &payload)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
 	// Validate the email address.
-	email := req.PostFormValue("email")
-	e, err := mail.ParseAddress(email)
+	e, err := mail.ParseAddress(payload.Email)
 	if err != nil {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
 	// Strip any names from the email and leave just the address.
-	email = e.Address
 	// The password is optional.
-	pass := req.PostFormValue("password")
-	u, err := api.staticDB.UserCreatePK(ctx, email, pass, "", pk, database.TierFree)
+	payload.Email = e.Address
+	u, err := api.staticDB.UserCreatePK(ctx, payload.Email, payload.Password, "", pk, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -412,17 +445,27 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	email := req.PostFormValue("email")
+	// Parse the request's body.
+	var payload credentialsDTO
+	b, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
+	err = json.Unmarshal(b, &payload)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
 	// Validate the email address.
-	a, err := mail.ParseAddress(email)
+	a, err := mail.ParseAddress(payload.Email)
 	if err != nil {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
 	// Strip any names from the email and leave just the address.
-	email = a.Address
-	pw := req.PostFormValue("password")
-	if pw == "" {
+	payload.Email = a.Address
+	if payload.Password == "" {
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
 	}
@@ -436,7 +479,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, errors.AddContext(err, "failed to generate user sub"), http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserCreate(req.Context(), email, pw, sub, database.TierFree)
+	u, err := api.staticDB.UserCreate(req.Context(), payload.Email, payload.Password, sub, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -469,7 +512,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	var payload userUpdateData
+	var payload userUpdateDTO
 	err = json.Unmarshal(bodyBytes, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
@@ -615,7 +658,7 @@ func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request,
 	ctx := req.Context()
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromRequest(req)
+	err = chr.LoadFromRequest(req.Body)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -865,27 +908,32 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 // They need to provide a valid password-reset token.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if err := req.ParseForm(); err != nil {
-		api.WriteError(w, err, http.StatusBadRequest)
+	// Parse the request's body.
+	var payload accountRecoveryDTO
+	b, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
 	}
-	recoveryToken := req.Form.Get("token")
-	password := req.Form.Get("password")
-	confirmPassword := req.Form.Get("confirmPassword")
-	if recoveryToken == "" || password == "" || confirmPassword == "" {
+	err = json.Unmarshal(b, &payload)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
+	if payload.Password == "" || payload.ConfirmPassword == "" || payload.Token == "" {
 		api.WriteError(w, errors.New("missing required parameter"), http.StatusBadRequest)
 		return
 	}
-	if password != confirmPassword {
+	if payload.Password != payload.ConfirmPassword {
 		api.WriteError(w, errors.New("passwords don't match"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserByRecoveryToken(req.Context(), recoveryToken)
+	u, err := api.staticDB.UserByRecoveryToken(req.Context(), payload.Token)
 	if err != nil {
 		api.WriteError(w, errors.New("no such user"), http.StatusBadRequest)
 		return
 	}
-	passHash, err := hash.Generate(password)
+	passHash, err := hash.Generate(payload.Password)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to hash password"), http.StatusInternalServerError)
 		return

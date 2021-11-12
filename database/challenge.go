@@ -3,8 +3,10 @@ package database
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"net/http"
+	"io"
+	"io/ioutil"
 	"strings"
 	"time"
 
@@ -37,6 +39,10 @@ const (
 )
 
 var (
+	// ErrInvalidChallengeResponse is returned when the received challenge
+	// response object is not valid, i.e. it's either missing one of its
+	// required fields or those do not follow the expected format.
+	ErrInvalidChallengeResponse = errors.New("invalid response")
 	// PortalName is the name this portal uses to announce itself to the world.
 	// Its value is controlled by the PORTAL_DOMAIN environment variable.
 	// This name does not have a protocol prefix.
@@ -55,8 +61,8 @@ type (
 		ExpiresAt time.Time `bson:"expires_at" json:"-"`
 	}
 
-	// ChallengeResponse defines the format in which the caller will deliver
-	// its response to our login and register challenges.
+	// ChallengeResponse defines the format of a fully parsed and validated
+	// response to a challenge.
 	ChallengeResponse struct {
 		Response  []byte `json:"response"`
 		Signature []byte `json:"signature"`
@@ -72,6 +78,13 @@ type (
 		Sub         string             `bson:"sub"`
 		ChallengeID primitive.ObjectID `bson:"challenge_id"`
 		ExpiresAt   time.Time          `bson:"expires_at"`
+	}
+
+	// challengeResponseDTO defines the format in which the caller will deliver
+	// its response to a challenge.
+	challengeResponseDTO struct {
+		Response  string `json:"response"`
+		Signature string `json:"signature"`
 	}
 )
 
@@ -184,15 +197,25 @@ func (db *DB) DeleteUnconfirmedUserUpdate(ctx context.Context, chID primitive.Ob
 
 // LoadFromRequest loads a ChallengeResponse by extracting its string form from
 // http.Request.
-func (cr *ChallengeResponse) LoadFromRequest(req *http.Request) error {
-	resp, err := hex.DecodeString(req.PostFormValue("response"))
+func (cr *ChallengeResponse) LoadFromRequest(body io.Reader) error {
+	// Parse the request's body.
+	var payload challengeResponseDTO
+	b, err := ioutil.ReadAll(body)
+	if err != nil {
+		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
+	}
+	err = json.Unmarshal(b, &payload)
+	if err != nil {
+		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
+	}
+	resp, err := hex.DecodeString(payload.Response)
 	if err != nil {
 		return errors.AddContext(err, "failed to parse the response")
 	}
 	if len(resp) < ChallengeSize {
-		return errors.New("invalid response")
+		return ErrInvalidChallengeResponse
 	}
-	sig, err := hex.DecodeString(req.PostFormValue("signature"))
+	sig, err := hex.DecodeString(payload.Signature)
 	if err != nil {
 		return errors.AddContext(err, "failed to parse the response signature")
 	}

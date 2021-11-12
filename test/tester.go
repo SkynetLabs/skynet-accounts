@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
@@ -136,19 +135,28 @@ func (at *AccountsTester) Delete(endpoint string, params url.Values) (r *http.Re
 }
 
 // Post executes a POST request against the test service.
-func (at *AccountsTester) Post(endpoint string, params url.Values, postParams url.Values) (r *http.Response, body []byte, err error) {
+// TODO Remove the url.Values in favour of a simple map.
+func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams url.Values) (r *http.Response, body []byte, err error) {
 	if params == nil {
 		params = url.Values{}
 	}
-	if postParams == nil {
-		postParams = url.Values{}
+	bodyMap := make(map[string]string)
+	for k, v := range bodyParams {
+		if len(v) == 0 {
+			continue
+		}
+		bodyMap[k] = v[0]
+	}
+	bodyBytes, err := json.Marshal(bodyMap)
+	if err != nil {
+		return
 	}
 	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + params.Encode()
-	req, err := http.NewRequest(http.MethodPost, serviceURL, strings.NewReader(postParams.Encode()))
+	req, err := http.NewRequest(http.MethodPost, serviceURL, bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 	if at.Cookie != nil {
 		req.Header.Set("Cookie", at.Cookie.String())
 	}
