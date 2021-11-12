@@ -287,9 +287,9 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 
 	// Update the user's password with an empty one. Expect this to succeed but
 	// not change anything.
-	_, b, err = at.UserPUT("", "", "")
-	if err != nil {
-		t.Fatal(err)
+	r, b, _ = at.UserPUT("", "", "")
+	if r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("Expected 400 Bad Request, got %d", r.StatusCode)
 	}
 	// Fetch the user from the DB again and make sure their password hash hasn't
 	// changed.

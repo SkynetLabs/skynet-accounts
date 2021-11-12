@@ -477,9 +477,9 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	if payload.Email == "" && payload.StripeID == "" && payload.Password == "" {
+	if payload == (userUpdateData{}) {
 		// The payload is empty, nothing to do.
-		api.WriteSuccess(w)
+		api.WriteError(w, errors.New("empty request"), http.StatusBadRequest)
 		return
 	}
 
