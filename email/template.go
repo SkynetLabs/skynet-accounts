@@ -97,7 +97,7 @@ If this was not you, please ignore this email.
 // confirmEmailEmail generates an email for confirming that the user owns the
 // given email address.
 func confirmEmailEmail(to string, token string) *database.EmailMessage {
-	body := strings.ReplaceAll(confirmEmailTempl, "{{.ConfirmEndpoint}}", PortalAddress+"/user/confirm")
+	body := strings.ReplaceAll(confirmEmailTempl, "{{.ConfirmEndpoint}}", PortalAddressAccounts+"/user/confirm")
 	body = strings.ReplaceAll(body, "{{.Token}}", token)
 	return &database.EmailMessage{
 		From:     From,
@@ -110,7 +110,7 @@ func confirmEmailEmail(to string, token string) *database.EmailMessage {
 
 // recoverAccountEmail generates an email for recovering an account.
 func recoverAccountEmail(to string, token string) *database.EmailMessage {
-	body := strings.ReplaceAll(recoverAccountTempl, "{{.RecoverEndpoint}}", PortalAddress+"/user/recover")
+	body := strings.ReplaceAll(recoverAccountTempl, "{{.RecoverEndpoint}}", PortalAddressAccounts+"/user/recover")
 	body = strings.ReplaceAll(body, "{{.Token}}", token)
 	return &database.EmailMessage{
 		From:     From,

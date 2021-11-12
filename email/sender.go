@@ -32,6 +32,9 @@ var (
 	// comes from the PORTAL_DOMAIN environment variable, preceded by the
 	// appropriate schema.
 	PortalAddress = "https://siasky.net"
+	// PortalAddressAccounts defines the URI where we can access the accounts
+	// sub-site.
+	PortalAddressAccounts = "https://accounts.siasky.net"
 
 	// ServerLockID holds the name of the name of this particular server. Its
 	// value is controlled by the SERVER_DOMAIN entry in the .env file. If the

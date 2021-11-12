@@ -661,7 +661,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 			result[name] = match[i]
 		}
 	}
-	expectedEndpoint := email.PortalAddress + "/user/recover"
+	expectedEndpoint := email.PortalAddressAccounts + "/user/recover"
 	if re, exists := result["recEndpoint"]; !exists || !strings.Contains(re, expectedEndpoint) {
 		t.Fatalf("Expected to find a link to '%s', got '%s'", expectedEndpoint, re)
 	}
