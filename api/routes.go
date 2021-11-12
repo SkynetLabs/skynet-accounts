@@ -43,7 +43,7 @@ func (api *API) buildHTTPRoutes() {
 	// Endpoints for email communication with the user.
 	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET)))
 	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.validate(api.userReconfirmPOST)))
-	api.staticRouter.GET("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverGET)))
+	api.staticRouter.POST("/user/recover/request", api.WithDBSession(api.noValidate(api.userRecoverRequestPOST)))
 	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverPOST)))
 
 	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noValidate(api.stripeWebhookPOST)))
@@ -103,7 +103,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
 	if errors.Contains(err, http.ErrNoCookie) {
-		return "", errors.New("no cookie found")
+		return "", errors.New("no authorisation token found")
 	}
 	if err != nil {
 		return "", errors.AddContext(err, "cookie exists but it's not valid")
