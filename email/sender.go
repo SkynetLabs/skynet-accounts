@@ -34,7 +34,7 @@ var (
 	PortalAddress = "https://siasky.net"
 	// PortalAddressAccounts defines the URI where we can access the accounts
 	// sub-site.
-	PortalAddressAccounts = "https://accounts.siasky.net"
+	PortalAddressAccounts = "https://account.siasky.net"
 
 	// ServerLockID holds the name of the name of this particular server. Its
 	// value is controlled by the SERVER_DOMAIN entry in the .env file. If the
