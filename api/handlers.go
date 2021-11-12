@@ -842,21 +842,32 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 // without logging in.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if err := req.ParseForm(); err != nil {
+	// Read and parse the request body.
+	bodyBytes, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = errors.AddContext(err, "failed to read request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	email := req.PostFormValue("email")
-	if email == "" {
+	var payload struct {
+		Email string `json:"email"`
+	}
+	err = json.Unmarshal(bodyBytes, &payload)
+	if err != nil {
+		err = errors.AddContext(err, "failed to parse request body")
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if payload.Email == "" {
 		api.WriteError(w, errors.New("missing required parameter 'email'"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserByEmail(req.Context(), email)
+	u, err := api.staticDB.UserByEmail(req.Context(), payload.Email)
 	if errors.Contains(err, database.ErrUserNotFound) {
 		// Someone tried to recover an account with an email that's not in our
 		// database. It's possible that this is a user who forgot which email
 		// they used when they signed up. Email them, so they know.
-		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), email)
+		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), payload.Email)
 		if errSend != nil {
 			api.staticLogger.Warningln(errors.AddContext(err, "failed to send an email"))
 		}
