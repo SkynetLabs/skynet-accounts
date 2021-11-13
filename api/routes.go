@@ -41,7 +41,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
 
 	// Endpoints for email communication with the user.
-	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET)))
+	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET))) // TODO POST
 	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.validate(api.userReconfirmPOST)))
 	api.staticRouter.POST("/user/recover/request", api.WithDBSession(api.noValidate(api.userRecoverRequestPOST)))
 	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverPOST)))
