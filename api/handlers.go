@@ -64,6 +64,7 @@ type (
 
 // healthGET returns the status of the service
 func (api *API) healthGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	status := struct {
 		DBAlive bool `json:"dbAlive"`
 	}{}
@@ -73,7 +74,8 @@ func (api *API) healthGET(w http.ResponseWriter, req *http.Request, _ httprouter
 }
 
 // limitsGET returns the speed limits of this portal.
-func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+func (api *API) limitsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	resp := LimitsPublic{
 		UserLimits: api.staticTierLimits,
 	}
@@ -82,6 +84,7 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 
 // loginGET generates a login challenge for the caller.
 func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	var pk database.PubKey
 	err := pk.LoadString(req.FormValue("pubKey"))
 	if err != nil {
@@ -107,6 +110,7 @@ func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	// Get the body, we might need to use it several times.
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -230,6 +234,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 
 // logoutPOST ends a user session by removing a cookie
 func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	_, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.staticLogger.Debugln("Error fetching token from context:", err)
@@ -247,6 +252,7 @@ func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httproute
 
 // registerGET generates a registration challenge for the caller.
 func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	var pk database.PubKey
 	err := pk.LoadString(req.FormValue("pubKey"))
 	if err != nil {
@@ -269,6 +275,7 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 
 // registerPOST registers a new user based on a challenge-response.
 func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	// Get the body, we might need to use it several times.
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -323,6 +330,7 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 // userGET returns information about an existing user and create it if it
 // doesn't exist.
 func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -354,6 +362,7 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 // userLimitsGET returns the speed limits which apply to this user.
 func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	t, err := tokenFromRequest(req)
 	if err != nil {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
@@ -392,6 +401,7 @@ func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httpro
 
 // userStatsGET returns statistics about an existing user.
 func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -416,6 +426,7 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 
 // userDELETE deletes the user and all of their data.
 func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	ctx := req.Context()
 	sub, _, _, err := jwt.TokenFromContext(ctx)
 	if err != nil {
@@ -445,6 +456,7 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	// Parse the request's body.
 	var payload credentialsDTO
 	b, err := ioutil.ReadAll(req.Body)
@@ -498,6 +510,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 // userPUT allows changing some user information.
 // This method receives its parameters as a JSON object.
 func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	ctx := req.Context()
 	sub, _, _, err := jwt.TokenFromContext(ctx)
 	if err != nil {
@@ -609,6 +622,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 // userPubKeyRegisterGET generates an update challenge for the caller.
 func (api *API) userPubKeyRegisterGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -650,6 +664,7 @@ func (api *API) userPubKeyRegisterGET(w http.ResponseWriter, req *http.Request, 
 
 // userPubKeyRegisterPOST updates the user's pubKey based on a challenge-response.
 func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -713,6 +728,7 @@ func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request,
 
 // userUploadsGET returns all uploads made by the current user.
 func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -749,6 +765,7 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 
 // userDownloadsGET returns all downloads made by the current user.
 func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -788,6 +805,7 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 // which this token was sent.
 // The user doesn't need to be logged in.
 func (api *API) userConfirmGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	if err := req.ParseForm(); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -809,6 +827,7 @@ func (api *API) userConfirmGET(w http.ResponseWriter, req *http.Request, _ httpr
 // email, in case the previous one didn't arrive for some reason.
 // The user needs to be logged in.
 func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -819,6 +838,7 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	u.EmailConfirmed = false
 	u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(database.EmailConfirmationTokenTTL).Truncate(time.Millisecond)
 	u.EmailConfirmationToken, err = lib.GenerateUUID()
 	if err != nil {
@@ -843,6 +863,7 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 // without logging in.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	// Read and parse the request body.
 	bodyBytes, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -920,6 +941,7 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 // They need to provide a valid password-reset token.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	// Parse the request's body.
 	var payload accountRecoveryDTO
 	b, err := ioutil.ReadAll(req.Body)
@@ -962,6 +984,7 @@ func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ http
 
 // trackUploadPOST registers a new upload in the system.
 func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1010,6 +1033,7 @@ func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps htt
 
 // trackDownloadPOST registers a new download in the system.
 func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1076,6 +1100,7 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 
 // trackRegistryReadPOST registers a new registry read in the system.
 func (api *API) trackRegistryReadPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1096,6 +1121,7 @@ func (api *API) trackRegistryReadPOST(w http.ResponseWriter, req *http.Request, 
 
 // trackRegistryWritePOST registers a new registry write in the system.
 func (api *API) trackRegistryWritePOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1116,6 +1142,7 @@ func (api *API) trackRegistryWritePOST(w http.ResponseWriter, req *http.Request,
 
 // userUploadsDELETE unpins all uploads of a skylink uploaded by the user.
 func (api *API) userUploadsDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1175,6 +1202,18 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 			api.staticLogger.Warnf("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
 		api.staticUserTierCache.Set(u)
+	}
+}
+
+// closeBody is a helper tha closes the request's body and logs any error that
+// results from the action.
+func (api *API) closeBody(r *http.Request) {
+	if r == nil {
+		return
+	}
+	err := r.Body.Close()
+	if err != nil {
+		api.staticLogger.Debugln("Error while closing request body:", err.Error())
 	}
 }
 
