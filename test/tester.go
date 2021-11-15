@@ -135,23 +135,15 @@ func (at *AccountsTester) Delete(endpoint string, params url.Values) (r *http.Re
 }
 
 // Post executes a POST request against the test service.
-// TODO Remove the url.Values in favour of a simple map.
-func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams url.Values) (r *http.Response, body []byte, err error) {
-	if params == nil {
-		params = url.Values{}
+func (at *AccountsTester) Post(endpoint string, queryParams url.Values, bodyParams map[string]string) (r *http.Response, body []byte, err error) {
+	if queryParams == nil {
+		queryParams = url.Values{}
 	}
-	bodyMap := make(map[string]string)
-	for k, v := range bodyParams {
-		if len(v) == 0 {
-			continue
-		}
-		bodyMap[k] = v[0]
-	}
-	bodyBytes, err := json.Marshal(bodyMap)
+	bodyBytes, err := json.Marshal(bodyParams)
 	if err != nil {
 		return
 	}
-	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + params.Encode()
+	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + queryParams.Encode()
 	req, err := http.NewRequest(http.MethodPost, serviceURL, bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, nil, err
@@ -181,10 +173,11 @@ func (at *AccountsTester) Close() error {
 
 // CreateUserPost is a helper method.
 func (at *AccountsTester) CreateUserPost(email, password string) (r *http.Response, body []byte, err error) {
-	params := url.Values{}
-	params.Add("email", email)
-	params.Add("password", password)
-	return at.Post("/user", nil, params)
+	bodyParams := map[string]string{
+		"email":    email,
+		"password": password,
+	}
+	return at.Post("/user", nil, bodyParams)
 }
 
 // UserPUT is a helper.

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
@@ -191,10 +190,11 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	params := url.Values{}
-	params.Add("email", email)
-	params.Add("password", password)
-	r, _, err := at.Post("/login", nil, params)
+	body := map[string]string{
+		"email":    email,
+		"password": password,
+	}
+	r, _, err := at.Post("/login", nil, body)
 	if err != nil {
 		t.Fatal(err)
 	}
