@@ -304,6 +304,9 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	if u3.EmailConfirmationToken == "" {
 		t.Fatalf("Expected the user to have a non-empty confirmation token, got '%s'", u3.EmailConfirmationToken)
 	}
+	if !checkConfirmationFieldsAlignment(u3) {
+		t.Fatal("EmailConfirmed and EmailConfirmationToken fields are misaligned.")
+	}
 	// Expect to find a confirmation email queued for sending.
 	filer := bson.M{"to": emailAddr}
 	_, msgs, err := at.DB.FindEmails(at.Ctx, filer, &options.FindOptions{})
@@ -520,7 +523,10 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	if u2.EmailConfirmationToken != "" {
-		t.Fatal("User is not confirmed.")
+		t.Fatal("User's email is not confirmed.")
+	}
+	if !checkConfirmationFieldsAlignment(u2) {
+		t.Fatal("EmailConfirmed and EmailConfirmationToken fields are misaligned.")
 	}
 
 	// Make sure `POST /user/reconfirm` requires a cookie.
@@ -543,6 +549,9 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 	}
 	if u3.EmailConfirmationToken == "" {
 		t.Fatal("User is still confirmed.")
+	}
+	if !checkConfirmationFieldsAlignment(u3) {
+		t.Fatal("EmailConfirmed and EmailConfirmationToken fields are misaligned.")
 	}
 
 	// Call the endpoint without a token.
@@ -957,4 +966,17 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected to get %s, got %s", unauthorized, err)
 	}
+}
+
+// checkConfirmationFieldsAlignment checks whether the EmailConfirmationToken
+// and EmailConfirmed fields are aligned for the given user. They are aligned
+// when the token is empty and the email is confirmed and vice versa.
+func checkConfirmationFieldsAlignment(u *database.User) bool {
+	if u.EmailConfirmed && u.EmailConfirmationToken == "" {
+		return true
+	}
+	if !u.EmailConfirmed && u.EmailConfirmationToken != "" {
+		return true
+	}
+	return false
 }

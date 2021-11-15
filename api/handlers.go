@@ -581,6 +581,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		}
 		// Set the new email and set it up for a confirmation.
 		u.Email = payload.Email
+		u.EmailConfirmed = false
 		u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(database.EmailConfirmationTokenTTL).Truncate(time.Millisecond)
 		u.EmailConfirmationToken, err = lib.GenerateUUID()
 		if err != nil {

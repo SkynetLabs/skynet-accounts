@@ -112,7 +112,7 @@ type (
 		// its ID.Hex() form.
 		ID                               primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Email                            string             `bson:"email" json:"email"`
-		EmailConfirmed                   bool               `bson:"-" json:"emailConfirmed"`
+		EmailConfirmed                   bool               `bson:"email_confirmed" json:"emailConfirmed"`
 		EmailConfirmationToken           string             `bson:"email_confirmation_token,omitempty" json:"-"`
 		EmailConfirmationTokenExpiration time.Time          `bson:"email_confirmation_token_expiration,omitempty" json:"-"`
 		PasswordHash                     string             `bson:"password_hash" json:"-"`
@@ -163,7 +163,6 @@ func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	SetNonDBFields(users[0])
 	return users[0], nil
 }
 
@@ -192,7 +191,6 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse value from DB")
 	}
-	SetNonDBFields(&u)
 	return &u, nil
 }
 
@@ -204,7 +202,6 @@ func (db *DB) UserByPubKey(ctx context.Context, pk PubKey) (*User, error) {
 	if err != nil {
 		return nil, ErrUserNotFound
 	}
-	SetNonDBFields(&u)
 	return &u, nil
 }
 
@@ -214,7 +211,6 @@ func (db *DB) UserByRecoveryToken(ctx context.Context, token string) (*User, err
 	if err != nil {
 		return nil, err
 	}
-	SetNonDBFields(users[0])
 	return users[0], nil
 }
 
@@ -243,7 +239,6 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse value from DB")
 	}
-	SetNonDBFields(&u)
 	return &u, nil
 }
 
@@ -262,7 +257,6 @@ func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, er
 		// want to just return. Hitting a duplicate key error means we ran into
 		// a race condition and we can easily recover from that.
 		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-			SetNonDBFields(u)
 			return u, err
 		}
 		// Recover from the race condition by fetching the existing user from
@@ -272,7 +266,6 @@ func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, er
 	if err != nil {
 		return nil, err
 	}
-	SetNonDBFields(users[0])
 	return users[0], nil
 }
 
@@ -298,12 +291,12 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 	if u.EmailConfirmationTokenExpiration.Before(time.Now().UTC()) {
 		return nil, errors.AddContext(ErrInvalidToken, "token expired")
 	}
+	u.EmailConfirmed = true
 	u.EmailConfirmationToken = ""
 	err = db.UserSave(ctx, u)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to update user")
 	}
-	SetNonDBFields(u)
 	return u, nil
 }
 
@@ -358,6 +351,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	u := &User{
 		ID:                               primitive.ObjectID{},
 		Email:                            emailAddr,
+		EmailConfirmed:                   false,
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
@@ -374,7 +368,6 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		return nil, errors.AddContext(err, "failed to Insert")
 	}
 	u.ID = ir.InsertedID.(primitive.ObjectID)
-	SetNonDBFields(u)
 	return u, nil
 }
 
@@ -428,6 +421,7 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 	u := &User{
 		ID:                               primitive.ObjectID{},
 		Email:                            emailAddr,
+		EmailConfirmed:                   false,
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
@@ -445,7 +439,6 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		return nil, errors.AddContext(err, "failed to Insert")
 	}
 	u.ID = ir.InsertedID.(primitive.ObjectID)
-	SetNonDBFields(u)
 	return u, nil
 }
 
@@ -818,15 +811,6 @@ func (db *DB) userRegistryReadStats(ctx context.Context, userID primitive.Object
 		return 0, 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
 	}
 	return reads, reads * skynet.CostBandwidthRegistryRead, nil
-}
-
-// SetNonDBFields is a helper method which calculates and sets some fields on
-// the User struct which are not stored in the DB.
-//
-// TODO This can be done in a better way. I want to enable this now,
-// so Karol can finish his work. I can improve it later before mering.
-func SetNonDBFields(u *User) {
-	u.EmailConfirmed = u.EmailConfirmationToken == ""
 }
 
 // monthStart returns the start of the user's subscription month.

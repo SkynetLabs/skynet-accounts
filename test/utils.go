@@ -69,7 +69,6 @@ func CreateUser(at *AccountsTester, email, password string) (*User, error) {
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to fetch user from the DB")
 	}
-	database.SetNonDBFields(u)
 	return &User{u, at.DB}, nil
 }
 
