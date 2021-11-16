@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
@@ -70,9 +71,10 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 	return api, nil
 }
 
-// Router exposed the internal httprouter struct.
-func (api *API) Router() *httprouter.Router {
-	return api.staticRouter
+// ListenAndServe starts the API server on the given port.
+func (api *API) ListenAndServe(port int) error {
+	api.staticLogger.Info(fmt.Sprintf("Listening on port %d", port))
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), api.staticRouter)
 }
 
 // WithDBSession injects a session context into the request context of the handler.
