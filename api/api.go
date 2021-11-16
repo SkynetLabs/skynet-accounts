@@ -93,7 +93,7 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 		sctx := mongo.NewSessionContext(req.Context(), sess)
 
 		// Get the special response writer.
-		mw, err := newMongoWriter(w, sctx, api.staticLogger)
+		mw, err := NewMongoWriter(w, sctx, api.staticLogger)
 		if err != nil {
 			api.WriteError(w, errors.AddContext(err, "failed to start a new transaction"), http.StatusInternalServerError)
 			return

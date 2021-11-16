@@ -101,7 +101,7 @@ func NewSender(ctx context.Context, db *database.DB, logger *logrus.Logger, deps
 	}, nil
 }
 
-// Start periodically scanning the database for email messages waiting to be
+// Start periodically scans the database for email messages waiting to be
 // sent and sending them.
 func (s Sender) Start() {
 	go func() {
