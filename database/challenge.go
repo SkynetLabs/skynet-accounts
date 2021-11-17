@@ -132,7 +132,8 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 	// Now that we know the challenge type, we can get the recipient as well.
 	recipientOffset := ChallengeSize + len([]byte(cType))
 	recipient := string(resp[recipientOffset:])
-	if recipient != PortalName {
+	// Check if the recipient is the current portal or any of its subdomains.
+	if !strings.HasSuffix(recipient, PortalName) {
 		return nil, primitive.ObjectID{}, errors.New("invalid recipient " + recipient)
 	}
 	// Fetch the challenge from the DB.
