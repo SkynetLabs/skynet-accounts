@@ -23,6 +23,7 @@ type (
 		staticMF            *metafetcher.MetaFetcher
 		staticRouter        *httprouter.Router
 		staticLogger        *logrus.Logger
+		staticLoggerPerf    *logrus.Logger
 		staticMailer        *email.Mailer
 		staticTierLimits    []TierLimitsPublic
 		staticUserTierCache *userTierCache
@@ -35,7 +36,7 @@ type (
 )
 
 // New returns a new initialised API.
-func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer) (*API, error) {
+func New(db *database.DB, mf *metafetcher.MetaFetcher, logger, loggerPerf *logrus.Logger, mailer *email.Mailer) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
 	}
@@ -63,6 +64,7 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 		staticMF:            mf,
 		staticRouter:        router,
 		staticLogger:        logger,
+		staticLoggerPerf:    loggerPerf,
 		staticMailer:        mailer,
 		staticTierLimits:    tierLimits,
 		staticUserTierCache: newUserTierCache(),

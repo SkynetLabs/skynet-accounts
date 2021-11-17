@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
+	"github.com/rifflock/lfshook"
+	easy "github.com/t-tomalak/logrus-easy-formatter"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/joho/godotenv"
@@ -42,6 +45,9 @@ var (
 	// envLogLevel holds the name of the environment variable which defines the
 	// desired log level.
 	envLogLevel = "SKYNET_ACCOUNTS_LOG_LEVEL"
+	// envLogPerf holds the name of the environment variable which defines the
+	// path to the performance log file. Can be empty.
+	envLogPerf = "SKYNET_ACCOUNTS_PERF_LOG"
 	// envPortal holds the name of the environment variable for the portal to
 	// use to fetch skylinks and sign JWT tokens.
 	envPortal = "PORTAL_DOMAIN"
@@ -88,6 +94,26 @@ func logLevel() logrus.Level {
 	return logrus.InfoLevel
 }
 
+// perfLogger sets up a custom logger that logs to a file. This logger is meant
+// to be only used for logging endpoint execution times.
+func perfLogger() *logrus.Logger {
+	logFilePath := os.Getenv(envLogPerf)
+	if logFilePath == "" {
+		panic("no perf log")
+		return nil
+	}
+	// TODO If we want log rotation see https://github.com/rifflock/lfshook#log-rotation
+	logger := logrus.New()
+	logger.SetOutput(ioutil.Discard) // No stdout
+	logger.Hooks.Add(lfshook.NewHook(
+		logFilePath,
+		&easy.Formatter{
+			LogFormat: "%msg%\n",
+		},
+	))
+	return logger
+}
+
 func main() {
 	// Load the environment variables from the .env file.
 	// Existing variables take precedence and won't be overwritten.
@@ -99,6 +125,7 @@ func main() {
 	ctx := context.Background()
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
+	loggerPerf := perfLogger()
 
 	// portal tells us which Skynet portal to use for downloading skylinks.
 	portal := os.Getenv(envPortal)
@@ -172,7 +199,7 @@ func main() {
 	// we can determine their size.
 	mf := metafetcher.New(ctx, db, logger)
 	// Start the HTTP server.
-	server, err := api.New(db, mf, logger, mailer)
+	server, err := api.New(db, mf, logger, loggerPerf, mailer)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
