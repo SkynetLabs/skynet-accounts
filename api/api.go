@@ -71,6 +71,11 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 	return api, nil
 }
 
+// ServeHTTP implements the http.Handler interface.
+func (api *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	api.staticRouter.ServeHTTP(w, req)
+}
+
 // ListenAndServe starts the API server on the given port.
 func (api *API) ListenAndServe(port int) error {
 	api.staticLogger.Info(fmt.Sprintf("Listening on port %d", port))
