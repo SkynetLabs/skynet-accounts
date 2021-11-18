@@ -99,7 +99,6 @@ func logLevel() logrus.Level {
 func perfLogger() *logrus.Logger {
 	logFilePath := os.Getenv(envLogPerf)
 	if logFilePath == "" {
-		panic("no perf log")
 		return nil
 	}
 	// TODO If we want log rotation see https://github.com/rifflock/lfshook#log-rotation
