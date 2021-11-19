@@ -115,7 +115,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	}
 	// Wait for the accounts tester to be fully ready.
 	err = build.Retry(50, time.Millisecond, func() error {
-		_, _, err = at.Get("/health", nil)
+		_, _, err = at.Get("/api/health", nil)
 		return err
 	})
 	if err != nil {
