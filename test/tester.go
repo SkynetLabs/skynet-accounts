@@ -161,7 +161,7 @@ func (at *AccountsTester) Post(endpoint string, queryParams url.Values, bodyPara
 }
 
 // Put executes a PUT request against the test service.
-func (at *AccountsTester) Put(endpoint string, params url.Values, putParams url.Values) (r *http.Response, body []byte, err error) {
+func (at *AccountsTester) Put(endpoint string, params url.Values, putParams map[string]string) (r *http.Response, body []byte, err error) {
 	return at.request(http.MethodPut, endpoint, params, putParams)
 }
 
@@ -207,7 +207,7 @@ func (at *AccountsTester) UserPUT(email, stipeID string) (*http.Response, []byte
 
 // request is a helper method that puts together and executes an HTTP
 // request. It attaches the current cookie, if one exists.
-func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
+func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, bodyParams map[string]string) (*http.Response, []byte, error) {
 	if queryParams == nil {
 		queryParams = url.Values{}
 	}
