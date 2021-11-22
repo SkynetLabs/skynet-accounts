@@ -196,9 +196,10 @@ func (db *DB) DeleteUnconfirmedUserUpdate(ctx context.Context, chID primitive.Ob
 	return err
 }
 
-// LoadFromRequest loads a ChallengeResponse by extracting its string form from
-// http.Request.
-func (cr *ChallengeResponse) LoadFromRequest(body io.Reader) error {
+// LoadFromReader loads a ChallengeResponse from the given io.Reader.
+//
+// Typically, this reader will be a request.Body.
+func (cr *ChallengeResponse) LoadFromReader(body io.Reader) error {
 	// Parse the request's body.
 	var payload challengeResponseDTO
 	b, err := ioutil.ReadAll(body)

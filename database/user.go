@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"fmt"
-	"net/mail"
 	"strings"
 	"sync"
 	"time"
@@ -308,11 +307,10 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier int) (*User, error) {
 	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
-	// e, err := mail.ParseAddress(emailAddr)
+	// emailAddr, err := lib.NormalizeEmail(emailAddr)
 	// if err != nil {
 	// 	return nil, errors.AddContext(err, "invalid email address")
 	// }
-	// emailAddr = e.Address
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
@@ -378,11 +376,11 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk PubKey, tier int) (*User, error) {
-	e, err := mail.ParseAddress(emailAddr)
+	// Validate and normalize the email.
+	emailAddr, err := lib.NormalizeEmail(emailAddr)
 	if err != nil {
 		return nil, errors.AddContext(err, "invalid email address")
 	}
-	emailAddr = e.Address
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {

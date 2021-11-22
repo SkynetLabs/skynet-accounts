@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
-	"net/mail"
 	"net/url"
 	"strconv"
 	"time"
@@ -114,7 +113,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	// Get the body, we might need to use it several times.
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "empty request body"), http.StatusBadRequest)
+		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
 		return
 	}
 
@@ -131,9 +130,9 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 		return
 	}
 
-	// Check for a challenge response in the request.
+	// Check for a challenge response in the request's body.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromRequest(bytes.NewBuffer(body))
+	err = chr.LoadFromReader(bytes.NewBuffer(body))
 	if err == nil {
 		api.loginPOSTChallengeResponse(w, req, chr)
 		return
@@ -284,7 +283,7 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 	}
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromRequest(bytes.NewBuffer(body))
+	err = chr.LoadFromReader(bytes.NewBuffer(body))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -302,15 +301,13 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
 	}
-	// Validate the email address.
-	e, err := mail.ParseAddress(payload.Email)
+	// Validate and normalize the email address.
+	payload.Email, err = lib.NormalizeEmail(payload.Email)
 	if err != nil {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
-	// Strip any names from the email and leave just the address.
-	// The password is optional.
-	payload.Email = e.Address
+	// The password is optional and that's why we do not verify it.
 	u, err := api.staticDB.UserCreatePK(ctx, payload.Email, payload.Password, "", pk, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -461,7 +458,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 	var payload credentialsDTO
 	b, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
 		return
 	}
 	err = json.Unmarshal(b, &payload)
@@ -469,14 +466,12 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
 	}
-	// Validate the email address.
-	a, err := mail.ParseAddress(payload.Email)
+	// Validate and normalize the email address.
+	payload.Email, err = lib.NormalizeEmail(payload.Email)
 	if err != nil {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
-	// Strip any names from the email and leave just the address.
-	payload.Email = a.Address
 	if payload.Password == "" {
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
@@ -573,14 +568,12 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 	var changedEmail bool
 	if payload.Email != "" {
-		// Validate the new email.
-		a, err := mail.ParseAddress(payload.Email)
+		// Validate  and normalize the new email.
+		payload.Email, err = lib.NormalizeEmail(payload.Email)
 		if err != nil {
-			api.WriteError(w, errors.AddContext(err, "invalid email address"), http.StatusBadRequest)
+			api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 			return
 		}
-		// Strip any names from the email and leave just the address.
-		payload.Email = a.Address
 		// Check if another user already has this email address.
 		eu, err := api.staticDB.UserByEmail(ctx, payload.Email)
 		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
@@ -674,7 +667,7 @@ func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request,
 	ctx := req.Context()
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromRequest(req.Body)
+	err = chr.LoadFromReader(req.Body)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -946,7 +939,7 @@ func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ http
 	var payload accountRecoveryDTO
 	b, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
 		return
 	}
 	err = json.Unmarshal(b, &payload)

@@ -16,7 +16,7 @@ import (
 	"golang.org/x/crypto/ed25519"
 )
 
-// TestChallengeResponse_LoadFromRequest tests the LoadFromRequest method of
+// TestChallengeResponse_LoadFromRequest tests the LoadFromReader method of
 // ChallengeResponse.
 func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 	var chr ChallengeResponse
@@ -35,7 +35,7 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		Body: ioutil.NopCloser(bytes.NewReader(payloadBytes)),
 	}
 	// No "response" field.
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid response") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid response", err)
 	}
@@ -48,7 +48,7 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid response") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid response", err)
 	}
@@ -61,7 +61,7 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid signature") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid signature", err)
 	}
@@ -75,7 +75,7 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid signature") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid signature", err)
 	}
@@ -89,7 +89,7 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
