@@ -1,8 +1,11 @@
 package database
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // TestMonthStart ensures we calculate the start of the subscription month
@@ -38,5 +41,62 @@ func TestMonthStart(t *testing.T) {
 		if som != tt.startOfMonth {
 			t.Errorf("Expected a sub ending on %v to have startOfMonth on %v but got %v.", tt.subUntil.String(), tt.startOfMonth.String(), som.String())
 		}
+	}
+}
+
+func TestUser_UnmarshalJSON(t *testing.T) {
+	name := t.Name()
+	u := &User{
+		ID:              primitive.ObjectID{},
+		Email:           name + "@siasky.net",
+		SubscribedUntil: time.Now(),
+		EmailConfirmationToken: "initial",
+	}
+
+	// We have a user with a confirmed email (no token).
+	// Marshal and unmarshal the user.
+	// We expect the EmailConfirmed field to be `true`.
+	b, err := json.Marshal(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.EmailConfirmed {
+		t.Fatal("Expected the email to be unconfirmed.")
+	}
+
+	// Set a confirmation token. Don't touch the EmailConfirmed field.
+	u.EmailConfirmationToken = "set"
+	// Marshal and unmarshal the user.
+	// We expect the EmailConfirmed field to be `false`.
+	b, err = json.Marshal(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.EmailConfirmed {
+		t.Fatal("Expected the email to be unconfirmed.")
+	}
+
+	// Remove the confirmation token. Don't touch the EmailConfirmed field.
+	u.EmailConfirmationToken = ""
+	// Marshal and unmarshal the user.
+	// We expect the EmailConfirmed field to be `true`.
+	b, err = json.Marshal(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !u.EmailConfirmed {
+		t.Fatal("Expected the email to be confirmed.")
 	}
 }

@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -111,7 +112,7 @@ type (
 		// its ID.Hex() form.
 		ID                               primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Email                            string             `bson:"email" json:"email"`
-		EmailConfirmed                   bool               `bson:"email_confirmed" json:"emailConfirmed"`
+		EmailConfirmed                   bool               `bson:"-" json:"emailConfirmed"`
 		EmailConfirmationToken           string             `bson:"email_confirmation_token,omitempty" json:"-"`
 		EmailConfirmationTokenExpiration time.Time          `bson:"email_confirmation_token_expiration,omitempty" json:"-"`
 		PasswordHash                     string             `bson:"password_hash" json:"-"`
@@ -155,6 +156,15 @@ type (
 		Storage           int64  `json:"-"`
 	}
 )
+
+// MarshalJSON implements the json.Mashaller interface and allows us to
+// control how the User structs are marshalled.
+func (u *User) MarshalJSON() ([]byte, error) {
+	type userJSON User
+	u.EmailConfirmed = u.EmailConfirmationToken == ""
+	uj := userJSON(*u)
+	return json.Marshal(uj)
+}
 
 // UserByEmail returns the user with the given username.
 func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
