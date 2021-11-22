@@ -14,7 +14,7 @@ The tiers communicated by the API are numeric. This is the mapping:
 
 ## Health
 
-### GET `/api/health`
+### GET `/health`
 
 Returns the health of the service
 

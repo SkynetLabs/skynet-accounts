@@ -50,7 +50,7 @@ func TestHandlers(t *testing.T) {
 
 	// Specify subtests to run
 	tests := []subtest{
-		// GET /api/health
+		// GET /health
 		{name: "Health", test: testHandlerHealthGET},
 		// POST /user, POST /login
 		{name: "UserCreate", test: testHandlerUserPOST},
@@ -88,9 +88,9 @@ func TestHandlers(t *testing.T) {
 	}
 }
 
-// testHandlerHealthGET tests the /api/health handler.
+// testHandlerHealthGET tests the /health handler.
 func testHandlerHealthGET(t *testing.T, at *test.AccountsTester) {
-	_, b, err := at.Get("/api/health", nil)
+	_, b, err := at.Get("/health", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,7 @@ import (
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
 func (api *API) buildHTTPRoutes() {
-	api.staticRouter.GET("/api/health", api.noValidate(api.healthGET))
+	api.staticRouter.GET("/health", api.noValidate(api.healthGET))
 	api.staticRouter.GET("/limits", api.noValidate(api.limitsGET))
 
 	api.staticRouter.GET("/login", api.WithDBSession(api.noValidate(api.loginGET)))
