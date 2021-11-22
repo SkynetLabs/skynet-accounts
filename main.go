@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -177,6 +176,5 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
-	logger.Info("Listening on port 3000")
-	logger.Fatal(http.ListenAndServe(":3000", server.Router()))
+	logger.Fatal(server.ListenAndServe(3000))
 }

@@ -95,7 +95,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	// cancel function is called and the context is closed.
 	srv := &http.Server{
 		Addr:    ":" + testPortalPort,
-		Handler: server.Router(),
+		Handler: server,
 	}
 	go func() {
 		_ = srv.ListenAndServe()
