@@ -11,6 +11,8 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/types"
+	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/crypto"
 	"golang.org/x/crypto/ed25519"
@@ -71,16 +73,16 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Failed to unmarshal returned user:", err)
 	}
-	if u.Email != params.Get("email") {
-		t.Fatalf("Expected email '%s', got '%s'.", params.Get("email"), u.Email)
+	if u.Email != types.EmailField(params.Get("email")) {
+		t.Fatalf("Expected email '%s', got '%s'.", types.EmailField(params.Get("email")), u.Email)
 	}
 	// Make sure the user exists in the database.
 	u1, err := at.DB.UserByPubKey(at.Ctx, pk[:])
 	if err != nil {
 		t.Fatal("Failed to fetch user from DB:", err)
 	}
-	if u1.Email != params.Get("email") {
-		t.Fatalf("Expected user with email '%s', got '%s'.", params.Get("email"), u1.Email)
+	if u1.Email != types.EmailField(params.Get("email")) {
+		t.Fatalf("Expected user with email '%s', got '%s'.", types.EmailField(params.Get("email")), u1.Email)
 	}
 
 	// Try to request another registration challenge with the same pubkey.
@@ -174,8 +176,8 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Failed to parse user:", err)
 	}
-	if u.Email != params.Get("email") {
-		t.Fatalf("Expected user with email %s, got %s", params.Get("email"), u.Email)
+	if u.Email != types.EmailField(params.Get("email")) {
+		t.Fatalf("Expected user with email %s, got %s", types.EmailField(params.Get("email")), u.Email)
 	}
 }
 
@@ -188,7 +190,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 	at.Cookie = c
@@ -261,9 +263,9 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	// Try to solve the challenge while logged in as a different user.
 	// NOTE: This will consume the challenge and the user will need to request
 	// a new one.
-	r, _, err = at.CreateUserPost(name+"_user3@siasky.net", name+"_pass")
+	r, b, err = at.CreateUserPost(name+"_user3@siasky.net", name+"_pass")
 	if err != nil || r.StatusCode != http.StatusOK {
-		t.Fatal(r.Status, err)
+		t.Fatal(r.Status, err, string(b))
 	}
 	at.Cookie = test.ExtractCookie(r)
 	r, b, _ = at.Post("/user/pubkey/register", nil, params)

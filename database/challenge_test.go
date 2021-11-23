@@ -16,9 +16,9 @@ import (
 	"golang.org/x/crypto/ed25519"
 )
 
-// TestChallengeResponse_LoadFromRequest tests the LoadFromReader method of
+// TestChallengeResponse_LoadFromReader tests the LoadFromReader method of
 // ChallengeResponse.
-func TestChallengeResponse_LoadFromRequest(t *testing.T) {
+func TestChallengeResponse_LoadFromReader(t *testing.T) {
 	var chr ChallengeResponse
 	// Generate some valid data.
 	sk, _ := crypto.GenerateKeyPair()

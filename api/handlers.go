@@ -17,6 +17,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -39,6 +40,14 @@ type (
 		Storage           int64  `json:"storageLimit"`
 	}
 
+	// UserDTO defines a representation of the User struct returned by all
+	// handlers. This allows us to tweak the fields of the struct before
+	// returning it.
+	UserDTO struct {
+		database.User
+		EmailConfirmed bool `json:"emailConfirmed"`
+	}
+
 	// accountRecoveryDTO defines the payload we expect when a user is trying to
 	// change their password.
 	accountRecoveryDTO struct {
@@ -49,15 +58,15 @@ type (
 
 	// credentialsDTO defines the standard credentials package we expect.
 	credentialsDTO struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email    types.EmailField `json:"email"`
+		Password string           `json:"password"`
 	}
 
 	// userUpdateDTO defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
 	userUpdateDTO struct {
-		Email    string `json:"email,omitempty"`
-		StripeID string `json:"stripeCustomerId,omitempty"`
+		Email    types.EmailField `json:"email,omitempty"`
+		StripeID string           `json:"stripeCustomerId,omitempty"`
 	}
 )
 
@@ -126,7 +135,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	var payload credentialsDTO
 	err = json.Unmarshal(body, &payload)
 	if err == nil && payload.Email != "" && payload.Password != "" {
-		api.loginPOSTCredentials(w, req, payload.Email, payload.Password)
+		api.loginPOSTCredentials(w, req, string(payload.Email), payload.Password)
 		return
 	}
 
@@ -210,7 +219,7 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 // login cookie.
 func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bool) {
 	// Generate a JWT.
-	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
+	tk, tkBytes, err := jwt.TokenForUser(string(u.Email), u.Sub)
 	if err != nil {
 		api.staticLogger.Debugf("Error creating a token for user: %+v\n", err)
 		err = errors.AddContext(err, "failed to create a token for user")
@@ -225,7 +234,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 		return
 	}
 	if returnUser {
-		api.WriteJSON(w, u)
+		api.WriteJSON(w, UserDTOFromUser(u))
 	} else {
 		api.WriteSuccess(w)
 	}
@@ -301,14 +310,12 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
 	}
-	// Validate and normalize the email address.
-	payload.Email, err = lib.NormalizeEmail(payload.Email)
 	if err != nil {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
 	// The password is optional and that's why we do not verify it.
-	u, err := api.staticDB.UserCreatePK(ctx, payload.Email, payload.Password, "", pk, database.TierFree)
+	u, err := api.staticDB.UserCreatePK(ctx, string(payload.Email), payload.Password, "", pk, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -317,7 +324,7 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticMailer.SendAddressConfirmationEmail(ctx, u.Email, u.EmailConfirmationToken)
+	err = api.staticMailer.SendAddressConfirmationEmail(ctx, string(u.Email), u.EmailConfirmationToken)
 	if err != nil {
 		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
@@ -343,18 +350,18 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// We only do it here, instead of baking this into UserBySub because we only
 	// care about this information being correct when we're going to present it
 	// to the user, e.g. on the Dashboard.
-	_, email, err := jwt.UserDetailsFromJWT(req.Context())
+	_, emailAddr, err := jwt.UserDetailsFromJWT(req.Context())
 	if err != nil {
 		api.staticLogger.Traceln("Failed to get user details from JWT:", err)
 	}
-	if err == nil && email != u.Email {
-		u.Email = email
+	if err == nil && emailAddr != string(u.Email) {
+		u.Email = types.EmailField(emailAddr)
 		err = api.staticDB.UserSave(req.Context(), u)
 		if err != nil {
 			api.staticLogger.Traceln("Failed to update user in DB:", err)
 		}
 	}
-	api.WriteJSON(w, u)
+	api.WriteJSON(w, UserDTOFromUser(u))
 }
 
 // userLimitsGET returns the speed limits which apply to this user.
@@ -466,10 +473,8 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
 	}
-	// Validate and normalize the email address.
-	payload.Email, err = lib.NormalizeEmail(payload.Email)
-	if err != nil {
-		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
+	if payload.Email == "" {
+		api.WriteError(w, errors.New("email is required"), http.StatusBadRequest)
 		return
 	}
 	if payload.Password == "" {
@@ -486,7 +491,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, errors.AddContext(err, "failed to generate user sub"), http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserCreate(req.Context(), payload.Email, payload.Password, sub, database.TierFree)
+	u, err := api.staticDB.UserCreate(req.Context(), string(payload.Email), payload.Password, sub, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -495,7 +500,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
+	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), string(u.Email), u.EmailConfirmationToken)
 	if err != nil {
 		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
@@ -568,14 +573,8 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 	var changedEmail bool
 	if payload.Email != "" {
-		// Validate  and normalize the new email.
-		payload.Email, err = lib.NormalizeEmail(payload.Email)
-		if err != nil {
-			api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
-			return
-		}
 		// Check if another user already has this email address.
-		eu, err := api.staticDB.UserByEmail(ctx, payload.Email)
+		eu, err := api.staticDB.UserByEmail(ctx, string(payload.Email))
 		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
 			api.WriteError(w, err, http.StatusInternalServerError)
 			return
@@ -587,7 +586,6 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		}
 		// Set the new email and set it up for a confirmation.
 		u.Email = payload.Email
-		u.EmailConfirmed = false
 		u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(database.EmailConfirmationTokenTTL).Truncate(time.Millisecond)
 		u.EmailConfirmationToken, err = lib.GenerateUUID()
 		if err != nil {
@@ -605,7 +603,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}
 	// Send a confirmation email if the user's email address was changed.
 	if changedEmail {
-		err = api.staticMailer.SendAddressConfirmationEmail(ctx, u.Email, u.EmailConfirmationToken)
+		err = api.staticMailer.SendAddressConfirmationEmail(ctx, string(u.Email), u.EmailConfirmationToken)
 		if err != nil {
 			api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 		}
@@ -831,7 +829,6 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u.EmailConfirmed = false
 	u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(database.EmailConfirmationTokenTTL).Truncate(time.Millisecond)
 	u.EmailConfirmationToken, err = lib.GenerateUUID()
 	if err != nil {
@@ -843,7 +840,7 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 		api.WriteError(w, errors.AddContext(err, "failed to generate a new confirmation token"), http.StatusInternalServerError)
 		return
 	}
-	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
+	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), string(u.Email), u.EmailConfirmationToken)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to send the new confirmation token"), http.StatusInternalServerError)
 		return
@@ -865,7 +862,7 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 	var payload struct {
-		Email string `json:"email"`
+		Email types.EmailField `json:"email"`
 	}
 	err = json.Unmarshal(bodyBytes, &payload)
 	if err != nil {
@@ -877,12 +874,12 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 		api.WriteError(w, errors.New("missing required parameter 'email'"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserByEmail(req.Context(), payload.Email)
+	u, err := api.staticDB.UserByEmail(req.Context(), string(payload.Email))
 	if errors.Contains(err, database.ErrUserNotFound) {
 		// Someone tried to recover an account with an email that's not in our
 		// database. It's possible that this is a user who forgot which email
 		// they used when they signed up. Email them, so they know.
-		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), payload.Email)
+		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), string(payload.Email))
 		if errSend != nil {
 			api.staticLogger.Warningln(errors.AddContext(err, "failed to send an email"))
 		}
@@ -914,7 +911,7 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 	// Send the token to the user via an email.
-	err = api.staticMailer.SendRecoverAccountEmail(req.Context(), u.Email, u.RecoveryToken)
+	err = api.staticMailer.SendRecoverAccountEmail(req.Context(), string(u.Email), u.RecoveryToken)
 	if err != nil {
 		// The token was successfully generated and added to the user's account,
 		// but we failed to send it to the user. We will try to remove it.
@@ -1214,6 +1211,17 @@ func (api *API) closeBody(r *http.Request) {
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	api.WriteJSON(w, jwt.AccountsPublicJWKS)
+}
+
+// UserDTOFromUser converts a database.User struct to a UserDTO struct.
+func UserDTOFromUser(u *database.User) *UserDTO {
+	if u == nil {
+		return nil
+	}
+	return &UserDTO{
+		User:           *u,
+		EmailConfirmed: u.EmailConfirmationToken == "",
+	}
 }
 
 // fetchOffset extracts the offset from the params and validates its value.

@@ -22,6 +22,9 @@ func GenerateUUID() (string, error) {
 // NormalizeEmail returns the email address and strips all other text from the
 // input, e.g. "Barry Gibbs <bg@example.com>" becomes "bg@example.com".
 func NormalizeEmail(emailAddr string) (string, error) {
+	if emailAddr == "" {
+		return "", nil
+	}
 	parsedEmail, err := mail.ParseAddress(emailAddr)
 	if err != nil {
 		return "", errors.AddContext(err, "failed to parse email")

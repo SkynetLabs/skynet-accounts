@@ -75,7 +75,7 @@ func TestWithDBSession(t *testing.T) {
 		if err != nil {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
-		if u.Email != emailSuccess {
+		if string(u.Email) != emailSuccess {
 			t.Fatalf("Expected email %s, got %s.", emailSuccess, u.Email)
 		}
 		testAPI.WriteSuccess(w)
@@ -95,10 +95,10 @@ func TestWithDBSession(t *testing.T) {
 		if err != nil {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
-		if u.Email != emailSuccessJSON {
+		if string(u.Email) != emailSuccessJSON {
 			t.Fatalf("Expected email %s, got %s.", emailSuccessJSON, u.Email)
 		}
-		testAPI.WriteJSON(w, u)
+		testAPI.WriteJSON(w, api.UserDTOFromUser(u))
 	}
 
 	// This handler successfully creates a user in the DB but exits with
@@ -115,7 +115,7 @@ func TestWithDBSession(t *testing.T) {
 		if err != nil {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
-		if u.Email != emailFailure {
+		if string(u.Email) != emailFailure {
 			t.Fatalf("Expected email %s, got %s.", emailFailure, u.Email)
 		}
 
@@ -134,7 +134,7 @@ func TestWithDBSession(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to fetch user from DB.", err)
 	}
-	if u.Email != emailSuccess {
+	if string(u.Email) != emailSuccess {
 		t.Fatalf("Expected email %s, got %s.", emailSuccess, u.Email)
 	}
 
@@ -145,7 +145,7 @@ func TestWithDBSession(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to fetch user from DB.", err)
 	}
-	if u.Email != emailSuccessJSON {
+	if string(u.Email) != emailSuccessJSON {
 		t.Fatalf("Expected email %s, got %s.", emailSuccessJSON, u.Email)
 	}
 
@@ -169,7 +169,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	defer func() {
 		if errClose := at.Close(); errClose != nil {
-			t.Error(errClose)
+			t.Error(errors.AddContext(errClose, "failed to close account tester"))
 		}
 	}()
 
@@ -181,7 +181,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 

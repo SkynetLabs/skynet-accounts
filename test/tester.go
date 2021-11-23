@@ -125,16 +125,22 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 }
 
 // Get executes a GET request against the test service.
+//
+// NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Get(endpoint string, params url.Values) (r *http.Response, body []byte, err error) {
 	return at.request(http.MethodGet, endpoint, params, nil)
 }
 
 // Delete executes a DELETE request against the test service.
+//
+// NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Delete(endpoint string, params url.Values) (r *http.Response, body []byte, err error) {
 	return at.request(http.MethodDelete, endpoint, params, nil)
 }
 
 // Post executes a POST request against the test service.
+//
+// NOTE: The Body of the returned response is already read and closed.
 // TODO Remove the url.Values in favour of a simple map.
 func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams url.Values) (r *http.Response, body []byte, err error) {
 	if params == nil {
@@ -169,6 +175,8 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 }
 
 // Put executes a PUT request against the test service.
+//
+// NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Put(endpoint string, params url.Values, putParams url.Values) (r *http.Response, body []byte, err error) {
 	return at.request(http.MethodPut, endpoint, params, putParams)
 }
@@ -180,14 +188,18 @@ func (at *AccountsTester) Close() error {
 }
 
 // CreateUserPost is a helper method.
-func (at *AccountsTester) CreateUserPost(email, password string) (r *http.Response, body []byte, err error) {
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) CreateUserPost(emailAddr, password string) (r *http.Response, body []byte, err error) {
 	params := url.Values{}
-	params.Add("email", email)
+	params.Add("email", emailAddr)
 	params.Add("password", password)
 	return at.Post("/user", nil, params)
 }
 
 // UserPUT is a helper.
+//
+// NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) UserPUT(email, stipeID string) (*http.Response, []byte, error) {
 	serviceURL := testPortalAddr + ":" + testPortalPort + "/user"
 	b, err := json.Marshal(map[string]string{
@@ -214,6 +226,8 @@ func (at *AccountsTester) UserPUT(email, stipeID string) (*http.Response, []byte
 
 // request is a helper method that puts together and executes an HTTP
 // request. It attaches the current cookie, if one exists.
+//
+// NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
 	if queryParams == nil {
 		queryParams = url.Values{}
@@ -240,6 +254,8 @@ func (at *AccountsTester) request(method string, endpoint string, queryParams ur
 
 // processResponse is a helper method which extracts the body from the response
 // and handles non-OK status codes.
+//
+// NOTE: The Body of the returned response is already read and closed.
 func processResponse(r *http.Response) (*http.Response, []byte, error) {
 	body, err := ioutil.ReadAll(r.Body)
 	_ = r.Body.Close()

@@ -44,7 +44,7 @@ func TestHandlers(t *testing.T) {
 	}
 	defer func() {
 		if errClose := at.Close(); errClose != nil {
-			t.Error(errClose)
+			t.Error(errors.AddContext(errClose, "failed to close account tester"))
 		}
 	}()
 
@@ -122,26 +122,26 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
 	// Try to create a user with an empty email.
-	_, _, err = at.CreateUserPost("", "password")
+	_, b, err := at.CreateUserPost("", "password")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try to create a user with an invalid email.
-	_, _, err = at.CreateUserPost("invalid", "password")
+	_, b, err = at.CreateUserPost("invalid", "password")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try to create a user with an empty password.
 	params = url.Values{}
 	params.Add("email", emailAddr)
-	_, _, err = at.Post("/user", nil, params)
+	_, b, err = at.Post("/user", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s", badRequest, err, string(b))
 	}
 	// Create a user.
-	_, _, err = at.CreateUserPost(emailAddr, password)
+	_, b, err = at.CreateUserPost(emailAddr, password)
 	if err != nil {
-		t.Fatal("User creation failed. Error ", err.Error())
+		t.Fatalf("User creation failed. Error: '%s'. Body: '%s' ", err.Error(), string(b))
 	}
 	// Make sure the user exists in the DB.
 	u, err := at.DB.UserByEmail(at.Ctx, emailAddr)
@@ -160,14 +160,14 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	params = url.Values{}
 	params.Add("email", emailAddr)
 	params.Add("password", password)
-	_, _, err = at.Post("/login", nil, params)
+	_, b, err = at.Post("/login", nil, params)
 	if err != nil {
-		t.Fatal("Login failed. Error ", err.Error())
+		t.Fatalf("Login failed. Error: '%s'. Body: '%s'", err.Error(), string(b))
 	}
 	// try to create a user with an already taken email
-	_, _, err = at.CreateUserPost(emailAddr, "password")
+	_, b, err = at.CreateUserPost(emailAddr, "password")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 }
 
@@ -189,7 +189,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 	// Login with an existing user.
@@ -210,9 +210,9 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Expected to be able to fetch the user with this cookie.")
 	}
 	// test /logout while we're here.
-	r, _, err = at.Post("/logout", nil, nil)
+	r, b, err = at.Post("/logout", nil, nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	// Expect the returned cookie to be already expired.
 	at.Cookie = test.ExtractCookie(r)
@@ -251,7 +251,8 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
+			panic(err)
 		}
 	}()
 
@@ -269,7 +270,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	stripeID := name + "_stripe_id"
 	_, b, err := at.UserPUT("", stripeID)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	var u2 database.User
 	err = json.Unmarshal(b, &u2)
@@ -280,16 +281,16 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected the user to have StripeID %s, got %s", stripeID, u2.StripeID)
 	}
 	// Try to update the StripeID again. Expect this to fail.
-	r, _, err := at.UserPUT("", stripeID)
+	r, b, err := at.UserPUT("", stripeID)
 	if err == nil || !strings.Contains(err.Error(), "409 Conflict") || r.StatusCode != http.StatusConflict {
-		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d", err, r.StatusCode)
+		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d. Body: '%s'", err, r.StatusCode, string(b))
 	}
 
 	// Update the user's email.
 	emailAddr := name + "_new@siasky.net"
-	_, _, err = at.UserPUT(emailAddr, "")
-	if err != nil {
-		t.Fatal(err)
+	r, b, err = at.UserPUT(emailAddr, "")
+	if err != nil || r.StatusCode != http.StatusOK {
+		t.Fatal(r.StatusCode, string(b), err)
 	}
 	// Fetch the user from the DB because we want to be sure that their email
 	// is marked as unconfirmed which is not reflected in the JSON
@@ -298,14 +299,11 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u3.Email != emailAddr {
+	if string(u3.Email) != emailAddr {
 		t.Fatalf("Expected the user to have email %s, got %s", emailAddr, u3.Email)
 	}
 	if u3.EmailConfirmationToken == "" {
 		t.Fatalf("Expected the user to have a non-empty confirmation token, got '%s'", u3.EmailConfirmationToken)
-	}
-	if !checkConfirmationFieldsAlignment(u3) {
-		t.Fatal("EmailConfirmed and EmailConfirmationToken fields are misaligned.")
 	}
 	// Expect to find a confirmation email queued for sending.
 	filer := bson.M{"to": emailAddr}
@@ -314,7 +312,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	if len(msgs) != 1 || msgs[0].Subject != "Please verify your email address" {
-		t.Fatal("Expected to find a confirmation email but didn't.")
+		t.Fatal("Expected to find a single confirmation email but didn't.")
 	}
 }
 
@@ -332,7 +330,7 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
 	}
 	// Make sure the use doesn't exist anymore.
-	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
+	_, err = at.DB.UserByEmail(at.Ctx, string(u.Email))
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
 	}
@@ -372,7 +370,7 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
 	}
 	// Make sure the user doesn't exist anymore.
-	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
+	_, err = at.DB.UserByEmail(at.Ctx, string(u.Email))
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
 	}
@@ -400,7 +398,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 
@@ -444,7 +442,7 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 
@@ -469,20 +467,20 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try to delete the upload without passing a JWT cookie.
 	at.Cookie = nil
-	_, _, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
+	_, b, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error %s, got %s", unauthorized, err)
+		t.Fatalf("Expected error %s, got %s. Body: %s", unauthorized, err, string(b))
 	}
 	at.Cookie = c
 	// Delete it.
-	_, _, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
+	_, b, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	// Make sure it's gone.
 	_, b, err = at.Get("/user/uploads", nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	err = json.Unmarshal(b, &ups)
 	if err != nil {
@@ -504,7 +502,7 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 
@@ -513,58 +511,52 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 	// Confirm the user
 	params := url.Values{}
 	params.Add("token", u.EmailConfirmationToken)
-	_, _, err = at.Get("/user/confirm", params)
+	_, b, err := at.Get("/user/confirm", params)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	// Make sure the user's email address is confirmed now.
-	u2, err := at.DB.UserByEmail(at.Ctx, u.Email)
+	u2, err := at.DB.UserByEmail(at.Ctx, string(u.Email))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if u2.EmailConfirmationToken != "" {
 		t.Fatal("User's email is not confirmed.")
 	}
-	if !checkConfirmationFieldsAlignment(u2) {
-		t.Fatal("EmailConfirmed and EmailConfirmationToken fields are misaligned.")
-	}
 
 	// Make sure `POST /user/reconfirm` requires a cookie.
 	at.Cookie = nil
-	_, _, err = at.Post("/user/reconfirm", nil, nil)
+	_, b, err = at.Post("/user/reconfirm", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
 	}
 	// Reset the confirmation field, so we can continue testing with the same
 	// user.
 	at.Cookie = c
-	_, _, err = at.Post("/user/reconfirm", nil, nil)
+	_, b, err = at.Post("/user/reconfirm", nil, nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	// Make sure the user's email address is unconfirmed now.
-	u3, err := at.DB.UserByEmail(at.Ctx, u.Email)
+	u3, err := at.DB.UserByEmail(at.Ctx, string(u.Email))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if u3.EmailConfirmationToken == "" {
 		t.Fatal("User is still confirmed.")
 	}
-	if !checkConfirmationFieldsAlignment(u3) {
-		t.Fatal("EmailConfirmed and EmailConfirmationToken fields are misaligned.")
-	}
 
 	// Call the endpoint without a token.
-	_, _, err = at.Get("/user/confirm", nil)
+	_, b, err = at.Get("/user/confirm", nil)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Call the endpoint with a bad token.
 	params = url.Values{}
 	params.Add("token", "this is not a valid token")
-	_, _, err = at.Get("/user/confirm", params)
+	_, b, err = at.Get("/user/confirm", params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Call the endpoint with an expired token.
 	u.EmailConfirmationTokenExpiration = time.Now().Add(-time.Hour).UTC()
@@ -574,9 +566,9 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 	}
 	params = url.Values{}
 	params.Add("token", u.EmailConfirmationToken)
-	_, _, err = at.Get("/user/confirm", params)
+	_, b, err = at.Get("/user/confirm", params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 }
 
@@ -588,7 +580,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 
@@ -597,9 +589,9 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// // TEST REQUESTING RECOVERY // //
 
 	// Request recovery without supplying an email.
-	_, _, err = at.Post("/user/recover/request", nil, nil)
+	_, b, err := at.Post("/user/recover/request", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Request recovery with an unknown email address. We don't want to leak
 	// that this email is not used by any account, so we expect to receive an OK
@@ -612,7 +604,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	attemptedEmail := hex.EncodeToString(fastrand.Bytes(16)) + "@siasky.net"
 	params := url.Values{}
 	params.Add("email", attemptedEmail)
-	_, b, err := at.Post("/user/recover/request", nil, params)
+	_, b, err = at.Post("/user/recover/request", nil, params)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
@@ -627,10 +619,10 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	}
 	// Request recovery with a valid but unconfirmed email.
 	params = url.Values{}
-	params.Add("email", u.Email)
-	_, _, err = at.Post("/user/recover/request", nil, params)
+	params.Add("email", string(u.Email))
+	_, b, err = at.Post("/user/recover/request", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Confirm the email.
 	params = url.Values{}
@@ -642,7 +634,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// Request recovery with a valid email. We expect there to be a single email
 	// with the recovery token.
 	params = url.Values{}
-	params.Add("email", u.Email)
+	params.Add("email", string(u.Email))
 	_, b, err = at.Post("/user/recover/request", nil, params)
 	if err != nil {
 		t.Fatal(err, string(b))
@@ -691,43 +683,43 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	params = url.Values{}
 	params.Add("password", newPassword)
 	params.Add("confirmPassword", newPassword)
-	_, _, err = at.Post("/user/recover", nil, params)
+	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try without a password.
 	params = url.Values{}
 	params.Add("token", token)
 	params.Add("confirmPassword", newPassword)
-	_, _, err = at.Post("/user/recover", nil, params)
+	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try without a confirmation.
 	params = url.Values{}
 	params.Add("token", token)
 	params.Add("password", newPassword)
-	_, _, err = at.Post("/user/recover", nil, params)
+	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try with mismatched password and confirmation.
 	params = url.Values{}
 	params.Add("token", token)
 	params.Add("password", newPassword)
 	params.Add("confirmPassword", "not the same as the password")
-	_, _, err = at.Post("/user/recover", nil, params)
+	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try with an invalid token.
 	params = url.Values{}
 	params.Add("token", hex.EncodeToString(fastrand.Bytes(32)))
 	params.Add("password", newPassword)
 	params.Add("confirmPassword", newPassword)
-	_, _, err = at.Post("/user/recover", nil, params)
+	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try to use the token we got to recover the account.
 	params = url.Values{}
@@ -741,14 +733,14 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	}
 	// Make sure the user's password is now successfully changed.
 	params = url.Values{}
-	params.Add("email", u.Email)
+	params.Add("email", string(u.Email))
 	params.Add("password", newPassword)
 	_, b, err = at.Post("/login", nil, params)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
 	// Make sure the reset token is removed from the user.
-	u2, err := at.DB.UserByEmail(at.Ctx, u.Email)
+	u2, err := at.DB.UserByEmail(at.Ctx, string(u.Email))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -761,9 +753,9 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	params.Add("token", token)
 	params.Add("password", newPassword)
 	params.Add("confirmPassword", newPassword)
-	_, _, err = at.Post("/user/recover", nil, params)
+	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 }
 
@@ -776,7 +768,7 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 
@@ -792,20 +784,20 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call trackUpload without a cookie.
 	at.Cookie = nil
-	_, _, err = at.Post("/track/upload/"+skylink.String(), nil, nil)
+	_, b, err := at.Post("/track/upload/"+skylink.String(), nil, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
 	}
 	at.Cookie = c
 	// Call trackUpload with an invalid skylink.
-	_, _, err = at.Post("/track/upload/INVALID_SKYLINK", nil, nil)
+	_, b, err = at.Post("/track/upload/INVALID_SKYLINK", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected error '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Call trackUpload with a valid skylink.
-	_, _, err = at.Post("/track/upload/"+skylink.String(), nil, nil)
+	_, b, err = at.Post("/track/upload/"+skylink.String(), nil, nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	// Adjust the expectations. We won't adjust anything based on size because
 	// the metafetcher won't be running during testing.
@@ -817,29 +809,29 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	at.Cookie = nil
 	params := url.Values{}
 	params.Add("bytes", "100")
-	_, _, err = at.Post("/track/download/"+skylink.String(), params, nil)
+	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+		t.Fatalf("Expected error '%s', got '%s'. Body: '%s", unauthorized, err, string(b))
 	}
 	at.Cookie = c
 	// Call trackDownload with an invalid skylink.
-	_, _, err = at.Post("/track/download/INVALID_SKYLINK", params, nil)
+	_, b, err = at.Post("/track/download/INVALID_SKYLINK", params, nil)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected error '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Call trackDownload with a valid skylink and a negative size download
 	params = url.Values{}
 	params.Add("bytes", "-100")
-	_, _, err = at.Post("/track/download/"+skylink.String(), params, nil)
+	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected error '%s', got '%s'", badRequest, err)
+		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Call trackDownload with a valid skylink.
 	params = url.Values{}
 	params.Add("bytes", "100")
-	_, _, err = at.Post("/track/download/"+skylink.String(), params, nil)
+	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	// Adjust the expectations.
 	expectedStats.NumDownloads++
@@ -848,15 +840,15 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call trackRegistryRead without a cookie.
 	at.Cookie = nil
-	_, _, err = at.Post("/track/registry/read", nil, nil)
+	_, b, err = at.Post("/track/registry/read", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
 	}
 	at.Cookie = c
 	// Call trackRegistryRead.
-	_, _, err = at.Post("/track/registry/read", nil, nil)
+	_, b, err = at.Post("/track/registry/read", nil, nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	// Adjust the expectations.
 	expectedStats.NumRegReads++
@@ -864,15 +856,15 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call trackRegistryWrite without a cookie.
 	at.Cookie = nil
-	_, _, err = at.Post("/track/registry/write", nil, nil)
+	_, b, err = at.Post("/track/registry/write", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
 	}
 	at.Cookie = c
 	// Call trackRegistryWrite.
-	_, _, err = at.Post("/track/registry/write", nil, nil)
+	_, b, err = at.Post("/track/registry/write", nil, nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	// Adjust the expectations.
 	expectedStats.NumRegWrites++
@@ -880,15 +872,15 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call userStats without a cookie.
 	at.Cookie = nil
-	_, _, err = at.Get("/user/stats", nil)
+	_, b, err = at.Get("/user/stats", nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
+		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
 	}
 	at.Cookie = c
 	// Call userStats.
-	_, b, err := at.Get("/user/stats", nil)
+	_, b, err = at.Get("/user/stats", nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(b))
 	}
 	var serverStats database.UserStats
 	err = json.Unmarshal(b, &serverStats)
@@ -916,7 +908,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 
@@ -952,7 +944,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Failed to unmarshal user:", err.Error())
 	}
-	if u2.Email != newEmail {
+	if string(u2.Email) != newEmail {
 		t.Fatalf("Email mismatch. Expected %s, got %s", newEmail, u2.Email)
 	}
 	r, _, err = at.Post("/logout", nil, nil)
@@ -962,21 +954,8 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	// Grab the new cookie.
 	at.Cookie = test.ExtractCookie(r)
 	// Try to get the user, expect a 401.
-	_, _, err = at.Get("/user", nil)
+	_, b, err = at.Get("/user", nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected to get %s, got %s", unauthorized, err)
+		t.Fatalf("Expected to get %s, got %s. Body: %s", unauthorized, err, string(b))
 	}
-}
-
-// checkConfirmationFieldsAlignment checks whether the EmailConfirmationToken
-// and EmailConfirmed fields are aligned for the given user. They are aligned
-// when the token is empty and the email is confirmed and vice versa.
-func checkConfirmationFieldsAlignment(u *database.User) bool {
-	if u.EmailConfirmed && u.EmailConfirmationToken == "" {
-		return true
-	}
-	if !u.EmailConfirmed && u.EmailConfirmationToken != "" {
-		return true
-	}
-	return false
 }
