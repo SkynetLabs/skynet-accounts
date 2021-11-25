@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -16,6 +17,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
+	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/types"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
@@ -116,7 +118,7 @@ func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Get the body, we might need to use it several times.
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
 		return
@@ -278,7 +280,7 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 // registerPOST registers a new user based on a challenge-response.
 func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Get the body, we might need to use it several times.
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "empty request body"), http.StatusBadRequest)
 		return
@@ -451,12 +453,7 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Parse the request's body.
 	var payload credentialsDTO
-	b, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
-		return
-	}
-	err = json.Unmarshal(b, &payload)
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
@@ -506,14 +503,8 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}
 
 	// Read and parse the request body.
-	bodyBytes, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		err = errors.AddContext(err, "failed to read request body")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
 	var payload userUpdateDTO
-	err = json.Unmarshal(bodyBytes, &payload)
+	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -659,7 +650,7 @@ func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request,
 	ctx := req.Context()
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromReader(req.Body)
+	err = chr.LoadFromReader(io.LimitReader(req.Body, 4*skynet.KiB))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -844,16 +835,10 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 // The user doesn't need to be logged in.
 func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Read and parse the request body.
-	bodyBytes, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		err = errors.AddContext(err, "failed to read request body")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
 	var payload struct {
 		Email types.EmailField `json:"email"`
 	}
-	err = json.Unmarshal(bodyBytes, &payload)
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -922,12 +907,7 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Parse the request's body.
 	var payload accountRecoveryDTO
-	b, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
-		return
-	}
-	err = json.Unmarshal(b, &payload)
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
@@ -1214,4 +1194,11 @@ func fetchPageSize(form url.Values) (int, error) {
 		pageSize = database.DefaultPageSize
 	}
 	return pageSize, nil
+}
+
+// parseRequestBodyJSON reads a limited portion of the body and decodes it into
+// the given obj. The purpose of this is to prevent DoS attacks that rely on
+// excessively large request bodies.
+func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, obj interface{}) error {
+	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&obj)
 }
