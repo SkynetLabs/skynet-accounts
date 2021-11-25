@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"net/mail"
 	"strings"
 	"sync"
 	"time"
@@ -372,9 +373,9 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk PubKey, tier int) (*User, error) {
-	// Validate and normalize the email.
-	emailAddr, err := lib.NormalizeEmail(emailAddr)
-	if err != nil {
+	// Validate the email.
+	parsed, err := mail.ParseAddress(emailAddr)
+	if err != nil || parsed.Address != emailAddr {
 		return nil, errors.AddContext(err, "invalid email address")
 	}
 	// Check for an existing user with this email.
