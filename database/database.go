@@ -61,7 +61,7 @@ var (
 	mongoWriteConcern = "majority"
 	// mongoWriteConcernTimeout specifies a time limit, in milliseconds, for
 	// the write concern to be satisfied.
-	mongoWriteConcernTimeout = "5000"
+	mongoWriteConcernTimeout = "30000"
 
 	// ErrGeneralInternalFailure is returned when we do not want to disclose
 	// what kind of error occurred. This should always be coupled with another
