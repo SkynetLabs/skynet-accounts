@@ -317,7 +317,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	}
 	// Check if we can login with the new password.
 	params := url.Values{}
-	params.Add("email", string(u.Email))
+	params.Add("email", u.Email)
 	params.Add("password", pw)
 	// Try logging in with a non-existent user.
 	_, _, err = at.Post("/login", nil, params)
@@ -338,7 +338,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(u3.Email) != emailAddr {
+	if u3.Email != emailAddr {
 		t.Fatalf("Expected the user to have email %s, got %s", emailAddr, u3.Email)
 	}
 	if u3.EmailConfirmationToken == "" {
@@ -369,7 +369,7 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
 	}
 	// Make sure the use doesn't exist anymore.
-	_, err = at.DB.UserByEmail(at.Ctx, string(u.Email))
+	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
 	}
@@ -409,7 +409,7 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
 	}
 	// Make sure the user doesn't exist anymore.
-	_, err = at.DB.UserByEmail(at.Ctx, string(u.Email))
+	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error '%s', got '%s'.", database.ErrUserNotFound, err)
 	}
@@ -555,7 +555,7 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err, string(b))
 	}
 	// Make sure the user's email address is confirmed now.
-	u2, err := at.DB.UserByEmail(at.Ctx, string(u.Email))
+	u2, err := at.DB.UserByEmail(at.Ctx, u.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -577,7 +577,7 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err, string(b))
 	}
 	// Make sure the user's email address is unconfirmed now.
-	u3, err := at.DB.UserByEmail(at.Ctx, string(u.Email))
+	u3, err := at.DB.UserByEmail(at.Ctx, u.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -658,7 +658,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	}
 	// Request recovery with a valid but unconfirmed email.
 	params = url.Values{}
-	params.Add("email", string(u.Email))
+	params.Add("email", u.Email)
 	_, b, err = at.Post("/user/recover/request", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
@@ -673,7 +673,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// Request recovery with a valid email. We expect there to be a single email
 	// with the recovery token.
 	params = url.Values{}
-	params.Add("email", string(u.Email))
+	params.Add("email", u.Email)
 	_, b, err = at.Post("/user/recover/request", nil, params)
 	if err != nil {
 		t.Fatal(err, string(b))
@@ -772,14 +772,14 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	}
 	// Make sure the user's password is now successfully changed.
 	params = url.Values{}
-	params.Add("email", string(u.Email))
+	params.Add("email", u.Email)
 	params.Add("password", newPassword)
 	_, b, err = at.Post("/login", nil, params)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
 	// Make sure the reset token is removed from the user.
-	u2, err := at.DB.UserByEmail(at.Ctx, string(u.Email))
+	u2, err := at.DB.UserByEmail(at.Ctx, u.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -983,7 +983,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Failed to unmarshal user:", err.Error())
 	}
-	if string(u2.Email) != newEmail {
+	if u2.Email != newEmail {
 		t.Fatalf("Email mismatch. Expected %s, got %s", newEmail, u2.Email)
 	}
 	r, _, err = at.Post("/logout", nil, nil)

@@ -41,8 +41,8 @@ type DownloadResponse struct {
 type DownloadsResponse struct {
 	Items    []DownloadResponse `json:"items"`
 	Offset   int                `json:"offset"`
-	PageSize int                   `json:"pageSize"`
-	Count    int                   `json:"count"`
+	PageSize int                `json:"pageSize"`
+	Count    int                `json:"count"`
 }
 
 // DownloadByID fetches a single download from the DB.

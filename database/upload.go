@@ -35,8 +35,8 @@ type UploadResponse struct {
 type UploadsResponse struct {
 	Items    []UploadResponse `json:"items"`
 	Offset   int              `json:"offset"`
-	PageSize int                 `json:"pageSize"`
-	Count    int                 `json:"count"`
+	PageSize int              `json:"pageSize"`
+	Count    int              `json:"count"`
 }
 
 // UploadByID fetches a single upload from the DB.

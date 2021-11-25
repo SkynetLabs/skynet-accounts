@@ -75,7 +75,7 @@ func TestWithDBSession(t *testing.T) {
 		if err != nil {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
-		if string(u.Email) != emailSuccess {
+		if u.Email != emailSuccess {
 			t.Fatalf("Expected email %s, got %s.", emailSuccess, u.Email)
 		}
 		testAPI.WriteSuccess(w)
@@ -95,7 +95,7 @@ func TestWithDBSession(t *testing.T) {
 		if err != nil {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
-		if string(u.Email) != emailSuccessJSON {
+		if u.Email != emailSuccessJSON {
 			t.Fatalf("Expected email %s, got %s.", emailSuccessJSON, u.Email)
 		}
 		testAPI.WriteJSON(w, api.UserGETFromUser(u))
@@ -115,7 +115,7 @@ func TestWithDBSession(t *testing.T) {
 		if err != nil {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
-		if string(u.Email) != emailFailure {
+		if u.Email != emailFailure {
 			t.Fatalf("Expected email %s, got %s.", emailFailure, u.Email)
 		}
 
@@ -134,7 +134,7 @@ func TestWithDBSession(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to fetch user from DB.", err)
 	}
-	if string(u.Email) != emailSuccess {
+	if u.Email != emailSuccess {
 		t.Fatalf("Expected email %s, got %s.", emailSuccess, u.Email)
 	}
 
@@ -145,7 +145,7 @@ func TestWithDBSession(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to fetch user from DB.", err)
 	}
-	if string(u.Email) != emailSuccessJSON {
+	if u.Email != emailSuccessJSON {
 		t.Fatalf("Expected email %s, got %s.", emailSuccessJSON, u.Email)
 	}
 

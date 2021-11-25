@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/lib"
-	"github.com/SkynetLabs/skynet-accounts/types"
-
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwt"
 	"github.com/sirupsen/logrus"
@@ -82,7 +80,7 @@ func TestValidateToken_Expired(t *testing.T) {
 		Active: true,
 		Identity: tokenIdentity{
 			Traits: tokenTraits{
-				Email: types.EmailField(email),
+				Email: email,
 			},
 		},
 	}

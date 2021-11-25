@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
-	"github.com/SkynetLabs/skynet-accounts/types"
-
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
@@ -63,7 +61,7 @@ type (
 		Traits tokenTraits `json:"traits"`
 	}
 	tokenTraits struct {
-		Email types.EmailField `json:"email"`
+		Email string `json:"email"`
 	}
 )
 
@@ -315,7 +313,7 @@ func tokenForUser(emailAddr, sub string) (jwt.Token, error) {
 		Active: true,
 		Identity: tokenIdentity{
 			Traits: tokenTraits{
-				Email: types.EmailField(emailAddr),
+				Email: emailAddr,
 			},
 		},
 	}
