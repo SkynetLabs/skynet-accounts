@@ -80,9 +80,9 @@ type (
 		ExpiresAt   time.Time          `bson:"expires_at"`
 	}
 
-	// challengeResponseDTO defines the format in which the caller will deliver
+	// challengeResponseRequest defines the format in which the caller will deliver
 	// its response to a challenge.
-	challengeResponseDTO struct {
+	challengeResponseRequest struct {
 		Response  string `json:"response"`
 		Signature string `json:"signature"`
 	}
@@ -201,7 +201,7 @@ func (cr *ChallengeResponse) LoadFromBytes(b []byte) error {
 	if b == nil {
 		return errors.New("invalid input")
 	}
-	var payload challengeResponseDTO
+	var payload challengeResponseRequest
 	err := json.Unmarshal(b, &payload)
 	if err != nil {
 		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())

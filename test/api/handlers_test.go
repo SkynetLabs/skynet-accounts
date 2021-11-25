@@ -495,7 +495,7 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ups database.UploadsResponseDTO
+	var ups database.UploadsResponse
 	err = json.Unmarshal(b, &ups)
 	if err != nil {
 		t.Fatal(err)

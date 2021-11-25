@@ -306,7 +306,7 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 
 // generateUploadsPipeline generates a mongo pipeline for transforming
 // an `Upload` or `Download` struct into the respective
-// `<Up/Down>loadResponseDTO` struct.
+// `<Up/Down>loadResponse` struct.
 //
 // The Mongo query we want to ultimately execute is:
 //	db.downloads.aggregate([

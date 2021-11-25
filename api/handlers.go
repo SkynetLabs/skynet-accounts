@@ -41,31 +41,31 @@ type (
 		Storage           int64  `json:"storageLimit"`
 	}
 
-	// UserDTO defines a representation of the User struct returned by all
+	// UserGET defines a representation of the User struct returned by all
 	// handlers. This allows us to tweak the fields of the struct before
 	// returning it.
-	UserDTO struct {
+	UserGET struct {
 		database.User
 		EmailConfirmed bool `json:"emailConfirmed"`
 	}
 
-	// accountRecoveryDTO defines the payload we expect when a user is trying to
-	// change their password.
-	accountRecoveryDTO struct {
+	// accountRecoveryPOST defines the payload we expect when a user is trying
+	// to change their password.
+	accountRecoveryPOST struct {
 		Token           string `json:"token"`
 		Password        string `json:"password"`
 		ConfirmPassword string `json:"confirmPassword"`
 	}
 
-	// credentialsDTO defines the standard credentials package we expect.
-	credentialsDTO struct {
+	// credentialsPOST defines the standard credentials package we expect.
+	credentialsPOST struct {
 		Email    types.EmailField `json:"email"`
 		Password string           `json:"password"`
 	}
 
-	// userUpdateDTO defines the fields of the User record that can be changed
+	// userUpdatePOST defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
-	userUpdateDTO struct {
+	userUpdatePOST struct {
 		Email    types.EmailField `json:"email,omitempty"`
 		Password string           `json:"password,omitempty"`
 		StripeID string           `json:"stripeCustomerId,omitempty"`
@@ -130,7 +130,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	// Check whether credentials are provided. Those trump the token because a
 	// user with a valid token might want to relog. No need to force them to
 	// log out first.
-	var payload credentialsDTO
+	var payload credentialsPOST
 	err = json.Unmarshal(body, &payload)
 	if err == nil && payload.Email != "" && payload.Password != "" {
 		api.loginPOSTCredentials(w, req, string(payload.Email), payload.Password)
@@ -232,7 +232,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 		return
 	}
 	if returnUser {
-		api.WriteJSON(w, UserDTOFromUser(u))
+		api.WriteJSON(w, UserGETFromUser(u))
 	} else {
 		api.WriteSuccess(w)
 	}
@@ -299,7 +299,7 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		return
 	}
 	// Parse the request's body.
-	var payload credentialsDTO
+	var payload credentialsPOST
 	err = json.Unmarshal(body, &payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
@@ -355,7 +355,7 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 			api.staticLogger.Traceln("Failed to update user in DB:", err)
 		}
 	}
-	api.WriteJSON(w, UserDTOFromUser(u))
+	api.WriteJSON(w, UserGETFromUser(u))
 }
 
 // userLimitsGET returns the speed limits which apply to this user.
@@ -452,7 +452,7 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Parse the request's body.
-	var payload credentialsDTO
+	var payload credentialsPOST
 	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
@@ -503,14 +503,14 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}
 
 	// Read and parse the request body.
-	var payload userUpdateDTO
+	var payload userUpdatePOST
 	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	if payload == (userUpdateDTO{}) {
+	if payload == (userUpdatePOST{}) {
 		// The payload is empty, nothing to do.
 		api.WriteError(w, errors.New("empty request"), http.StatusBadRequest)
 		return
@@ -729,7 +729,7 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.UploadsResponseDTO{
+	response := database.UploadsResponse{
 		Items:    ups,
 		Offset:   offset,
 		PageSize: pageSize,
@@ -765,7 +765,7 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.DownloadsResponseDTO{
+	response := database.DownloadsResponse{
 		Items:    downs,
 		Offset:   offset,
 		PageSize: pageSize,
@@ -906,7 +906,7 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 // The user doesn't need to be logged in.
 func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Parse the request's body.
-	var payload accountRecoveryDTO
+	var payload accountRecoveryPOST
 	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
@@ -1164,12 +1164,12 @@ func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httpr
 	api.WriteJSON(w, jwt.AccountsPublicJWKS)
 }
 
-// UserDTOFromUser converts a database.User struct to a UserDTO struct.
-func UserDTOFromUser(u *database.User) *UserDTO {
+// UserGETFromUser converts a database.User struct to a UserGET struct.
+func UserGETFromUser(u *database.User) *UserGET {
 	if u == nil {
 		return nil
 	}
-	return &UserDTO{
+	return &UserGET{
 		User:           *u,
 		EmailConfirmed: u.EmailConfirmationToken == "",
 	}

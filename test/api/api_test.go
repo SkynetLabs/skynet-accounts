@@ -98,7 +98,7 @@ func TestWithDBSession(t *testing.T) {
 		if string(u.Email) != emailSuccessJSON {
 			t.Fatalf("Expected email %s, got %s.", emailSuccessJSON, u.Email)
 		}
-		testAPI.WriteJSON(w, api.UserDTOFromUser(u))
+		testAPI.WriteJSON(w, api.UserGETFromUser(u))
 	}
 
 	// This handler successfully creates a user in the DB but exits with
