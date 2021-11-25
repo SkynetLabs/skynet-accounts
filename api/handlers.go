@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -138,7 +137,7 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 
 	// Check for a challenge response in the request's body.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromReader(bytes.NewBuffer(body))
+	err = chr.LoadFromBytes(body)
 	if err == nil {
 		api.loginPOSTChallengeResponse(w, req, chr)
 		return
@@ -286,7 +285,7 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 	}
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromReader(bytes.NewBuffer(body))
+	err = chr.LoadFromBytes(body)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return

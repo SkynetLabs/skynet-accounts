@@ -196,17 +196,13 @@ func (db *DB) DeleteUnconfirmedUserUpdate(ctx context.Context, chID primitive.Ob
 	return err
 }
 
-// LoadFromReader loads a ChallengeResponse from the given io.Reader.
-//
-// Typically, this reader will be a request.Body.
-func (cr *ChallengeResponse) LoadFromReader(body io.Reader) error {
-	// Parse the request's body.
-	var payload challengeResponseDTO
-	b, err := ioutil.ReadAll(body)
-	if err != nil {
-		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
+// LoadFromBytes loads a ChallengeResponse from a []byte.
+func (cr *ChallengeResponse) LoadFromBytes(b []byte) error {
+	if b == nil {
+		return errors.New("invalid input")
 	}
-	err = json.Unmarshal(b, &payload)
+	var payload challengeResponseDTO
+	err := json.Unmarshal(b, &payload)
 	if err != nil {
 		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
 	}
@@ -227,6 +223,18 @@ func (cr *ChallengeResponse) LoadFromReader(body io.Reader) error {
 	cr.Response = resp
 	cr.Signature = sig
 	return nil
+}
+
+// LoadFromReader loads a ChallengeResponse from the given io.Reader.
+//
+// Typically, this reader will be a request.Body.
+func (cr *ChallengeResponse) LoadFromReader(r io.Reader) error {
+	// Parse the request's body.
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
+	}
+	return cr.LoadFromBytes(b)
 }
 
 // LoadString loads a PubKey from its hex-encoded string form.
