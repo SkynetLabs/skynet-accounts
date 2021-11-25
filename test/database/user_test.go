@@ -10,7 +10,6 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
-	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -41,7 +40,7 @@ func TestUserByEmail(t *testing.T) {
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}
-	if u == nil || string(u.Email) != email {
+	if u == nil || u.Email != email {
 		t.Fatalf("Unexpected result %+v\n", u)
 	}
 	defer func(user *database.User) {
@@ -375,7 +374,7 @@ func TestUserSave(t *testing.T) {
 	username := t.Name()
 	// Case: save a user that doesn't exist in the DB.
 	u := &database.User{
-		Email: types.EmailField(username + "@siasky.net"),
+		Email: username + "@siasky.net",
 		Sub:   t.Name() + "sub",
 		Tier:  database.TierFree,
 	}
@@ -391,7 +390,7 @@ func TestUserSave(t *testing.T) {
 		t.Fatalf("Expected user id %s, got %s.", u.ID.Hex(), u1.ID.Hex())
 	}
 	// Case: save a user that does exist in the DB.
-	u.Email = types.EmailField(username + "_changed@siasky.net")
+	u.Email = username + "_changed@siasky.net"
 	u.Tier = database.TierPremium80
 	err = db.UserSave(ctx, u)
 	if err != nil {

@@ -1,12 +1,13 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strconv"
 	"time"
@@ -17,7 +18,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
-	"github.com/SkynetLabs/skynet-accounts/types"
+	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -41,40 +42,39 @@ type (
 		Storage           int64  `json:"storageLimit"`
 	}
 
-	// UserDTO defines a representation of the User struct returned by all
+	// UserGET defines a representation of the User struct returned by all
 	// handlers. This allows us to tweak the fields of the struct before
 	// returning it.
-	UserDTO struct {
+	UserGET struct {
 		database.User
 		EmailConfirmed bool `json:"emailConfirmed"`
 	}
 
-	// accountRecoveryDTO defines the payload we expect when a user is trying to
-	// change their password.
-	accountRecoveryDTO struct {
+	// accountRecoveryPOST defines the payload we expect when a user is trying
+	// to change their password.
+	accountRecoveryPOST struct {
 		Token           string `json:"token"`
 		Password        string `json:"password"`
 		ConfirmPassword string `json:"confirmPassword"`
 	}
 
-	// credentialsDTO defines the standard credentials package we expect.
-	credentialsDTO struct {
-		Email    types.EmailField `json:"email"`
-		Password string           `json:"password"`
+	// credentialsPOST defines the standard credentials package we expect.
+	credentialsPOST struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
-	// userUpdateDTO defines the fields of the User record that can be changed
+	// userUpdatePOST defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
-	userUpdateDTO struct {
-		Email    types.EmailField `json:"email,omitempty"`
-		Password string           `json:"password,omitempty"`
-		StripeID string           `json:"stripeCustomerId,omitempty"`
+	userUpdatePOST struct {
+		Email    string `json:"email,omitempty"`
+		Password string `json:"password,omitempty"`
+		StripeID string `json:"stripeCustomerId,omitempty"`
 	}
 )
 
 // healthGET returns the status of the service
 func (api *API) healthGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	status := struct {
 		DBAlive bool `json:"dbAlive"`
 	}{}
@@ -84,8 +84,7 @@ func (api *API) healthGET(w http.ResponseWriter, req *http.Request, _ httprouter
 }
 
 // limitsGET returns the speed limits of this portal.
-func (api *API) limitsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
+func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	resp := LimitsPublic{
 		UserLimits: api.staticTierLimits,
 	}
@@ -94,7 +93,6 @@ func (api *API) limitsGET(w http.ResponseWriter, req *http.Request, _ httprouter
 
 // loginGET generates a login challenge for the caller.
 func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	var pk database.PubKey
 	err := pk.LoadString(req.FormValue("pubKey"))
 	if err != nil {
@@ -120,9 +118,8 @@ func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	// Get the body, we might need to use it several times.
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
 		return
@@ -134,16 +131,16 @@ func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter
 	// Check whether credentials are provided. Those trump the token because a
 	// user with a valid token might want to relog. No need to force them to
 	// log out first.
-	var payload credentialsDTO
+	var payload credentialsPOST
 	err = json.Unmarshal(body, &payload)
 	if err == nil && payload.Email != "" && payload.Password != "" {
-		api.loginPOSTCredentials(w, req, string(payload.Email), payload.Password)
+		api.loginPOSTCredentials(w, req, payload.Email, payload.Password)
 		return
 	}
 
 	// Check for a challenge response in the request's body.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromReader(bytes.NewBuffer(body))
+	err = chr.LoadFromBytes(body)
 	if err == nil {
 		api.loginPOSTChallengeResponse(w, req, chr)
 		return
@@ -221,7 +218,7 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 // login cookie.
 func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bool) {
 	// Generate a JWT.
-	tk, tkBytes, err := jwt.TokenForUser(string(u.Email), u.Sub)
+	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
 	if err != nil {
 		api.staticLogger.Debugf("Error creating a token for user: %+v\n", err)
 		err = errors.AddContext(err, "failed to create a token for user")
@@ -236,7 +233,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 		return
 	}
 	if returnUser {
-		api.WriteJSON(w, UserDTOFromUser(u))
+		api.WriteJSON(w, UserGETFromUser(u))
 	} else {
 		api.WriteSuccess(w)
 	}
@@ -244,7 +241,6 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 
 // logoutPOST ends a user session by removing a cookie
 func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	_, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.staticLogger.Debugln("Error fetching token from context:", err)
@@ -262,7 +258,6 @@ func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httproute
 
 // registerGET generates a registration challenge for the caller.
 func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	// Check if the registrations are open.
 	val, err := api.staticDB.ReadConfigValue(req.Context(), database.ConfValRegistrationsDisabled)
 	if err != nil && !errors.Contains(err, mongo.ErrNoDocuments) {
@@ -295,7 +290,6 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 
 // registerPOST registers a new user based on a challenge-response.
 func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	// Check if the registrations are open.
 	val, err := api.staticDB.ReadConfigValue(req.Context(), database.ConfValRegistrationsDisabled)
 	if err != nil && !errors.Contains(err, mongo.ErrNoDocuments) {
@@ -307,37 +301,38 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		return
 	}
 	// Get the body, we might need to use it several times.
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "empty request body"), http.StatusBadRequest)
 		return
 	}
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromReader(bytes.NewBuffer(body))
+	err = chr.LoadFromBytes(body)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
 	}
+	// Parse the request's body.
+	var payload credentialsPOST
+	err = json.Unmarshal(body, &payload)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
+	parsed, err := mail.ParseAddress(payload.Email)
+	if err != nil || payload.Email != parsed.Address {
+		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
+		return
+	}
+	// The password is optional and that's why we do not verify it.
 	ctx := req.Context()
 	pk, _, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeRegister)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusBadRequest)
 		return
 	}
-	// Parse the request's body.
-	var payload credentialsDTO
-	err = json.Unmarshal(body, &payload)
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
-		return
-	}
-	if err != nil {
-		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
-		return
-	}
-	// The password is optional and that's why we do not verify it.
-	u, err := api.staticDB.UserCreatePK(ctx, string(payload.Email), payload.Password, "", pk, database.TierFree)
+	u, err := api.staticDB.UserCreatePK(ctx, payload.Email, payload.Password, "", pk, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -346,7 +341,7 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticMailer.SendAddressConfirmationEmail(ctx, string(u.Email), u.EmailConfirmationToken)
+	err = api.staticMailer.SendAddressConfirmationEmail(ctx, u.Email, u.EmailConfirmationToken)
 	if err != nil {
 		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
@@ -356,7 +351,6 @@ func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprou
 // userGET returns information about an existing user and create it if it
 // doesn't exist.
 func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -376,19 +370,18 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	if err != nil {
 		api.staticLogger.Traceln("Failed to get user details from JWT:", err)
 	}
-	if err == nil && emailAddr != string(u.Email) {
-		u.Email = types.EmailField(emailAddr)
+	if err == nil && emailAddr != u.Email {
+		u.Email = emailAddr
 		err = api.staticDB.UserSave(req.Context(), u)
 		if err != nil {
 			api.staticLogger.Traceln("Failed to update user in DB:", err)
 		}
 	}
-	api.WriteJSON(w, UserDTOFromUser(u))
+	api.WriteJSON(w, UserGETFromUser(u))
 }
 
 // userLimitsGET returns the speed limits which apply to this user.
 func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	t, err := tokenFromRequest(req)
 	if err != nil {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
@@ -427,7 +420,6 @@ func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httpro
 
 // userStatsGET returns statistics about an existing user.
 func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -452,7 +444,6 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 
 // userDELETE deletes the user and all of their data.
 func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	ctx := req.Context()
 	sub, _, _, err := jwt.TokenFromContext(ctx)
 	if err != nil {
@@ -482,7 +473,6 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	// Check if the registrations are open.
 	val, err := api.staticDB.ReadConfigValue(req.Context(), database.ConfValRegistrationsDisabled)
 	if err != nil && !errors.Contains(err, mongo.ErrNoDocuments) {
@@ -494,19 +484,19 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		return
 	}
 	// Parse the request's body.
-	var payload credentialsDTO
-	b, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
-		return
-	}
-	err = json.Unmarshal(b, &payload)
+	var payload credentialsPOST
+	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
 	}
 	if payload.Email == "" {
 		api.WriteError(w, errors.New("email is required"), http.StatusBadRequest)
+		return
+	}
+	parsed, err := mail.ParseAddress(payload.Email)
+	if err != nil || payload.Email != parsed.Address {
+		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
 	if payload.Password == "" {
@@ -523,7 +513,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, errors.AddContext(err, "failed to generate user sub"), http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserCreate(req.Context(), string(payload.Email), payload.Password, sub, database.TierFree)
+	u, err := api.staticDB.UserCreate(req.Context(), payload.Email, payload.Password, sub, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -532,7 +522,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), string(u.Email), u.EmailConfirmationToken)
+	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
 	if err != nil {
 		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
@@ -542,7 +532,6 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 // userPUT allows changing some user information.
 // This method receives its parameters as a JSON object.
 func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	ctx := req.Context()
 	sub, _, _, err := jwt.TokenFromContext(ctx)
 	if err != nil {
@@ -551,20 +540,14 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}
 
 	// Read and parse the request body.
-	bodyBytes, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		err = errors.AddContext(err, "failed to read request body")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
-	var payload userUpdateDTO
-	err = json.Unmarshal(bodyBytes, &payload)
+	var payload userUpdatePOST
+	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	if payload == (userUpdateDTO{}) {
+	if payload == (userUpdatePOST{}) {
 		// The payload is empty, nothing to do.
 		api.WriteError(w, errors.New("empty request"), http.StatusBadRequest)
 		return
@@ -614,8 +597,13 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 	var changedEmail bool
 	if payload.Email != "" {
+		parsed, err := mail.ParseAddress(payload.Email)
+		if err != nil || payload.Email != parsed.Address {
+			api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
+			return
+		}
 		// Check if another user already has this email address.
-		eu, err := api.staticDB.UserByEmail(ctx, string(payload.Email))
+		eu, err := api.staticDB.UserByEmail(ctx, payload.Email)
 		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
 			api.WriteError(w, err, http.StatusInternalServerError)
 			return
@@ -644,7 +632,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}
 	// Send a confirmation email if the user's email address was changed.
 	if changedEmail {
-		err = api.staticMailer.SendAddressConfirmationEmail(ctx, string(u.Email), u.EmailConfirmationToken)
+		err = api.staticMailer.SendAddressConfirmationEmail(ctx, u.Email, u.EmailConfirmationToken)
 		if err != nil {
 			api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 		}
@@ -654,7 +642,6 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 // userPubKeyRegisterGET generates an update challenge for the caller.
 func (api *API) userPubKeyRegisterGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -696,7 +683,6 @@ func (api *API) userPubKeyRegisterGET(w http.ResponseWriter, req *http.Request, 
 
 // userPubKeyRegisterPOST updates the user's pubKey based on a challenge-response.
 func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -706,7 +692,7 @@ func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request,
 	ctx := req.Context()
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromReader(req.Body)
+	err = chr.LoadFromReader(io.LimitReader(req.Body, 4*skynet.KiB))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -760,7 +746,6 @@ func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request,
 
 // userUploadsGET returns all uploads made by the current user.
 func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -786,7 +771,7 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.UploadsResponseDTO{
+	response := database.UploadsResponse{
 		Items:    ups,
 		Offset:   offset,
 		PageSize: pageSize,
@@ -797,7 +782,6 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 
 // userDownloadsGET returns all downloads made by the current user.
 func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -823,7 +807,7 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.DownloadsResponseDTO{
+	response := database.DownloadsResponse{
 		Items:    downs,
 		Offset:   offset,
 		PageSize: pageSize,
@@ -837,7 +821,6 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 // which this token was sent.
 // The user doesn't need to be logged in.
 func (api *API) userConfirmGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	if err := req.ParseForm(); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -859,7 +842,6 @@ func (api *API) userConfirmGET(w http.ResponseWriter, req *http.Request, _ httpr
 // email, in case the previous one didn't arrive for some reason.
 // The user needs to be logged in.
 func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -881,7 +863,7 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 		api.WriteError(w, errors.AddContext(err, "failed to generate a new confirmation token"), http.StatusInternalServerError)
 		return
 	}
-	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), string(u.Email), u.EmailConfirmationToken)
+	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to send the new confirmation token"), http.StatusInternalServerError)
 		return
@@ -894,18 +876,11 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 // without logging in.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	// Read and parse the request body.
-	bodyBytes, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		err = errors.AddContext(err, "failed to read request body")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
 	var payload struct {
-		Email types.EmailField `json:"email"`
+		Email string `json:"email"`
 	}
-	err = json.Unmarshal(bodyBytes, &payload)
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -915,12 +890,12 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 		api.WriteError(w, errors.New("missing required parameter 'email'"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserByEmail(req.Context(), string(payload.Email))
+	u, err := api.staticDB.UserByEmail(req.Context(), payload.Email)
 	if errors.Contains(err, database.ErrUserNotFound) {
 		// Someone tried to recover an account with an email that's not in our
 		// database. It's possible that this is a user who forgot which email
 		// they used when they signed up. Email them, so they know.
-		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), string(payload.Email))
+		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), payload.Email)
 		if errSend != nil {
 			api.staticLogger.Warningln(errors.AddContext(err, "failed to send an email"))
 		}
@@ -952,7 +927,7 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 	// Send the token to the user via an email.
-	err = api.staticMailer.SendRecoverAccountEmail(req.Context(), string(u.Email), u.RecoveryToken)
+	err = api.staticMailer.SendRecoverAccountEmail(req.Context(), u.Email, u.RecoveryToken)
 	if err != nil {
 		// The token was successfully generated and added to the user's account,
 		// but we failed to send it to the user. We will try to remove it.
@@ -972,15 +947,9 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 // They need to provide a valid password-reset token.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	// Parse the request's body.
-	var payload accountRecoveryDTO
-	b, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
-		return
-	}
-	err = json.Unmarshal(b, &payload)
+	var payload accountRecoveryPOST
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
@@ -1015,7 +984,6 @@ func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ http
 
 // trackUploadPOST registers a new upload in the system.
 func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1064,7 +1032,6 @@ func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps htt
 
 // trackDownloadPOST registers a new download in the system.
 func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1131,7 +1098,6 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 
 // trackRegistryReadPOST registers a new registry read in the system.
 func (api *API) trackRegistryReadPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1152,7 +1118,6 @@ func (api *API) trackRegistryReadPOST(w http.ResponseWriter, req *http.Request, 
 
 // trackRegistryWritePOST registers a new registry write in the system.
 func (api *API) trackRegistryWritePOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1173,7 +1138,6 @@ func (api *API) trackRegistryWritePOST(w http.ResponseWriter, req *http.Request,
 
 // userUploadsDELETE unpins all uploads of a skylink uploaded by the user.
 func (api *API) userUploadsDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	defer api.closeBody(req)
 	sub, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
@@ -1236,30 +1200,18 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 	}
 }
 
-// closeBody is a helper tha closes the request's body and logs any error that
-// results from the action.
-func (api *API) closeBody(r *http.Request) {
-	if r == nil {
-		return
-	}
-	err := r.Body.Close()
-	if err != nil {
-		api.staticLogger.Debugln("Error while closing request body:", err.Error())
-	}
-}
-
 // wellKnownJwksGET returns our public JWKS, so people can use that to verify
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	api.WriteJSON(w, jwt.AccountsPublicJWKS)
 }
 
-// UserDTOFromUser converts a database.User struct to a UserDTO struct.
-func UserDTOFromUser(u *database.User) *UserDTO {
+// UserGETFromUser converts a database.User struct to a UserGET struct.
+func UserGETFromUser(u *database.User) *UserGET {
 	if u == nil {
 		return nil
 	}
-	return &UserDTO{
+	return &UserGET{
 		User:           *u,
 		EmailConfirmed: u.EmailConfirmationToken == "",
 	}
@@ -1284,4 +1236,11 @@ func fetchPageSize(form url.Values) (int, error) {
 		pageSize = database.DefaultPageSize
 	}
 	return pageSize, nil
+}
+
+// parseRequestBodyJSON reads a limited portion of the body and decodes it into
+// the given obj. The purpose of this is to prevent DoS attacks that rely on
+// excessively large request bodies.
+func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, objRef interface{}) error {
+	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&objRef)
 }

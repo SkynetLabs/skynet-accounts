@@ -64,7 +64,7 @@ var (
 	mongoWriteConcern = "majority"
 	// mongoWriteConcernTimeout specifies a time limit, in milliseconds, for
 	// the write concern to be satisfied.
-	mongoWriteConcernTimeout = "5000"
+	mongoWriteConcernTimeout = "30000"
 
 	// ErrGeneralInternalFailure is returned when we do not want to disclose
 	// what kind of error occurred. This should always be coupled with another
@@ -317,7 +317,7 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 
 // generateUploadsPipeline generates a mongo pipeline for transforming
 // an `Upload` or `Download` struct into the respective
-// `<Up/Down>loadResponseDTO` struct.
+// `<Up/Down>loadResponse` struct.
 //
 // The Mongo query we want to ultimately execute is:
 //	db.downloads.aggregate([

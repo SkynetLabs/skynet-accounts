@@ -11,7 +11,6 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
-	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/crypto"
@@ -74,16 +73,16 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Failed to unmarshal returned user:", err)
 	}
-	if u.Email != types.EmailField(params.Get("email")) {
-		t.Fatalf("Expected email '%s', got '%s'.", types.EmailField(params.Get("email")), u.Email)
+	if u.Email != params.Get("email") {
+		t.Fatalf("Expected email '%s', got '%s'.", params.Get("email"), u.Email)
 	}
 	// Make sure the user exists in the database.
 	u1, err := at.DB.UserByPubKey(at.Ctx, pk[:])
 	if err != nil {
 		t.Fatal("Failed to fetch user from DB:", err)
 	}
-	if u1.Email != types.EmailField(params.Get("email")) {
-		t.Fatalf("Expected user with email '%s', got '%s'.", types.EmailField(params.Get("email")), u1.Email)
+	if u1.Email != params.Get("email") {
+		t.Fatalf("Expected user with email '%s', got '%s'.", params.Get("email"), u1.Email)
 	}
 
 	// Try to request another registration challenge with the same pubkey.
@@ -177,8 +176,8 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Failed to parse user:", err)
 	}
-	if u.Email != types.EmailField(params.Get("email")) {
-		t.Fatalf("Expected user with email %s, got %s", types.EmailField(params.Get("email")), u.Email)
+	if u.Email != params.Get("email") {
+		t.Fatalf("Expected user with email %s, got %s", params.Get("email"), u.Email)
 	}
 }
 
