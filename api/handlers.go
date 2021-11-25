@@ -454,7 +454,7 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Parse the request's body.
 	var payload credentialsPOST
-	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
@@ -510,7 +510,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 	// Read and parse the request body.
 	var payload userUpdatePOST
-	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
+	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -849,7 +849,7 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 	var payload struct {
 		Email string `json:"email"`
 	}
-	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -918,7 +918,7 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Parse the request's body.
 	var payload accountRecoveryPOST
-	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, payload)
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
@@ -1210,6 +1210,6 @@ func fetchPageSize(form url.Values) (int, error) {
 // parseRequestBodyJSON reads a limited portion of the body and decodes it into
 // the given obj. The purpose of this is to prevent DoS attacks that rely on
 // excessively large request bodies.
-func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, obj interface{}) error {
-	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&obj)
+func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, objRef interface{}) error {
+	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&objRef)
 }
