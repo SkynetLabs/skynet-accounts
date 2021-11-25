@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"strings"
 	"time"
 
@@ -132,9 +133,15 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 	// Now that we know the challenge type, we can get the recipient as well.
 	recipientOffset := ChallengeSize + len([]byte(cType))
 	recipient := string(resp[recipientOffset:])
+	// Make sure the recipient has a schema. It usually won't. We check for
+	// `http` only in order to cover both `http://` and `https://`
+	if !strings.HasPrefix(recipient, "http") {
+		recipient = "https://" + recipient
+	}
 	// Check if the recipient is the current portal or any of its subdomains.
-	if !strings.HasSuffix(recipient, PortalName) {
-		return nil, primitive.ObjectID{}, errors.New("invalid recipient " + recipient)
+	recipientURL, err := url.Parse(recipient)
+	if err != nil || recipientURL.Host != PortalName {
+		return nil, primitive.ObjectID{}, errors.New("invalid recipient " + string(resp[recipientOffset:]))
 	}
 	// Fetch the challenge from the DB.
 	filter := bson.M{
@@ -143,7 +150,7 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 	}
 	sr := db.staticChallenges.FindOne(ctx, filter)
 	var ch Challenge
-	err := sr.Decode(&ch)
+	err = sr.Decode(&ch)
 	if err != nil {
 		return nil, primitive.ObjectID{}, errors.AddContext(err, "challenge not found")
 	}
