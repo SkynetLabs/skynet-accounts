@@ -54,18 +54,22 @@ var (
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
 		TierAnonymous: {
-			TierName:          "anonymous",
-			UploadBandwidth:   5 * mbpsToBytesPerSecond,
-			DownloadBandwidth: 20 * mbpsToBytesPerSecond,
+			TierName:        "anonymous",
+			UploadBandwidth: 5 * mbpsToBytesPerSecond,
+			// TODO: temporarily lowered the download bandwidth on the anon tier
+			// from 20mbps to 5mpbs
+			DownloadBandwidth: 5 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  0,
 			RegistryDelay:     250,
 			Storage:           0,
 		},
 		TierFree: {
-			TierName:          "free",
-			UploadBandwidth:   10 * mbpsToBytesPerSecond,
-			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
+			TierName:        "free",
+			UploadBandwidth: 10 * mbpsToBytesPerSecond,
+			// TODO: temporarily lowered the download bandwidth on the free tier
+			// from 40mbps to 10mpbs
+			DownloadBandwidth: 10 * mbpsToBytesPerSecond,
 			MaxUploadSize:     100 * skynet.GiB,
 			MaxNumberUploads:  0.1 * filesAllowedPerTB,
 			RegistryDelay:     125,
