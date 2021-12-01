@@ -65,11 +65,9 @@ var (
 			Storage:           0,
 		},
 		TierFree: {
-			TierName:        "free",
-			UploadBandwidth: 10 * mbpsToBytesPerSecond,
-			// TODO: temporarily lowered the download bandwidth on the free tier
-			// from 40mbps to 10mpbs
-			DownloadBandwidth: 10 * mbpsToBytesPerSecond,
+			TierName:          "free",
+			UploadBandwidth:   10 * mbpsToBytesPerSecond,
+			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
 			MaxUploadSize:     100 * skynet.GiB,
 			MaxNumberUploads:  0.1 * filesAllowedPerTB,
 			RegistryDelay:     125,
