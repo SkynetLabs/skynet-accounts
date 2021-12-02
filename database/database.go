@@ -45,6 +45,9 @@ var (
 	// all user pubKey updates until their respective challenge has been
 	// responded to and they are applied.
 	dbUnconfirmedUserUpdates = "unconfirmed_user_updates"
+	// dbConfiguration defines the name of the db table with configuration
+	// settings.
+	dbConfiguration = "configuration"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -90,6 +93,7 @@ type (
 		staticEmails                 *mongo.Collection
 		staticChallenges             *mongo.Collection
 		staticUnconfirmedUserUpdates *mongo.Collection
+		staticConfiguration          *mongo.Collection
 		staticDeps                   lib.Dependencies
 		staticLogger                 *logrus.Logger
 	}
@@ -139,6 +143,7 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 		staticEmails:                 database.Collection(dbEmails),
 		staticChallenges:             database.Collection(dbChallenges),
 		staticUnconfirmedUserUpdates: database.Collection(dbUnconfirmedUserUpdates),
+		staticConfiguration:          database.Collection(dbConfiguration),
 		staticLogger:                 logger,
 	}
 	return db, nil
@@ -267,6 +272,12 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 			{
 				Keys:    bson.D{{"expires_at", 1}},
 				Options: options.Index().SetName("expires_at"),
+			},
+		},
+		dbConfiguration: {
+			{
+				Keys:    bson.D{{"key", 1}},
+				Options: options.Index().SetName("key_unique").SetUnique(true),
 			},
 		},
 	}

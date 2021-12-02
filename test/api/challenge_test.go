@@ -39,10 +39,11 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 			http.StatusBadRequest, "invalid pubKey provided", r.StatusCode, string(b))
 	}
 
-	// Request a challenge with a valid pubkey.
 	params = url.Values{}
 	pkStr := hex.EncodeToString(pk[:])
 	params.Add("pubKey", pkStr)
+
+	// Request a challenge with a valid pubkey.
 	_, b, err := at.Get("/register", params)
 	var chBytes []byte
 	{

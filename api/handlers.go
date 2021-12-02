@@ -21,6 +21,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type (
@@ -257,8 +258,18 @@ func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httproute
 
 // registerGET generates a registration challenge for the caller.
 func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check if the registrations are open.
+	val, err := api.staticDB.ReadConfigValue(req.Context(), database.ConfValRegistrationsDisabled)
+	if err != nil && !errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, errors.AddContext(err, "failed to read from configuration"), http.StatusInternalServerError)
+		return
+	}
+	if val == database.ConfValTrue {
+		api.WriteError(w, errors.New("registrations are currently disabled"), http.StatusNotImplemented)
+		return
+	}
 	var pk database.PubKey
-	err := pk.LoadString(req.FormValue("pubKey"))
+	err = pk.LoadString(req.FormValue("pubKey"))
 	if err != nil {
 		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
 		return
@@ -279,6 +290,16 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 
 // registerPOST registers a new user based on a challenge-response.
 func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check if the registrations are open.
+	val, err := api.staticDB.ReadConfigValue(req.Context(), database.ConfValRegistrationsDisabled)
+	if err != nil && !errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, errors.AddContext(err, "failed to read from configuration"), http.StatusInternalServerError)
+		return
+	}
+	if val == database.ConfValTrue {
+		api.WriteError(w, errors.New("registrations are currently disabled"), http.StatusNotImplemented)
+		return
+	}
 	// Get the body, we might need to use it several times.
 	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
 	if err != nil {
@@ -452,9 +473,19 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check if the registrations are open.
+	val, err := api.staticDB.ReadConfigValue(req.Context(), database.ConfValRegistrationsDisabled)
+	if err != nil && !errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, errors.AddContext(err, "failed to read from configuration"), http.StatusInternalServerError)
+		return
+	}
+	if val == database.ConfValTrue {
+		api.WriteError(w, errors.New("registrations are currently disabled"), http.StatusNotImplemented)
+		return
+	}
 	// Parse the request's body.
 	var payload credentialsPOST
-	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
