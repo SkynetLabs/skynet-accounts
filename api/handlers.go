@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/mail"
@@ -16,6 +18,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
+	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -38,10 +41,33 @@ type (
 		Storage           int64  `json:"storageLimit"`
 	}
 
-	// userUpdateData defines the fields of the User record that can be changed
+	// UserGET defines a representation of the User struct returned by all
+	// handlers. This allows us to tweak the fields of the struct before
+	// returning it.
+	UserGET struct {
+		database.User
+		EmailConfirmed bool `json:"emailConfirmed"`
+	}
+
+	// accountRecoveryPOST defines the payload we expect when a user is trying
+	// to change their password.
+	accountRecoveryPOST struct {
+		Token           string `json:"token"`
+		Password        string `json:"password"`
+		ConfirmPassword string `json:"confirmPassword"`
+	}
+
+	// credentialsPOST defines the standard credentials package we expect.
+	credentialsPOST struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	// userUpdatePOST defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
-	userUpdateData struct {
+	userUpdatePOST struct {
 		Email    string `json:"email,omitempty"`
+		Password string `json:"password,omitempty"`
 		StripeID string `json:"stripeCustomerId,omitempty"`
 	}
 )
@@ -64,31 +90,88 @@ func (api *API) limitsGET(w http.ResponseWriter, _ *http.Request, _ httprouter.P
 	api.WriteJSON(w, resp)
 }
 
+// loginGET generates a login challenge for the caller.
+func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	var pk database.PubKey
+	err := pk.LoadString(req.FormValue("pubKey"))
+	if err != nil {
+		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
+		return
+	}
+	_, err = api.staticDB.UserByPubKey(req.Context(), pk)
+	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, errors.New("no user with this pubkey"), http.StatusBadRequest)
+		return
+	}
+	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeLogin)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, ch)
+}
+
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Get the body, we might need to use it several times.
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
+		return
+	}
+
 	// Since we don't want to have separate endpoints for logging in with
 	// credentials and token, we'll do both here.
 	//
 	// Check whether credentials are provided. Those trump the token because a
 	// user with a valid token might want to relog. No need to force them to
 	// log out first.
-	email := req.PostFormValue("email")
-	pw := req.PostFormValue("password")
-	if email != "" && pw != "" {
-		api.loginPOSTCredentials(w, req, email, pw)
+	var payload credentialsPOST
+	err = json.Unmarshal(body, &payload)
+	if err == nil && payload.Email != "" && payload.Password != "" {
+		api.loginPOSTCredentials(w, req, payload.Email, payload.Password)
 		return
 	}
+
+	// Check for a challenge response in the request's body.
+	var chr database.ChallengeResponse
+	err = chr.LoadFromBytes(body)
+	if err == nil {
+		api.loginPOSTChallengeResponse(w, req, chr)
+		return
+	}
+
 	// In case credentials were not found try to log the user by detecting a
 	// token.
 	api.loginPOSTToken(w, req)
 }
 
+// loginPOSTChallengeResponse is a helper that handles logins with a challenge.
+func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Request, chr database.ChallengeResponse) {
+	ctx := req.Context()
+	pk, _, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeLogin)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserByPubKey(ctx, pk)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	api.loginUser(w, u, false)
+}
+
 // loginPOSTCredentials is a helper that handles logins with credentials.
 func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
 	// Fetch the user with that email, if they exist.
-	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
+	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if err != nil {
-		api.staticLogger.Tracef("Error fetching a user with email '%s': %+v\n", email, err)
+		api.staticLogger.Debugf("Error fetching a user with email '%s': %+v\n", email, err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
@@ -108,13 +191,13 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	// is and until when their current session is going to stay valid.
 	tokenStr, err := tokenFromRequest(req)
 	if err != nil {
-		api.staticLogger.Traceln("Error fetching token from request:", err)
+		api.staticLogger.Debugln("Error fetching token from request:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	token, err := jwt.ValidateToken(tokenStr)
 	if err != nil {
-		api.staticLogger.Traceln("Error validating token:", err)
+		api.staticLogger.Debugln("Error validating token:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
@@ -123,7 +206,7 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	// requesting their credentials or accessing the DB.
 	err = writeCookie(w, tokenStr, token.Expiration().UTC().Unix())
 	if err != nil {
-		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.staticLogger.Debugln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -136,7 +219,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 	// Generate a JWT.
 	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
 	if err != nil {
-		api.staticLogger.Tracef("Error creating a token for user: %+v\n", err)
+		api.staticLogger.Debugf("Error creating a token for user: %+v\n", err)
 		err = errors.AddContext(err, "failed to create a token for user")
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -144,12 +227,12 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 	// Write the JWT to an encrypted cookie.
 	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
 	if err != nil {
-		api.staticLogger.Traceln("Error writing cookie:", err)
+		api.staticLogger.Debugln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if returnUser {
-		api.WriteJSON(w, u)
+		api.WriteJSON(w, UserGETFromUser(u))
 	} else {
 		api.WriteSuccess(w)
 	}
@@ -159,17 +242,89 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 func (api *API) logoutPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	_, _, _, err := jwt.TokenFromContext(req.Context())
 	if err != nil {
-		api.staticLogger.Traceln("Error fetching token from context:", err)
+		api.staticLogger.Debugln("Error fetching token from context:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 	err = writeCookie(w, "", time.Now().UTC().Unix()-1)
 	if err != nil {
-		api.staticLogger.Traceln("Error deleting cookie:", err)
+		api.staticLogger.Debugln("Error deleting cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	api.WriteSuccess(w)
+}
+
+// registerGET generates a registration challenge for the caller.
+func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	var pk database.PubKey
+	err := pk.LoadString(req.FormValue("pubKey"))
+	if err != nil {
+		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
+		return
+	}
+	// Check if this pubkey is already associated with a user.
+	_, err = api.staticDB.UserByPubKey(req.Context(), pk)
+	if !errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, errors.New("pubkey already registered"), http.StatusBadRequest)
+		return
+	}
+	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeRegister)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, ch)
+}
+
+// registerPOST registers a new user based on a challenge-response.
+func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Get the body, we might need to use it several times.
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "empty request body"), http.StatusBadRequest)
+		return
+	}
+	// Get the challenge response.
+	var chr database.ChallengeResponse
+	err = chr.LoadFromBytes(body)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
+		return
+	}
+	// Parse the request's body.
+	var payload credentialsPOST
+	err = json.Unmarshal(body, &payload)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
+	parsed, err := mail.ParseAddress(payload.Email)
+	if err != nil || payload.Email != parsed.Address {
+		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
+		return
+	}
+	// The password is optional and that's why we do not verify it.
+	ctx := req.Context()
+	pk, _, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeRegister)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusBadRequest)
+		return
+	}
+	u, err := api.staticDB.UserCreatePK(ctx, payload.Email, payload.Password, "", pk, database.TierFree)
+	if errors.Contains(err, database.ErrUserAlreadyExists) {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	err = api.staticMailer.SendAddressConfirmationEmail(ctx, u.Email, u.EmailConfirmationToken)
+	if err != nil {
+		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
+	}
+	api.loginUser(w, u, true)
 }
 
 // userGET returns information about an existing user and create it if it
@@ -190,18 +345,18 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// We only do it here, instead of baking this into UserBySub because we only
 	// care about this information being correct when we're going to present it
 	// to the user, e.g. on the Dashboard.
-	_, email, err := jwt.UserDetailsFromJWT(req.Context())
+	_, emailAddr, err := jwt.UserDetailsFromJWT(req.Context())
 	if err != nil {
-		api.staticLogger.Debugln("Failed to get user details from JWT:", err)
+		api.staticLogger.Traceln("Failed to get user details from JWT:", err)
 	}
-	if err == nil && email != u.Email {
-		u.Email = email
+	if err == nil && emailAddr != u.Email {
+		u.Email = emailAddr
 		err = api.staticDB.UserSave(req.Context(), u)
 		if err != nil {
-			api.staticLogger.Debugln("Failed to update user in DB:", err)
+			api.staticLogger.Traceln("Failed to update user in DB:", err)
 		}
 	}
-	api.WriteJSON(w, u)
+	api.WriteJSON(w, UserGETFromUser(u))
 }
 
 // userLimitsGET returns the speed limits which apply to this user.
@@ -266,23 +421,68 @@ func (api *API) userStatsGET(w http.ResponseWriter, req *http.Request, _ httprou
 	api.WriteJSON(w, us)
 }
 
+// userDELETE deletes the user and all of their data.
+func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	ctx := req.Context()
+	sub, _, _, err := jwt.TokenFromContext(ctx)
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+	u, err := api.staticDB.UserBySub(ctx, sub, false)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	err = api.staticDB.UserDelete(ctx, u)
+	if errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	email := req.PostFormValue("email")
-	// Validate the email address.
-	a, err := mail.ParseAddress(email)
+	// Parse the request's body.
+	var payload credentialsPOST
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
+	if payload.Email == "" {
+		api.WriteError(w, errors.New("email is required"), http.StatusBadRequest)
+		return
+	}
+	parsed, err := mail.ParseAddress(payload.Email)
+	if err != nil || payload.Email != parsed.Address {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
-	// Strip any names from the email and leave just the address.
-	email = a.Address
-	pw := req.PostFormValue("password")
-	if pw == "" {
+	if payload.Password == "" {
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserCreate(req.Context(), email, pw, "", database.TierFree)
+	// We are generating the sub here and not in UserCreate because there are
+	// many reasons to call UserCreate but this handler is the only place (so
+	// far) that should be allowed to call it without a sub. The reason for that
+	// is that the users created here are the only users we do not need to link
+	// to CockroachDB via their subs.
+	sub, err := lib.GenerateUUID()
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to generate user sub"), http.StatusInternalServerError)
+		return
+	}
+	u, err := api.staticDB.UserCreate(req.Context(), payload.Email, payload.Password, sub, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -295,41 +495,35 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 	if err != nil {
 		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
-	api.WriteJSON(w, u)
+	api.loginUser(w, u, true)
 }
 
 // userPUT allows changing some user information.
 // This method receives its parameters as a JSON object.
 func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	ctx := req.Context()
+	sub, _, _, err := jwt.TokenFromContext(ctx)
 	if err != nil {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
 
 	// Read and parse the request body.
-	bodyBytes, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		err = errors.AddContext(err, "failed to read request body")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
-	defer func() { _ = req.Body.Close() }()
-	var payload userUpdateData
-	err = json.Unmarshal(bodyBytes, &payload)
+	var payload userUpdatePOST
+	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	if payload.Email == "" && payload.StripeID == "" {
+	if payload == (userUpdatePOST{}) {
 		// The payload is empty, nothing to do.
-		api.WriteSuccess(w)
+		api.WriteError(w, errors.New("empty request"), http.StatusBadRequest)
 		return
 	}
 
 	// Fetch the user from the DB.
-	u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+	u, err := api.staticDB.UserBySub(ctx, sub, false)
 	if errors.Contains(err, database.ErrUserNotFound) {
 		api.WriteError(w, err, http.StatusNotFound)
 		return
@@ -337,6 +531,15 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
+	}
+
+	if payload.Password != "" {
+		pwHash, err := hash.Generate(payload.Password)
+		if err != nil {
+			api.WriteError(w, errors.AddContext(err, "failed to hash password"), http.StatusInternalServerError)
+			return
+		}
+		u.PasswordHash = string(pwHash)
 	}
 
 	if payload.StripeID != "" {
@@ -347,7 +550,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 			return
 		}
 		// Verify that no other user owns this StripeID.
-		su, err := api.staticDB.UserByStripeID(req.Context(), payload.StripeID)
+		su, err := api.staticDB.UserByStripeID(ctx, payload.StripeID)
 		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
 			api.WriteError(w, err, http.StatusInternalServerError)
 			return
@@ -363,16 +566,13 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 	var changedEmail bool
 	if payload.Email != "" {
-		// Validate the new email.
-		a, err := mail.ParseAddress(payload.Email)
-		if err != nil {
-			api.WriteError(w, errors.AddContext(err, "invalid email address"), http.StatusBadRequest)
+		parsed, err := mail.ParseAddress(payload.Email)
+		if err != nil || payload.Email != parsed.Address {
+			api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 			return
 		}
-		// Strip any names from the email and leave just the address.
-		payload.Email = a.Address
 		// Check if another user already has this email address.
-		eu, err := api.staticDB.UserByEmail(req.Context(), payload.Email, false)
+		eu, err := api.staticDB.UserByEmail(ctx, payload.Email)
 		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
 			api.WriteError(w, err, http.StatusInternalServerError)
 			return
@@ -394,17 +594,121 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}
 
 	// Save the changes.
-	err = api.staticDB.UserSave(req.Context(), u)
+	err = api.staticDB.UserSave(ctx, u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	// Send a confirmation email if the user's email address was changed.
 	if changedEmail {
-		err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
+		err = api.staticMailer.SendAddressConfirmationEmail(ctx, u.Email, u.EmailConfirmationToken)
 		if err != nil {
 			api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 		}
+	}
+	api.loginUser(w, u, true)
+}
+
+// userPubKeyRegisterGET generates an update challenge for the caller.
+func (api *API) userPubKeyRegisterGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	ctx := req.Context()
+	pk, err := hex.DecodeString(req.FormValue("pubKey"))
+	if err != nil || len(pk) != database.PubKeySize {
+		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
+		return
+	}
+	_, err = api.staticDB.UserByPubKey(ctx, pk)
+	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
+		api.WriteError(w, errors.New("failed to fetch user from the DB"), http.StatusInternalServerError)
+		return
+	}
+	if err == nil {
+		api.WriteError(w, errors.New("pubkey already registered"), http.StatusBadRequest)
+		return
+	}
+	ch, err := api.staticDB.NewChallenge(ctx, pk, database.ChallengeTypeUpdate)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	uu := &database.UnconfirmedUserUpdate{
+		Sub:         sub,
+		ChallengeID: ch.ID,
+		ExpiresAt:   ch.ExpiresAt.Truncate(time.Millisecond),
+	}
+	err = api.staticDB.StoreUnconfirmedUserUpdate(ctx, uu)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to store unconfirmed user update"), http.StatusInternalServerError)
+		return
+	}
+	api.WriteJSON(w, ch)
+}
+
+// userPubKeyRegisterPOST updates the user's pubKey based on a challenge-response.
+func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	sub, _, _, err := jwt.TokenFromContext(req.Context())
+	if err != nil {
+		api.WriteError(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	ctx := req.Context()
+	// Get the challenge response.
+	var chr database.ChallengeResponse
+	err = chr.LoadFromReader(io.LimitReader(req.Body, 4*skynet.KiB))
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
+		return
+	}
+	pk, chID, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeUpdate)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusBadRequest)
+		return
+	}
+	// Check if the pubkey from the UnconfirmedUserUpdate is already associated
+	// with a user. That might have happened between the challenge creation and
+	// the current moment.
+	pku, err := api.staticDB.UserByPubKey(ctx, pk)
+	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
+		err = errors.AddContext(err, "failed to verify that the pubKey is not already in use")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if err == nil && pku.Sub != sub {
+		api.WriteError(w, errors.New("this pubKey already belongs to another user"), http.StatusBadRequest)
+		return
+	}
+	uu, err := api.staticDB.FetchUnconfirmedUserUpdate(ctx, chID)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to fetch unconfirmed user update"), http.StatusInternalServerError)
+		return
+	}
+	if uu.Sub != sub {
+		api.staticLogger.Warnf("Potential attempt to modify another user's pubKey. Sub of challenge requester '%s', sub of response submitter '%s'", uu.Sub, sub)
+		api.WriteError(w, errors.New("user's sub doesn't match update sub"), http.StatusBadRequest)
+		return
+	}
+	u, err := api.staticDB.UserBySub(ctx, sub, false)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	u.PubKeys = append(u.PubKeys, pk)
+	err = api.staticDB.UserSave(ctx, u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	err = api.staticDB.DeleteUnconfirmedUserUpdate(ctx, chID)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
 	}
 	api.loginUser(w, u, true)
 }
@@ -436,7 +740,7 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.UploadsResponseDTO{
+	response := database.UploadsResponse{
 		Items:    ups,
 		Offset:   offset,
 		PageSize: pageSize,
@@ -472,7 +776,7 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.DownloadsResponseDTO{
+	response := database.DownloadsResponse{
 		Items:    downs,
 		Offset:   offset,
 		PageSize: pageSize,
@@ -536,26 +840,31 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 	api.WriteSuccess(w)
 }
 
-// userRecoverGET allows the user to request an account recovery. This creates
-// a password-reset token that allows the user to change their password without
-// logging in.
+// userRecoverRequestPOST allows the user to request an account recovery. This
+// creates a password-reset token that allows the user to change their password
+// without logging in.
 // The user doesn't need to be logged in.
-func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if err := req.ParseForm(); err != nil {
+func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Read and parse the request body.
+	var payload struct {
+		Email string `json:"email"`
+	}
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	if err != nil {
+		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	email := req.Form.Get("email")
-	if email == "" {
+	if payload.Email == "" {
 		api.WriteError(w, errors.New("missing required parameter 'email'"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserByEmail(req.Context(), email, false)
+	u, err := api.staticDB.UserByEmail(req.Context(), payload.Email)
 	if errors.Contains(err, database.ErrUserNotFound) {
 		// Someone tried to recover an account with an email that's not in our
 		// database. It's possible that this is a user who forgot which email
 		// they used when they signed up. Email them, so they know.
-		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), email)
+		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), payload.Email)
 		if errSend != nil {
 			api.staticLogger.Warningln(errors.AddContext(err, "failed to send an email"))
 		}
@@ -589,7 +898,7 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 	// Send the token to the user via an email.
 	err = api.staticMailer.SendRecoverAccountEmail(req.Context(), u.Email, u.RecoveryToken)
 	if err != nil {
-		// The token was successfully generated and added to the user's account
+		// The token was successfully generated and added to the user's account,
 		// but we failed to send it to the user. We will try to remove it.
 		u.RecoveryToken = ""
 		if errRem := api.staticDB.UserSave(req.Context(), u); errRem != nil {
@@ -607,27 +916,27 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 // They need to provide a valid password-reset token.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if err := req.ParseForm(); err != nil {
-		api.WriteError(w, err, http.StatusBadRequest)
+	// Parse the request's body.
+	var payload accountRecoveryPOST
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
 	}
-	recoveryToken := req.Form.Get("token")
-	password := req.Form.Get("password")
-	confirmPassword := req.Form.Get("confirmPassword")
-	if recoveryToken == "" || password == "" || confirmPassword == "" {
+	if payload.Password == "" || payload.ConfirmPassword == "" || payload.Token == "" {
 		api.WriteError(w, errors.New("missing required parameter"), http.StatusBadRequest)
 		return
 	}
-	if password != confirmPassword {
+	if payload.Password != payload.ConfirmPassword {
 		api.WriteError(w, errors.New("passwords don't match"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserByRecoveryToken(req.Context(), recoveryToken)
+	u, err := api.staticDB.UserByRecoveryToken(req.Context(), payload.Token)
 	if err != nil {
 		api.WriteError(w, errors.New("no such user"), http.StatusBadRequest)
 		return
 	}
-	passHash, err := hash.Generate(password)
+	passHash, err := hash.Generate(payload.Password)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to hash password"), http.StatusInternalServerError)
 		return
@@ -675,7 +984,7 @@ func (api *API) trackUploadPOST(w http.ResponseWriter, req *http.Request, ps htt
 	}
 	if skylink.Size == 0 {
 		// Zero size means that we haven't fetched the skyfile's size yet.
-		// Queue the skylink to have its meta data fetched and updated in the DB.
+		// Queue the skylink to have its metadata fetched and updated in the DB.
 		go func() {
 			api.staticMF.Queue <- metafetcher.Message{
 				SkylinkID: skylink.ID,
@@ -744,7 +1053,7 @@ func (api *API) trackDownloadPOST(w http.ResponseWriter, req *http.Request, ps h
 	}
 	if skylink.Size == 0 {
 		// Zero size means that we haven't fetched the skyfile's size yet.
-		// Queue the skylink to have its meta data fetched. We do not specify a user
+		// Queue the skylink to have its metadata fetched. We do not specify a user
 		// here because this is not an upload, so nobody's used storage needs to be
 		// adjusted.
 		go func() {
@@ -854,7 +1163,7 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 		u.QuotaExceeded = quotaExceeded
 		err = api.staticDB.UserSave(ctx, u)
 		if err != nil {
-			api.staticLogger.Infof("Failed to save user. User: %+v, err: %s", u, err.Error())
+			api.staticLogger.Warnf("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
 		api.staticUserTierCache.Set(u)
 	}
@@ -864,6 +1173,17 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	api.WriteJSON(w, jwt.AccountsPublicJWKS)
+}
+
+// UserGETFromUser converts a database.User struct to a UserGET struct.
+func UserGETFromUser(u *database.User) *UserGET {
+	if u == nil {
+		return nil
+	}
+	return &UserGET{
+		User:           *u,
+		EmailConfirmed: u.EmailConfirmationToken == "",
+	}
 }
 
 // fetchOffset extracts the offset from the params and validates its value.
@@ -885,4 +1205,11 @@ func fetchPageSize(form url.Values) (int, error) {
 		pageSize = database.DefaultPageSize
 	}
 	return pageSize, nil
+}
+
+// parseRequestBodyJSON reads a limited portion of the body and decodes it into
+// the given obj. The purpose of this is to prevent DoS attacks that rely on
+// excessively large request bodies.
+func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, objRef interface{}) error {
+	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&objRef)
 }

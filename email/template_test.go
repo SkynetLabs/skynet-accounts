@@ -22,7 +22,7 @@ func TestConfirmEmailEmail(t *testing.T) {
 	if em.From != From {
 		t.Fatalf("Expected the email to go from %s, got %s", From, em.From)
 	}
-	if !strings.Contains(em.Body, "https://siasky.net/user/confirm?token="+token) {
+	if !strings.Contains(em.Body, "https://account.siasky.net/user/confirm?token="+token) {
 		t.Fatal("Invalid confirmation link.")
 	}
 }
@@ -42,7 +42,7 @@ func TestRecoverAccountEmail(t *testing.T) {
 	if em.From != From {
 		t.Fatalf("Expected the email to go from %s, got %s", From, em.From)
 	}
-	if !strings.Contains(em.Body, "https://siasky.net/user/recover?token="+token) {
+	if !strings.Contains(em.Body, "https://account.siasky.net/user/recover?token="+token) {
 		t.Fatal("Invalid confirmation link.")
 	}
 }

@@ -41,6 +41,12 @@ func (tu *User) Delete(ctx context.Context) error {
 	return tu.staticDB.UserDelete(ctx, tu.User)
 }
 
+// DBNameForTest sanitizes the input string, so it can be used as an email or
+// sub.
+func DBNameForTest(s string) string {
+	return strings.ReplaceAll(s, "/", "_")
+}
+
 // DBTestCredentials sets the environment variables to what we have defined in Makefile.
 func DBTestCredentials() database.DBCredentials {
 	return database.DBCredentials{
@@ -52,14 +58,14 @@ func DBTestCredentials() database.DBCredentials {
 }
 
 // CreateUser is a helper method which simplifies the creation of test users
-func CreateUser(at *AccountsTester, email, password string) (*User, error) {
+func CreateUser(at *AccountsTester, emailAddr, password string) (*User, error) {
 	// Create a user.
-	_, _, err := at.CreateUserPost(email, password)
+	_, _, err := at.CreateUserPost(emailAddr, password)
 	if err != nil {
 		return nil, errors.AddContext(err, "user creation failed")
 	}
 	// Fetch the user from the DB, so we can delete it later.
-	u, err := at.DB.UserByEmail(at.Ctx, email, false)
+	u, err := at.DB.UserByEmail(at.Ctx, emailAddr)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to fetch user from the DB")
 	}
@@ -72,7 +78,7 @@ func CreateUser(at *AccountsTester, email, password string) (*User, error) {
 func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, error) {
 	// Use the test's name as an email-compatible identifier.
 	params := url.Values{}
-	params.Add("email", strings.ReplaceAll(name, "/", "_")+"@siasky.net")
+	params.Add("email", DBNameForTest(name)+"@siasky.net")
 	params.Add("password", hex.EncodeToString(fastrand.Bytes(16)))
 	// Create a user.
 	u, err := CreateUser(at, params.Get("email"), params.Get("password"))

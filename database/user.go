@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"net/mail"
 	"strings"
 	"sync"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
-
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -49,8 +49,6 @@ const (
 var (
 	// True is a helper for when we need to pass a *bool to MongoDB.
 	True = true
-	// False is a helper for when we need to pass a *bool to MongoDB.
-	False = false
 	// UserLimits defines the speed limits for each tier.
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
@@ -76,7 +74,7 @@ var (
 			TierName:          "plus",
 			UploadBandwidth:   20 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 80 * mbpsToBytesPerSecond,
-			MaxUploadSize:     100 * skynet.GiB,
+			MaxUploadSize:     1 * skynet.TiB,
 			MaxNumberUploads:  1 * filesAllowedPerTB,
 			RegistryDelay:     0,
 			Storage:           1 * skynet.TiB,
@@ -85,7 +83,7 @@ var (
 			TierName:          "pro",
 			UploadBandwidth:   40 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 160 * mbpsToBytesPerSecond,
-			MaxUploadSize:     100 * skynet.GiB,
+			MaxUploadSize:     4 * skynet.TiB,
 			MaxNumberUploads:  4 * filesAllowedPerTB,
 			RegistryDelay:     0,
 			Storage:           4 * skynet.TiB,
@@ -94,7 +92,7 @@ var (
 			TierName:          "extreme",
 			UploadBandwidth:   80 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 320 * mbpsToBytesPerSecond,
-			MaxUploadSize:     100 * skynet.GiB,
+			MaxUploadSize:     10 * skynet.TiB,
 			MaxNumberUploads:  20 * filesAllowedPerTB,
 			RegistryDelay:     0,
 			Storage:           20 * skynet.TiB,
@@ -127,6 +125,10 @@ type (
 		SubscriptionCancelAtPeriodEnd    bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
 		StripeID                         string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                    bool               `bson:"quota_exceeded" json:"quotaExceeded"`
+		// The currently active (or default) key is going to be the first one in
+		// the list. If we want to activate a new pubkey, we'll just move it to
+		// the first position in the list.
+		PubKeys []PubKey `bson:"pub_keys" json:"-"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
@@ -155,22 +157,9 @@ type (
 	}
 )
 
-// UserByEmail returns the user with the given username. If `create` is `true`
-// it will create the user if it doesn't exist.
-func (db *DB) UserByEmail(ctx context.Context, email string, create bool) (*User, error) {
+// UserByEmail returns the user with the given username.
+func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
 	users, err := db.managedUsersByField(ctx, "email", email)
-	if create && errors.Contains(err, ErrUserNotFound) {
-		u, err := db.UserCreate(ctx, email, "", "", TierFree)
-		// If we're successful or hit any error, other than a duplicate key we
-		// want to just return. Hitting a duplicate key error means we ran into
-		// a race condition and we can easily recover from that.
-		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-			return u, err
-		}
-		// Recover from the race condition by fetching the existing user from
-		// the DB.
-		users, err = db.managedUsersByField(ctx, "email", email)
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +175,7 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 	// Get the first result.
@@ -201,6 +190,17 @@ func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error
 	err = c.Decode(&u)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to parse value from DB")
+	}
+	return &u, nil
+}
+
+// UserByPubKey returns the user with the given pubkey.
+func (db *DB) UserByPubKey(ctx context.Context, pk PubKey) (*User, error) {
+	sr := db.staticUsers.FindOne(ctx, bson.M{"pub_keys": pk})
+	var u User
+	err := sr.Decode(&u)
+	if err != nil {
+		return nil, ErrUserNotFound
 	}
 	return &u, nil
 }
@@ -223,7 +223,7 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 	// Get the first result.
@@ -301,15 +301,16 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 
 // UserCreate creates a new user in the DB.
 //
+// The `sub` field is optional.
+//
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier int) (*User, error) {
 	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
-	// e, err := mail.ParseAddress(emailAddr)
+	// emailAddr, err := lib.NormalizeEmail(emailAddr)
 	// if err != nil {
 	// 	return nil, errors.AddContext(err, "invalid email address")
 	// }
-	// emailAddr = e.Address
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
@@ -319,10 +320,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		return nil, ErrUserAlreadyExists
 	}
 	if sub == "" {
-		sub, err = lib.GenerateUUID()
-		if err != nil {
-			return nil, errors.AddContext(err, "failed to generate user sub")
-		}
+		return nil, errors.New("empty sub is not allowed")
 	}
 	// Check for an existing user with this sub.
 	users, err = db.managedUsersBySub(ctx, sub)
@@ -341,12 +339,12 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	if pass != "" {
 		passHash, err = hash.Generate(pass)
 		if err != nil {
-			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to generate password")
+			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to hash password")
 		}
 	}
 	emailConfToken, err := lib.GenerateUUID()
 	if err != nil {
-		return nil, errors.AddContext(err, "failed to generate an emil confirmation token")
+		return nil, errors.AddContext(err, "failed to generate an email confirmation token")
 	}
 	u := &User{
 		ID:                               primitive.ObjectID{},
@@ -370,12 +368,101 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	return u, nil
 }
 
+// UserCreatePK creates a new user with a pubkey in the DB.
+//
+// The `pass` and `sub` fields are optional.
+//
+// The new user is created as "unconfirmed" and a confirmation email is sent to
+// the address they provided.
+func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk PubKey, tier int) (*User, error) {
+	// Validate the email.
+	parsed, err := mail.ParseAddress(emailAddr)
+	if err != nil || parsed.Address != emailAddr {
+		return nil, errors.AddContext(err, "invalid email address")
+	}
+	// Check for an existing user with this email.
+	users, err := db.managedUsersByField(ctx, "email", emailAddr)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if len(users) > 0 {
+		return nil, ErrUserAlreadyExists
+	}
+	if sub == "" {
+		sub, err = lib.GenerateUUID()
+		if err != nil {
+			return nil, errors.AddContext(err, "failed to generate user sub")
+		}
+	}
+	// Check for an existing user with this sub.
+	users, err = db.managedUsersBySub(ctx, sub)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if len(users) > 0 {
+		return nil, ErrUserAlreadyExists
+	}
+	// Generate a password hash, if a password is provided. A password might not
+	// be provided if the user intends to only use pubkey authentication.
+	var passHash []byte
+	if pass != "" {
+		passHash, err = hash.Generate(pass)
+		if err != nil {
+			return nil, errors.AddContext(ErrGeneralInternalFailure, "failed to hash password")
+		}
+	}
+	emailConfToken, err := lib.GenerateUUID()
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to generate an email confirmation token")
+	}
+	u := &User{
+		ID:                               primitive.ObjectID{},
+		Email:                            emailAddr,
+		EmailConfirmationToken:           emailConfToken,
+		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
+		PasswordHash:                     string(passHash),
+		Sub:                              sub,
+		Tier:                             tier,
+		PubKeys:                          []PubKey{pk},
+	}
+	// Insert the user.
+	fields, err := bson.Marshal(u)
+	if err != nil {
+		return nil, err
+	}
+	ir, err := db.staticUsers.InsertOne(ctx, fields)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to Insert")
+	}
+	u.ID = ir.InsertedID.(primitive.ObjectID)
+	return u, nil
+}
+
 // UserDelete deletes a user by their ID.
 func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if u.ID.IsZero() {
 		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
 	}
-	filter := bson.D{{"_id", u.ID}}
+	// Delete all data associated with this user.
+	filter := bson.D{{"user_id", u.ID}}
+	_, err := db.staticDownloads.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user downloads")
+	}
+	_, err = db.staticUploads.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user uploads")
+	}
+	_, err = db.staticRegistryReads.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user registry reads")
+	}
+	_, err = db.staticRegistryWrites.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user registry writes")
+	}
+	// Delete the actual user.
+	filter = bson.D{{"_id", u.ID}}
 	dr, err := db.staticUsers.DeleteOne(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to Delete")
@@ -443,14 +530,14 @@ func (db *DB) Ping(ctx context.Context) error {
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
-	filter := bson.D{{fieldName, fieldValue}}
+	filter := bson.M{fieldName: fieldValue}
 	c, err := db.staticUsers.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to find user")
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 
@@ -480,7 +567,7 @@ func (db *DB) userStats(ctx context.Context, user User) (*UserStats, error) {
 	var errs []error
 	var errsMux sync.Mutex
 	regErr := func(msg string, e error) {
-		db.staticLogger.Info(msg, e)
+		db.staticLogger.Infoln(msg, e)
 		errsMux.Lock()
 		errs = append(errs, e)
 		errsMux.Unlock()

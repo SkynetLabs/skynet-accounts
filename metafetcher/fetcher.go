@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 
@@ -101,6 +100,9 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	}
 	client := http.Client{}
 	res, err := client.Do(&req)
+	if err == nil {
+		defer res.Body.Close()
+	}
 	if err != nil || res.StatusCode > 399 {
 		var statusCode int
 		if res != nil {
@@ -115,16 +117,11 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		go func() { mf.Queue <- m }()
 		return
 	}
-	bodyBytes, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		mf.logger.Debugf("Failed to read skyfile metadata: %s", err)
-		return
-	}
 	var meta struct {
 		Filename string `json:"filename"`
 		Length   int64  `json:"length"`
 	}
-	err = json.Unmarshal(bodyBytes, &meta)
+	err = json.NewDecoder(res.Body).Decode(&meta)
 	if err != nil {
 		mf.logger.Debugf("Failed to parse skyfile metadata: %s", err)
 		return

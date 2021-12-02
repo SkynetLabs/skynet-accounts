@@ -3,7 +3,6 @@ package email
 import (
 	"context"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -22,7 +21,7 @@ import (
 func TestSender(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +82,7 @@ func TestSender(t *testing.T) {
 // creating and "sending" emails.
 func TestContendingSenders(t *testing.T) {
 	ctx := context.Background()
-	dbName := strings.ReplaceAll(t.Name(), "/", "_")
+	dbName := test.DBNameForTest(t.Name())
 	logger := logrus.New()
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), logger)
 	if err != nil {

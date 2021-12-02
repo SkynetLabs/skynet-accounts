@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
-
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
@@ -171,7 +170,7 @@ func TokenFromContext(ctx context.Context) (sub string, email string, token jwt.
 		return
 	}
 	s, ok := t.Get("sub")
-	if !ok {
+	if !ok || s.(string) == "" {
 		err = errors.New("sub field missing")
 		return
 	}
@@ -306,15 +305,15 @@ func LoadAccountsKeySet(logger *logrus.Logger) error {
 
 // tokenForUser is a helper method that puts together an unsigned token based
 // on the provided values.
-func tokenForUser(email, sub string) (jwt.Token, error) {
-	if email == "" || sub == "" {
+func tokenForUser(emailAddr, sub string) (jwt.Token, error) {
+	if emailAddr == "" || sub == "" {
 		return nil, errors.New("email and sub cannot be empty")
 	}
 	session := tokenSession{
 		Active: true,
 		Identity: tokenIdentity{
 			Traits: tokenTraits{
-				Email: email,
+				Email: emailAddr,
 			},
 		},
 	}

@@ -38,6 +38,13 @@ var (
 	// dbEmails defines the name of the "emails" collection within skynet's
 	// database.
 	dbEmails = "emails"
+	// dbChallenges defines the name of the "challenges" collection within
+	// skynet's database.
+	dbChallenges = "challenges"
+	// dbUnconfirmedUserUpdates defines the name of the collection which holds
+	// all user pubKey updates until their respective challenge has been
+	// responded to and they are applied.
+	dbUnconfirmedUserUpdates = "unconfirmed_user_updates"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -54,7 +61,7 @@ var (
 	mongoWriteConcern = "majority"
 	// mongoWriteConcernTimeout specifies a time limit, in milliseconds, for
 	// the write concern to be satisfied.
-	mongoWriteConcernTimeout = "1000"
+	mongoWriteConcernTimeout = "30000"
 
 	// ErrGeneralInternalFailure is returned when we do not want to disclose
 	// what kind of error occurred. This should always be coupled with another
@@ -73,16 +80,18 @@ var (
 type (
 	// DB represents a MongoDB database connection.
 	DB struct {
-		staticDB             *mongo.Database
-		staticUsers          *mongo.Collection
-		staticSkylinks       *mongo.Collection
-		staticUploads        *mongo.Collection
-		staticDownloads      *mongo.Collection
-		staticRegistryReads  *mongo.Collection
-		staticRegistryWrites *mongo.Collection
-		staticEmails         *mongo.Collection
-		staticDeps           lib.Dependencies
-		staticLogger         *logrus.Logger
+		staticDB                     *mongo.Database
+		staticUsers                  *mongo.Collection
+		staticSkylinks               *mongo.Collection
+		staticUploads                *mongo.Collection
+		staticDownloads              *mongo.Collection
+		staticRegistryReads          *mongo.Collection
+		staticRegistryWrites         *mongo.Collection
+		staticEmails                 *mongo.Collection
+		staticChallenges             *mongo.Collection
+		staticUnconfirmedUserUpdates *mongo.Collection
+		staticDeps                   lib.Dependencies
+		staticLogger                 *logrus.Logger
 	}
 
 	// DBCredentials is a helper struct that binds together all values needed for
@@ -120,15 +129,17 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 		return nil, err
 	}
 	db := &DB{
-		staticDB:             database,
-		staticUsers:          database.Collection(dbUsersCollection),
-		staticSkylinks:       database.Collection(dbSkylinksCollection),
-		staticUploads:        database.Collection(dbUploadsCollection),
-		staticDownloads:      database.Collection(dbDownloadsCollection),
-		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
-		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
-		staticEmails:         database.Collection(dbEmails),
-		staticLogger:         logger,
+		staticDB:                     database,
+		staticUsers:                  database.Collection(dbUsersCollection),
+		staticSkylinks:               database.Collection(dbSkylinksCollection),
+		staticUploads:                database.Collection(dbUploadsCollection),
+		staticDownloads:              database.Collection(dbDownloadsCollection),
+		staticRegistryReads:          database.Collection(dbRegistryReadsCollection),
+		staticRegistryWrites:         database.Collection(dbRegistryWritesCollection),
+		staticEmails:                 database.Collection(dbEmails),
+		staticChallenges:             database.Collection(dbChallenges),
+		staticUnconfirmedUserUpdates: database.Collection(dbUnconfirmedUserUpdates),
+		staticLogger:                 logger,
 	}
 	return db, nil
 }
@@ -234,6 +245,30 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("sent_by"),
 			},
 		},
+		dbChallenges: {
+			{
+				Keys:    bson.D{{"challenge", 1}},
+				Options: options.Index().SetName("challenge"),
+			},
+			{
+				Keys:    bson.D{{"type", 1}},
+				Options: options.Index().SetName("type"),
+			},
+			{
+				Keys:    bson.D{{"expires_at", 1}},
+				Options: options.Index().SetName("expires_at"),
+			},
+		},
+		dbUnconfirmedUserUpdates: {
+			{
+				Keys:    bson.D{{"challenge_id", 1}},
+				Options: options.Index().SetName("challenge_id"),
+			},
+			{
+				Keys:    bson.D{{"expires_at", 1}},
+				Options: options.Index().SetName("expires_at"),
+			},
+		},
 	}
 
 	for collName, models := range schema {
@@ -271,7 +306,7 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 
 // generateUploadsPipeline generates a mongo pipeline for transforming
 // an `Upload` or `Download` struct into the respective
-// `<Up/Down>loadResponseDTO` struct.
+// `<Up/Down>loadResponse` struct.
 //
 // The Mongo query we want to ultimately execute is:
 //	db.downloads.aggregate([
@@ -372,7 +407,7 @@ func (db *DB) count(ctx context.Context, coll *mongo.Collection, matchStage bson
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 

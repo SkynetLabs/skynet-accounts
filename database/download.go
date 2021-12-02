@@ -27,9 +27,9 @@ type Download struct {
 	UpdatedAt time.Time          `bson:"updated_at" json:"-"`
 }
 
-// DownloadResponseDTO  is the representation of a download we send as response
+// DownloadResponse  is the representation of a download we send as response
 // to the caller.
-type DownloadResponseDTO struct {
+type DownloadResponse struct {
 	ID        string    `bson:"_id" json:"id"`
 	Skylink   string    `bson:"skylink" json:"skylink"`
 	Name      string    `bson:"name" json:"name"`
@@ -37,12 +37,12 @@ type DownloadResponseDTO struct {
 	CreatedAt time.Time `bson:"created_at" json:"downloadedOn"`
 }
 
-// DownloadsResponseDTO defines the final format of our response to the caller.
-type DownloadsResponseDTO struct {
-	Items    []DownloadResponseDTO `json:"items"`
-	Offset   int                   `json:"offset"`
-	PageSize int                   `json:"pageSize"`
-	Count    int                   `json:"count"`
+// DownloadsResponse defines the final format of our response to the caller.
+type DownloadsResponse struct {
+	Items    []DownloadResponse `json:"items"`
+	Offset   int                `json:"offset"`
+	PageSize int                `json:"pageSize"`
+	Count    int                `json:"count"`
 }
 
 // DownloadByID fetches a single download from the DB.
@@ -90,7 +90,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 
 // DownloadsBySkylink fetches a page of downloads of this skylink and the total
 // number of such downloads.
-func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
+func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]DownloadResponse, int, error) {
 	if skylink.ID.IsZero() {
 		return nil, 0, errors.New("invalid skylink")
 	}
@@ -103,7 +103,7 @@ func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, p
 
 // DownloadsByUser fetches a page of downloads by this user and the total number
 // of such downloads.
-func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
+func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize int) ([]DownloadResponse, int, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
 	}
@@ -116,16 +116,16 @@ func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize i
 
 // downloadsBy fetches a page of downloads, filtered by an arbitrary match
 // criteria. It also reports the total number of records in the list.
-func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]DownloadResponseDTO, int, error) {
+func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]DownloadResponse, int, error) {
 	cnt, err := db.count(ctx, db.staticDownloads, matchStage)
 	if err != nil || cnt == 0 {
-		return []DownloadResponseDTO{}, 0, err
+		return []DownloadResponse{}, 0, err
 	}
 	c, err := db.staticDownloads.Aggregate(ctx, generateDownloadsPipeline(matchStage, offset, pageSize))
 	if err != nil {
 		return nil, 0, err
 	}
-	downloads := make([]DownloadResponseDTO, pageSize)
+	downloads := make([]DownloadResponse, pageSize)
 	err = c.All(ctx, &downloads)
 	if err != nil {
 		return nil, 0, err

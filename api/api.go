@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
@@ -70,9 +71,15 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 	return api, nil
 }
 
-// Router exposed the internal httprouter struct.
-func (api *API) Router() *httprouter.Router {
-	return api.staticRouter
+// ServeHTTP implements the http.Handler interface.
+func (api *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	api.staticRouter.ServeHTTP(w, req)
+}
+
+// ListenAndServe starts the API server on the given port.
+func (api *API) ListenAndServe(port int) error {
+	api.staticLogger.Info(fmt.Sprintf("Listening on port %d", port))
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), api.staticRouter)
 }
 
 // WithDBSession injects a session context into the request context of the handler.
@@ -91,7 +98,7 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 		sctx := mongo.NewSessionContext(req.Context(), sess)
 
 		// Get the special response writer.
-		mw, err := newMongoWriter(w, sctx, api.staticLogger)
+		mw, err := NewMongoWriter(w, sctx, api.staticLogger)
 		if err != nil {
 			api.WriteError(w, errors.AddContext(err, "failed to start a new transaction"), http.StatusInternalServerError)
 			return
@@ -141,5 +148,5 @@ func (api *API) WriteJSON(w http.ResponseWriter, obj interface{}) {
 // requested action succeeded AND there is no data to return.
 func (api *API) WriteSuccess(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
-	api.staticLogger.Debugln(http.StatusNoContent)
+	api.staticLogger.Traceln(http.StatusNoContent)
 }

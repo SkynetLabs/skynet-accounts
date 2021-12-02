@@ -101,6 +101,17 @@ Conflict.
   - 409 Conflict (StripeID is already set)
   - 500
 
+### DELETE `/user`
+
+Deletes the user and all of their data.
+
+* Requires valid JWT: `true`
+* Returns:
+  - 204
+  - 401 (missing JWT)
+  - 404 (when there is no such user)
+  - 500 (on any other error)
+
 ### GET `/user/limits`
 
 Returns the portal limits of the current user. Returns the values for 
@@ -200,13 +211,13 @@ Requests another confirmation email sent to the account's email address.
  - 401
  - 500
 
-### GET `/user/recover`
+### POST `/user/recover/request`
 
 Requests a recovery token to be sent to given email. The email needs to be 
 confirmed for the action to be performed.
 
 * Requires a valid JWT token: `false`
-* GET params: `email`
+* POST params: `email`
 * Returns:
 - 204
 - 400

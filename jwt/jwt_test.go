@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/lib"
-
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwt"
 	"github.com/sirupsen/logrus"

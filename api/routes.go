@@ -14,29 +14,36 @@ import (
 // buildHTTPRoutes registers all HTTP routes and their handlers.
 func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/health", api.noValidate(api.healthGET))
-
 	api.staticRouter.GET("/limits", api.noValidate(api.limitsGET))
 
+	api.staticRouter.GET("/login", api.WithDBSession(api.noValidate(api.loginGET)))
 	api.staticRouter.POST("/login", api.WithDBSession(api.noValidate(api.loginPOST)))
 	api.staticRouter.POST("/logout", api.WithDBSession(api.validate(api.logoutPOST)))
+	api.staticRouter.GET("/register", api.WithDBSession(api.noValidate(api.registerGET)))
+	api.staticRouter.POST("/register", api.WithDBSession(api.noValidate(api.registerPOST)))
 
+	// Endpoints at which Nginx reports portal usage.
 	api.staticRouter.POST("/track/upload/:skylink", api.WithDBSession(api.validate(api.trackUploadPOST)))
 	api.staticRouter.POST("/track/download/:skylink", api.WithDBSession(api.validate(api.trackDownloadPOST)))
 	api.staticRouter.POST("/track/registry/read", api.WithDBSession(api.validate(api.trackRegistryReadPOST)))
 	api.staticRouter.POST("/track/registry/write", api.WithDBSession(api.validate(api.trackRegistryWritePOST)))
 
-	api.staticRouter.POST("/user", api.WithDBSession(api.noValidate(api.userPOST)))
+	api.staticRouter.POST("/user", api.WithDBSession(api.noValidate(api.userPOST))) // This will be removed in the future.
 	api.staticRouter.GET("/user", api.WithDBSession(api.validate(api.userGET)))
 	api.staticRouter.PUT("/user", api.WithDBSession(api.validate(api.userPUT)))
+	api.staticRouter.DELETE("/user", api.WithDBSession(api.validate(api.userDELETE)))
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsGET))
+	api.staticRouter.GET("/user/pubkey/register", api.WithDBSession(api.validate(api.userPubKeyRegisterGET)))
+	api.staticRouter.POST("/user/pubkey/register", api.WithDBSession(api.validate(api.userPubKeyRegisterPOST)))
 	api.staticRouter.GET("/user/uploads", api.WithDBSession(api.validate(api.userUploadsGET)))
 	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.validate(api.userUploadsDELETE)))
 	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
 
-	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET)))
+	// Endpoints for email communication with the user.
+	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET))) // TODO POST
 	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.validate(api.userReconfirmPOST)))
-	api.staticRouter.GET("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverGET)))
+	api.staticRouter.POST("/user/recover/request", api.WithDBSession(api.noValidate(api.userRecoverRequestPOST)))
 	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverPOST)))
 
 	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noValidate(api.stripeWebhookPOST)))
@@ -60,13 +67,13 @@ func (api *API) validate(h httprouter.Handle) httprouter.Handle {
 		api.logRequest(req)
 		tokenStr, err := tokenFromRequest(req)
 		if err != nil {
-			api.staticLogger.Traceln("Error fetching token from request:", err)
+			api.staticLogger.Debugln("Error fetching token from request:", err)
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
 		token, err := jwt.ValidateToken(tokenStr)
 		if err != nil {
-			api.staticLogger.Traceln("Error validating token:", err)
+			api.staticLogger.Debugln("Error validating token:", err)
 			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
@@ -96,7 +103,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
 	if errors.Contains(err, http.ErrNoCookie) {
-		return "", errors.New("no cookie found")
+		return "", errors.New("no authorisation token found")
 	}
 	if err != nil {
 		return "", errors.AddContext(err, "cookie exists but it's not valid")
