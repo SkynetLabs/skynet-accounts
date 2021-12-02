@@ -142,7 +142,7 @@ func main() {
 		// Set the FROM address to outgoing emails. This can be overridden by
 		// the ACCOUNTS_EMAIL_FROM optional environment variable.
 		if uri.User != nil {
-			email.From = uri.User.String()
+			email.From = uri.User.Username()
 		}
 		if emailFrom := os.Getenv(envEmailFrom); emailFrom != "" {
 			email.From = emailFrom
