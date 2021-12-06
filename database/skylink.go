@@ -13,6 +13,12 @@ import (
 )
 
 var (
+	// extractSkylinkRE extracts a skylink from the given string. It matches
+	// both base32 and base64 skylinks.
+	//
+	// Note: It's important that we match the base32 first because base32 is a
+	// subset of base64, so the base64 regex will match part of the base32 and
+	// return partial data which will be useless.
 	extractSkylinkRE      = regexp.MustCompile("^.*([a-z0-9]{55})|([a-zA-Z0-9-_]{46}).*$")
 	validateSkylinkHashRE = regexp.MustCompile("(^[a-z0-9]{55}$)|(^[a-zA-Z0-9-_]{46}$)")
 )
