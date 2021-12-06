@@ -117,7 +117,7 @@ type (
 		SubscriptionStatus            string             `bson:"subscription_status" json:"subscriptionStatus"`
 		SubscriptionCancelAt          time.Time          `bson:"subscription_cancel_at" json:"subscriptionCancelAt"`
 		SubscriptionCancelAtPeriodEnd bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
-		StripeId                      string             `bson:"stripe_id" json:"stripeCustomerId"`
+		StripeID                      string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                 bool               `bson:"quota_exceeded" json:"quotaExceeded"`
 	}
 	// UserStats contains statistical information about the user.
@@ -291,11 +291,11 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 	return nil
 }
 
-// UserSetStripeId changes the user's stripe id in the DB.
-func (db *DB) UserSetStripeId(ctx context.Context, u *User, stripeId string) error {
+// UserSetStripeID changes the user's stripe id in the DB.
+func (db *DB) UserSetStripeID(ctx context.Context, u *User, stripeID string) error {
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{
-		"stripe_id": stripeId,
+		"stripe_id": stripeID,
 	}}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
@@ -588,9 +588,9 @@ func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, mont
 
 // userRegistryWriteStats reports the number of registry writes by the user and
 // the bandwidth used.
-func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
+func (db *DB) userRegistryWriteStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", userId},
+		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	writes, err := db.count(ctx, db.staticRegistryWrites, matchStage)
@@ -602,9 +602,9 @@ func (db *DB) userRegistryWriteStats(ctx context.Context, userId primitive.Objec
 
 // userRegistryReadsStats reports the number of registry reads by the user and
 // the bandwidth used.
-func (db *DB) userRegistryReadStats(ctx context.Context, userId primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
+func (db *DB) userRegistryReadStats(ctx context.Context, userID primitive.ObjectID, monthStart time.Time) (int64, int64, error) {
 	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", userId},
+		{"user_id", userID},
 		{"timestamp", bson.D{{"$gt", monthStart}}},
 	}}}
 	reads, err := db.count(ctx, db.staticRegistryReads, matchStage)

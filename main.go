@@ -46,9 +46,9 @@ var (
 	// envOathkeeperAddr hold the name of the environment variable for
 	// Oathkeeper's address. Defaults to "oathkeeper:4456".
 	envOathkeeperAddr = "OATHKEEPER_ADDR"
-	// envStripeApiKey hold the name of the environment variable for Stripe's
+	// envStripeAPIKey hold the name of the environment variable for Stripe's
 	// API key. It's only required when integrating with Stripe.
-	envStripeApiKey = "STRIPE_API_KEY"
+	envStripeAPIKey = "STRIPE_API_KEY"
 )
 
 // loadDBCredentials creates a new DB connection based on credentials found in
@@ -89,7 +89,7 @@ func main() {
 	if oaddr := os.Getenv(envOathkeeperAddr); oaddr != "" {
 		jwt.OathkeeperAddr = oaddr
 	}
-	if sk := os.Getenv(envStripeApiKey); sk != "" {
+	if sk := os.Getenv(envStripeAPIKey); sk != "" {
 		stripe.Key = sk
 		api.StripeTestMode = !strings.HasPrefix(stripe.Key, "sk_live_")
 	}

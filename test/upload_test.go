@@ -91,7 +91,7 @@ func TestUpload_UploadsByUser(t *testing.T) {
 	}
 	// Create a second upload for the same skylink. The user's used storage
 	// should stay the same but the upload bandwidth should increase.
-	_, _, err = RegisterTestUpload(ctx, db, u, sl)
+	_, _, err = createUpload(ctx, db, u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}

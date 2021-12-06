@@ -271,7 +271,7 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 	cp := &stripe.CustomerParams{
 		Plan: &plan,
 	}
-	_, err := customer.Update(u.StripeId, cp)
+	_, err := customer.Update(u.StripeID, cp)
 	if err != nil {
 		return errors.AddContext(err, "failed to update customer on Stripe")
 	}
@@ -283,7 +283,7 @@ func (api *API) assignTier(ctx context.Context, tier int, u *database.User) erro
 		cp = &stripe.CustomerParams{
 			Plan: &plan,
 		}
-		_, err2 := customer.Update(u.StripeId, cp)
+		_, err2 := customer.Update(u.StripeID, cp)
 		if err2 != nil {
 			err2 = errors.AddContext(err2, "failed to revert the change on Stripe")
 		}

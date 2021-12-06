@@ -218,7 +218,7 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		return
 	}
 	// Check if this user already has this ID assigned to them.
-	if payload.StripeID == u.StripeId {
+	if payload.StripeID == u.StripeID {
 		// Nothing to do.
 		api.WriteJSON(w, u)
 		return
@@ -235,20 +235,20 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 		return
 	}
 	// Check if this user already has a Stripe customer ID.
-	if u.StripeId != "" {
-		err = errors.New("This user already has a Stripe customer id.")
+	if u.StripeID != "" {
+		err = errors.New("this user already has a Stripe customer id")
 		api.WriteError(w, err, http.StatusUnprocessableEntity)
 		return
 	}
 	// Save the changed Stripe ID to the DB.
-	err = api.staticDB.UserSetStripeId(req.Context(), u, payload.StripeID)
+	err = api.staticDB.UserSetStripeID(req.Context(), u, payload.StripeID)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	// We set this for the purpose of returning the updated value without
 	// reading from the DB.
-	u.StripeId = payload.StripeID
+	u.StripeID = payload.StripeID
 	api.WriteJSON(w, u)
 }
 
