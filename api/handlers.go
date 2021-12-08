@@ -565,6 +565,18 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}
 
 	if payload.Password != "" {
+		// Check if the registrations are open. If they are not then changing
+		// passwords is also not allowed.
+		val, err := api.staticDB.ReadConfigValue(req.Context(), database.ConfValRegistrationsDisabled)
+		if err != nil && !errors.Contains(err, mongo.ErrNoDocuments) {
+			api.WriteError(w, errors.AddContext(err, "failed to read from configuration"), http.StatusInternalServerError)
+			return
+		}
+		if val == database.ConfValTrue {
+			api.WriteError(w, errors.New("registrations are currently disabled"), http.StatusNotImplemented)
+			return
+		}
+
 		pwHash, err := hash.Generate(payload.Password)
 		if err != nil {
 			api.WriteError(w, errors.AddContext(err, "failed to hash password"), http.StatusInternalServerError)
@@ -876,11 +888,23 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 // without logging in.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check if the registrations are open. If they are not then account
+	// recovery is also disabled.
+	val, err := api.staticDB.ReadConfigValue(req.Context(), database.ConfValRegistrationsDisabled)
+	if err != nil && !errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, errors.AddContext(err, "failed to read from configuration"), http.StatusInternalServerError)
+		return
+	}
+	if val == database.ConfValTrue {
+		api.WriteError(w, errors.New("registrations are currently disabled"), http.StatusNotImplemented)
+		return
+	}
+
 	// Read and parse the request body.
 	var payload struct {
 		Email string `json:"email"`
 	}
-	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -947,9 +971,22 @@ func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request,
 // They need to provide a valid password-reset token.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check if the registrations are open. If they are not then account
+	// recovery is also disabled.
+	val, err := api.staticDB.ReadConfigValue(req.Context(), database.ConfValRegistrationsDisabled)
+	if err != nil && !errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, errors.AddContext(err, "failed to read from configuration"), http.StatusInternalServerError)
+		return
+	}
+	if val == database.ConfValTrue {
+		api.WriteError(w, errors.New("registrations are currently disabled"), http.StatusNotImplemented)
+		return
+	}
+
+
 	// Parse the request's body.
 	var payload accountRecoveryPOST
-	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
