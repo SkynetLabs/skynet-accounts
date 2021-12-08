@@ -22,6 +22,10 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+var (
+	dbMigrations = "migration_crdb"
+)
+
 // cru represents a user in CockroachDB
 type cru struct {
 	Sub       string    `json:"sub"`
@@ -255,10 +259,8 @@ func mongoEmailsUnique(ctx context.Context, db *mongo.Database) error {
 }
 
 func latestMigrationTS(ctx context.Context, mgr *mongo.Database) (time.Time, error) {
-	coll := mgr.Collection("migration_crdb")
-	// Fetch the time of the start of the latest migration run.
-	filter := bson.M{"timestamp": bson.M{"$gt": 0}}
-	sr := coll.FindOne(ctx, filter)
+	coll := mgr.Collection(dbMigrations)
+	sr := coll.FindOne(ctx, bson.M{})
 	var oldTimestamp time.Time
 	if sr.Err() != nil && sr.Err() != mongo.ErrNoDocuments {
 		return oldTimestamp, sr.Err()
@@ -279,7 +281,7 @@ func latestMigrationTS(ctx context.Context, mgr *mongo.Database) (time.Time, err
 }
 
 func setLatestMigrationTS(ctx context.Context, mgr *mongo.Database, t time.Time) error {
-	coll := mgr.Collection("migration_crdb")
+	coll := mgr.Collection(dbMigrations)
 	filter := bson.M{}
 	update := bson.M{"$set": bson.M{"timestamp": t}}
 	opts := &options.UpdateOptions{Upsert: &database.True}
