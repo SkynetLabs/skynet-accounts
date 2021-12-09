@@ -1,0 +1,1 @@
+- Add support for base32 skylinks.
