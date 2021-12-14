@@ -145,7 +145,7 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 	}
 	// Require HTTPS
 	if recipientURL.Scheme != "https" {
-		return nil, primitive.ObjectID{}, fmt.Errorf("invalid scheme %v, should be https")
+		return nil, primitive.ObjectID{}, fmt.Errorf("invalid scheme %v, should be https", recipientURL.Scheme)
 	}
 	// Fetch the challenge from the DB.
 	filter := bson.M{
