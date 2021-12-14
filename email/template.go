@@ -26,7 +26,7 @@ Hi, please verify your account by clicking the following link:
 
 <a href="{{.ConfirmEndpoint}}?token={{.Token}}">{{.ConfirmEndpoint}}?token={{.Token}}</a>
 
---e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a
+--e31b4aa4706e10c57d31a44da59281c216fb10992b0e5b512edea805408a--
 `
 
 	recoverAccountSubject = "Recover access to your account"
@@ -97,7 +97,7 @@ If this was not you, please ignore this email.
 // confirmEmailEmail generates an email for confirming that the user owns the
 // given email address.
 func confirmEmailEmail(to string, token string) *database.EmailMessage {
-	body := strings.ReplaceAll(confirmEmailTempl, "{{.ConfirmEndpoint}}", PortalAddress+"/user/confirm")
+	body := strings.ReplaceAll(confirmEmailTempl, "{{.ConfirmEndpoint}}", PortalAddressAccounts+"/user/confirm")
 	body = strings.ReplaceAll(body, "{{.Token}}", token)
 	return &database.EmailMessage{
 		From:     From,
@@ -110,7 +110,7 @@ func confirmEmailEmail(to string, token string) *database.EmailMessage {
 
 // recoverAccountEmail generates an email for recovering an account.
 func recoverAccountEmail(to string, token string) *database.EmailMessage {
-	body := strings.ReplaceAll(recoverAccountTempl, "{{.RecoverEndpoint}}", PortalAddress+"/user/recover")
+	body := strings.ReplaceAll(recoverAccountTempl, "{{.RecoverEndpoint}}", PortalAddressAccounts+"/user/recover")
 	body = strings.ReplaceAll(body, "{{.Token}}", token)
 	return &database.EmailMessage{
 		From:     From,

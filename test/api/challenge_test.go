@@ -11,6 +11,7 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/crypto"
 	"golang.org/x/crypto/ed25519"
@@ -188,7 +189,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 	at.Cookie = c
@@ -261,9 +262,9 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	// Try to solve the challenge while logged in as a different user.
 	// NOTE: This will consume the challenge and the user will need to request
 	// a new one.
-	r, _, err = at.CreateUserPost(name+"_user3@siasky.net", name+"_pass")
+	r, b, err = at.CreateUserPost(name+"_user3@siasky.net", name+"_pass")
 	if err != nil || r.StatusCode != http.StatusOK {
-		t.Fatal(r.Status, err)
+		t.Fatal(r.Status, err, string(b))
 	}
 	at.Cookie = test.ExtractCookie(r)
 	r, b, _ = at.Post("/user/pubkey/register", nil, params)

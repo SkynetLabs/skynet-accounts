@@ -14,9 +14,9 @@ type MongoWriter struct {
 	w      http.ResponseWriter
 }
 
-// newMongoWriter creates the MongoWriter and starts a transaction.
+// NewMongoWriter creates the MongoWriter and starts a transaction.
 // Returns an error if it fails to start a transaction.
-func newMongoWriter(w http.ResponseWriter, sctx mongo.SessionContext, logger *logrus.Logger) (MongoWriter, error) {
+func NewMongoWriter(w http.ResponseWriter, sctx mongo.SessionContext, logger *logrus.Logger) (MongoWriter, error) {
 	return MongoWriter{
 		logger: logger,
 		sctx:   sctx,

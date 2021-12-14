@@ -13,7 +13,6 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
-
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -308,11 +307,10 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier int) (*User, error) {
 	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
-	// e, err := mail.ParseAddress(emailAddr)
+	// emailAddr, err := lib.NormalizeEmail(emailAddr)
 	// if err != nil {
 	// 	return nil, errors.AddContext(err, "invalid email address")
 	// }
-	// emailAddr = e.Address
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
@@ -377,11 +375,11 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk PubKey, tier int) (*User, error) {
-	e, err := mail.ParseAddress(emailAddr)
-	if err != nil {
+	// Validate the email.
+	parsed, err := mail.ParseAddress(emailAddr)
+	if err != nil || parsed.Address != emailAddr {
 		return nil, errors.AddContext(err, "invalid email address")
 	}
-	emailAddr = e.Address
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {

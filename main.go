@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -21,12 +20,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stripe/stripe-go/v71"
 	"gitlab.com/NebulousLabs/errors"
-)
-
-const (
-	// defaultPortal is the URL of the default Skynet portal, maintained by
-	// Skynet Labs. It can be overridden by an environment variable.
-	defaultPortal = "https://siasky.net"
 )
 
 var (
@@ -82,21 +75,9 @@ func loadDBCredentials() (database.DBCredentials, error) {
 
 // logLevel returns the desires log level.
 func logLevel() logrus.Level {
-	switch debugEnv, _ := os.LookupEnv(envLogLevel); debugEnv {
-	case "panic":
-		return logrus.PanicLevel
-	case "fatal":
-		return logrus.FatalLevel
-	case "error":
-		return logrus.ErrorLevel
-	case "warn":
-		return logrus.WarnLevel
-	case "info":
-		return logrus.InfoLevel
-	case "debug":
-		return logrus.DebugLevel
-	case "trace":
-		return logrus.TraceLevel
+	lvl, err := logrus.ParseLevel(os.Getenv(envLogLevel))
+	if err == nil {
+		return lvl
 	}
 	if build.DEBUG {
 		return logrus.TraceLevel
@@ -105,23 +86,6 @@ func logLevel() logrus.Level {
 		return logrus.DebugLevel
 	}
 	return logrus.InfoLevel
-}
-
-// portal is a helper that fetches the portal name and scheme from the config
-// or takes the default value. It then validates it and returns a usable value.
-func portal() (string, string, error) {
-	pVal, ok := os.LookupEnv(envPortal)
-	if !ok {
-		pVal = defaultPortal
-	}
-	p, err := url.Parse(pVal)
-	if err != nil {
-		return "", "", err
-	}
-	if p.Scheme == "" {
-		p.Scheme = "https"
-	}
-	return p.Scheme, p.Host, nil
 }
 
 func main() {
@@ -136,17 +100,19 @@ func main() {
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
 
-	portalScheme, portalHost, err := portal()
-	if err != nil {
-		log.Fatal(errors.AddContext(err, "failed to parse portal name"))
+	// portal tells us which Skynet portal to use for downloading skylinks.
+	portal := os.Getenv(envPortal)
+	if portal == "" {
+		log.Fatal("missing env var " + envPortal)
 	}
-	database.PortalName = portalHost
-	portalAddr := portalScheme + "://" + portalHost
+	database.PortalName = portal
+	portalAddr := "https://" + portal
 	jwt.JWTPortalName = portalAddr
 	email.PortalAddress = portalAddr
+	email.PortalAddressAccounts = "https://account." + portal
 	email.ServerLockID = os.Getenv(envServerDomain)
 	if email.ServerLockID == "" {
-		email.ServerLockID = jwt.JWTPortalName
+		email.ServerLockID = portalAddr
 		logger.Warningf(`Environment variable %s is missing! This server's identity 
 			is set to the default '%s' value. That is OK only if this server is running on its own 
 			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
@@ -210,6 +176,5 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
-	logger.Info("Listening on port 3000")
-	logger.Fatal(http.ListenAndServe(":3000", server.Router()))
+	logger.Fatal(server.ListenAndServe(3000))
 }

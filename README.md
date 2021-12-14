@@ -80,7 +80,7 @@ func main() {
 	}
 	jsonbuf, err := json.MarshalIndent(jwks, "", "  ")
 	if err != nil {
-		log.Fatal("failed to generate JSON: %s", err)
+		log.Fatalf("failed to generate JSON: %s", err)
 	}
 	os.Stdout.Write(jsonbuf)
 }

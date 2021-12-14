@@ -58,14 +58,14 @@ func DBTestCredentials() database.DBCredentials {
 }
 
 // CreateUser is a helper method which simplifies the creation of test users
-func CreateUser(at *AccountsTester, email, password string) (*User, error) {
+func CreateUser(at *AccountsTester, emailAddr, password string) (*User, error) {
 	// Create a user.
-	_, _, err := at.CreateUserPost(email, password)
+	_, _, err := at.CreateUserPost(emailAddr, password)
 	if err != nil {
 		return nil, errors.AddContext(err, "user creation failed")
 	}
 	// Fetch the user from the DB, so we can delete it later.
-	u, err := at.DB.UserByEmail(at.Ctx, email)
+	u, err := at.DB.UserByEmail(at.Ctx, emailAddr)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to fetch user from the DB")
 	}

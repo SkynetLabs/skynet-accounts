@@ -132,7 +132,6 @@ test-long: lint lint-ci
 	@mkdir -p cover
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
 
-# test-int always returns a zero exit value! Only use it manually!
 # These env var values are for testing only. They can be freely changed.
 test-int: test-long start-mongo
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count)
@@ -146,4 +145,4 @@ test-single: export COOKIE_ENC_KEY="65d31d12b80fc57df16d84c02a9bb62e2bc3b633388b
 test-single:
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=$(RUN) -count=$(count)
 
-.PHONY: all fmt install release clean check test test-int test-long test-single stop-mongo
+.PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo

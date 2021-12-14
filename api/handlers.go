@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/mail"
@@ -17,6 +18,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
+	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -39,9 +41,31 @@ type (
 		Storage           int64  `json:"storageLimit"`
 	}
 
-	// userUpdateData defines the fields of the User record that can be changed
+	// UserGET defines a representation of the User struct returned by all
+	// handlers. This allows us to tweak the fields of the struct before
+	// returning it.
+	UserGET struct {
+		database.User
+		EmailConfirmed bool `json:"emailConfirmed"`
+	}
+
+	// accountRecoveryPOST defines the payload we expect when a user is trying
+	// to change their password.
+	accountRecoveryPOST struct {
+		Token           string `json:"token"`
+		Password        string `json:"password"`
+		ConfirmPassword string `json:"confirmPassword"`
+	}
+
+	// credentialsPOST defines the standard credentials package we expect.
+	credentialsPOST struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	// userUpdatePOST defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
-	userUpdateData struct {
+	userUpdatePOST struct {
 		Email    string `json:"email,omitempty"`
 		Password string `json:"password,omitempty"`
 		StripeID string `json:"stripeCustomerId,omitempty"`
@@ -93,22 +117,29 @@ func (api *API) loginGET(w http.ResponseWriter, req *http.Request, _ httprouter.
 
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Get the body, we might need to use it several times.
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
+		return
+	}
+
 	// Since we don't want to have separate endpoints for logging in with
 	// credentials and token, we'll do both here.
 	//
 	// Check whether credentials are provided. Those trump the token because a
 	// user with a valid token might want to relog. No need to force them to
 	// log out first.
-	email := req.PostFormValue("email")
-	pw := req.PostFormValue("password")
-	if email != "" && pw != "" {
-		api.loginPOSTCredentials(w, req, email, pw)
+	var payload credentialsPOST
+	err = json.Unmarshal(body, &payload)
+	if err == nil && payload.Email != "" && payload.Password != "" {
+		api.loginPOSTCredentials(w, req, payload.Email, payload.Password)
 		return
 	}
 
-	// Check for a challenge response in the request.
+	// Check for a challenge response in the request's body.
 	var chr database.ChallengeResponse
-	err := chr.LoadFromRequest(req)
+	err = chr.LoadFromBytes(body)
 	if err == nil {
 		api.loginPOSTChallengeResponse(w, req, chr)
 		return
@@ -201,7 +232,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 		return
 	}
 	if returnUser {
-		api.WriteJSON(w, u)
+		api.WriteJSON(w, UserGETFromUser(u))
 	} else {
 		api.WriteSuccess(w)
 	}
@@ -248,31 +279,39 @@ func (api *API) registerGET(w http.ResponseWriter, req *http.Request, _ httprout
 
 // registerPOST registers a new user based on a challenge-response.
 func (api *API) registerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Get the body, we might need to use it several times.
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "empty request body"), http.StatusBadRequest)
+		return
+	}
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err := chr.LoadFromRequest(req)
+	err = chr.LoadFromBytes(body)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
 	}
+	// Parse the request's body.
+	var payload credentialsPOST
+	err = json.Unmarshal(body, &payload)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
+	parsed, err := mail.ParseAddress(payload.Email)
+	if err != nil || payload.Email != parsed.Address {
+		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
+		return
+	}
+	// The password is optional and that's why we do not verify it.
 	ctx := req.Context()
 	pk, _, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeRegister)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusBadRequest)
 		return
 	}
-	// Validate the email address.
-	email := req.PostFormValue("email")
-	e, err := mail.ParseAddress(email)
-	if err != nil {
-		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
-		return
-	}
-	// Strip any names from the email and leave just the address.
-	email = e.Address
-	// The password is optional.
-	pass := req.PostFormValue("password")
-	u, err := api.staticDB.UserCreatePK(ctx, email, pass, "", pk, database.TierFree)
+	u, err := api.staticDB.UserCreatePK(ctx, payload.Email, payload.Password, "", pk, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -306,18 +345,18 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	// We only do it here, instead of baking this into UserBySub because we only
 	// care about this information being correct when we're going to present it
 	// to the user, e.g. on the Dashboard.
-	_, email, err := jwt.UserDetailsFromJWT(req.Context())
+	_, emailAddr, err := jwt.UserDetailsFromJWT(req.Context())
 	if err != nil {
 		api.staticLogger.Traceln("Failed to get user details from JWT:", err)
 	}
-	if err == nil && email != u.Email {
-		u.Email = email
+	if err == nil && emailAddr != u.Email {
+		u.Email = emailAddr
 		err = api.staticDB.UserSave(req.Context(), u)
 		if err != nil {
 			api.staticLogger.Traceln("Failed to update user in DB:", err)
 		}
 	}
-	api.WriteJSON(w, u)
+	api.WriteJSON(w, UserGETFromUser(u))
 }
 
 // userLimitsGET returns the speed limits which apply to this user.
@@ -413,17 +452,23 @@ func (api *API) userDELETE(w http.ResponseWriter, req *http.Request, _ httproute
 
 // userPOST creates a new user.
 func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	email := req.PostFormValue("email")
-	// Validate the email address.
-	a, err := mail.ParseAddress(email)
+	// Parse the request's body.
+	var payload credentialsPOST
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
+	if payload.Email == "" {
+		api.WriteError(w, errors.New("email is required"), http.StatusBadRequest)
+		return
+	}
+	parsed, err := mail.ParseAddress(payload.Email)
+	if err != nil || payload.Email != parsed.Address {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
-	// Strip any names from the email and leave just the address.
-	email = a.Address
-	pw := req.PostFormValue("password")
-	if pw == "" {
+	if payload.Password == "" {
 		api.WriteError(w, errors.New("password is required"), http.StatusBadRequest)
 		return
 	}
@@ -437,7 +482,7 @@ func (api *API) userPOST(w http.ResponseWriter, req *http.Request, _ httprouter.
 		api.WriteError(w, errors.AddContext(err, "failed to generate user sub"), http.StatusInternalServerError)
 		return
 	}
-	u, err := api.staticDB.UserCreate(req.Context(), email, pw, sub, database.TierFree)
+	u, err := api.staticDB.UserCreate(req.Context(), payload.Email, payload.Password, sub, database.TierFree)
 	if errors.Contains(err, database.ErrUserAlreadyExists) {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -464,20 +509,14 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 	}
 
 	// Read and parse the request body.
-	bodyBytes, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		err = errors.AddContext(err, "failed to read request body")
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
-	var payload userUpdateData
-	err = json.Unmarshal(bodyBytes, &payload)
+	var payload userUpdatePOST
+	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	if payload == (userUpdateData{}) {
+	if payload == (userUpdatePOST{}) {
 		// The payload is empty, nothing to do.
 		api.WriteError(w, errors.New("empty request"), http.StatusBadRequest)
 		return
@@ -527,14 +566,11 @@ func (api *API) userPUT(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 	var changedEmail bool
 	if payload.Email != "" {
-		// Validate the new email.
-		a, err := mail.ParseAddress(payload.Email)
-		if err != nil {
-			api.WriteError(w, errors.AddContext(err, "invalid email address"), http.StatusBadRequest)
+		parsed, err := mail.ParseAddress(payload.Email)
+		if err != nil || payload.Email != parsed.Address {
+			api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 			return
 		}
-		// Strip any names from the email and leave just the address.
-		payload.Email = a.Address
 		// Check if another user already has this email address.
 		eu, err := api.staticDB.UserByEmail(ctx, payload.Email)
 		if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
@@ -625,7 +661,7 @@ func (api *API) userPubKeyRegisterPOST(w http.ResponseWriter, req *http.Request,
 	ctx := req.Context()
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err = chr.LoadFromRequest(req)
+	err = chr.LoadFromReader(io.LimitReader(req.Body, 4*skynet.KiB))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -704,7 +740,7 @@ func (api *API) userUploadsGET(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.UploadsResponseDTO{
+	response := database.UploadsResponse{
 		Items:    ups,
 		Offset:   offset,
 		PageSize: pageSize,
@@ -740,7 +776,7 @@ func (api *API) userDownloadsGET(w http.ResponseWriter, req *http.Request, _ htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.DownloadsResponseDTO{
+	response := database.DownloadsResponse{
 		Items:    downs,
 		Offset:   offset,
 		PageSize: pageSize,
@@ -804,26 +840,31 @@ func (api *API) userReconfirmPOST(w http.ResponseWriter, req *http.Request, _ ht
 	api.WriteSuccess(w)
 }
 
-// userRecoverGET allows the user to request an account recovery. This creates
-// a password-reset token that allows the user to change their password without
-// logging in.
+// userRecoverRequestPOST allows the user to request an account recovery. This
+// creates a password-reset token that allows the user to change their password
+// without logging in.
 // The user doesn't need to be logged in.
-func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if err := req.ParseForm(); err != nil {
+func (api *API) userRecoverRequestPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Read and parse the request body.
+	var payload struct {
+		Email string `json:"email"`
+	}
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	if err != nil {
+		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	email := req.Form.Get("email")
-	if email == "" {
+	if payload.Email == "" {
 		api.WriteError(w, errors.New("missing required parameter 'email'"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserByEmail(req.Context(), email)
+	u, err := api.staticDB.UserByEmail(req.Context(), payload.Email)
 	if errors.Contains(err, database.ErrUserNotFound) {
 		// Someone tried to recover an account with an email that's not in our
 		// database. It's possible that this is a user who forgot which email
 		// they used when they signed up. Email them, so they know.
-		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), email)
+		errSend := api.staticMailer.SendAccountAccessAttemptedEmail(req.Context(), payload.Email)
 		if errSend != nil {
 			api.staticLogger.Warningln(errors.AddContext(err, "failed to send an email"))
 		}
@@ -875,27 +916,27 @@ func (api *API) userRecoverGET(w http.ResponseWriter, req *http.Request, _ httpr
 // They need to provide a valid password-reset token.
 // The user doesn't need to be logged in.
 func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if err := req.ParseForm(); err != nil {
-		api.WriteError(w, err, http.StatusBadRequest)
+	// Parse the request's body.
+	var payload accountRecoveryPOST
+	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
 	}
-	recoveryToken := req.Form.Get("token")
-	password := req.Form.Get("password")
-	confirmPassword := req.Form.Get("confirmPassword")
-	if recoveryToken == "" || password == "" || confirmPassword == "" {
+	if payload.Password == "" || payload.ConfirmPassword == "" || payload.Token == "" {
 		api.WriteError(w, errors.New("missing required parameter"), http.StatusBadRequest)
 		return
 	}
-	if password != confirmPassword {
+	if payload.Password != payload.ConfirmPassword {
 		api.WriteError(w, errors.New("passwords don't match"), http.StatusBadRequest)
 		return
 	}
-	u, err := api.staticDB.UserByRecoveryToken(req.Context(), recoveryToken)
+	u, err := api.staticDB.UserByRecoveryToken(req.Context(), payload.Token)
 	if err != nil {
 		api.WriteError(w, errors.New("no such user"), http.StatusBadRequest)
 		return
 	}
-	passHash, err := hash.Generate(password)
+	passHash, err := hash.Generate(payload.Password)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to hash password"), http.StatusInternalServerError)
 		return
@@ -1134,6 +1175,17 @@ func (api *API) wellKnownJwksGET(w http.ResponseWriter, _ *http.Request, _ httpr
 	api.WriteJSON(w, jwt.AccountsPublicJWKS)
 }
 
+// UserGETFromUser converts a database.User struct to a UserGET struct.
+func UserGETFromUser(u *database.User) *UserGET {
+	if u == nil {
+		return nil
+	}
+	return &UserGET{
+		User:           *u,
+		EmailConfirmed: u.EmailConfirmationToken == "",
+	}
+}
+
 // fetchOffset extracts the offset from the params and validates its value.
 func fetchOffset(form url.Values) (int, error) {
 	offset, _ := strconv.Atoi(form.Get("offset"))
@@ -1153,4 +1205,11 @@ func fetchPageSize(form url.Values) (int, error) {
 		pageSize = database.DefaultPageSize
 	}
 	return pageSize, nil
+}
+
+// parseRequestBodyJSON reads a limited portion of the body and decodes it into
+// the given obj. The purpose of this is to prevent DoS attacks that rely on
+// excessively large request bodies.
+func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, objRef interface{}) error {
+	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&objRef)
 }

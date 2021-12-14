@@ -211,13 +211,13 @@ Requests another confirmation email sent to the account's email address.
  - 401
  - 500
 
-### GET `/user/recover`
+### POST `/user/recover/request`
 
 Requests a recovery token to be sent to given email. The email needs to be 
 confirmed for the action to be performed.
 
 * Requires a valid JWT token: `false`
-* GET params: `email`
+* POST params: `email`
 * Returns:
 - 204
 - 400

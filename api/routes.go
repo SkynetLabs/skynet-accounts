@@ -34,16 +34,16 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.DELETE("/user", api.WithDBSession(api.validate(api.userDELETE)))
 	api.staticRouter.GET("/user/limits", api.noValidate(api.userLimitsGET))
 	api.staticRouter.GET("/user/stats", api.validate(api.userStatsGET))
-	api.staticRouter.GET("/user/pubkey/register", api.validate(api.userPubKeyRegisterGET))
-	api.staticRouter.POST("/user/pubkey/register", api.validate(api.userPubKeyRegisterPOST))
+	api.staticRouter.GET("/user/pubkey/register", api.WithDBSession(api.validate(api.userPubKeyRegisterGET)))
+	api.staticRouter.POST("/user/pubkey/register", api.WithDBSession(api.validate(api.userPubKeyRegisterPOST)))
 	api.staticRouter.GET("/user/uploads", api.WithDBSession(api.validate(api.userUploadsGET)))
 	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.validate(api.userUploadsDELETE)))
 	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
 
 	// Endpoints for email communication with the user.
-	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET)))
+	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET))) // TODO POST
 	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.validate(api.userReconfirmPOST)))
-	api.staticRouter.GET("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverGET)))
+	api.staticRouter.POST("/user/recover/request", api.WithDBSession(api.noValidate(api.userRecoverRequestPOST)))
 	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noValidate(api.userRecoverPOST)))
 
 	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noValidate(api.stripeWebhookPOST)))
@@ -103,7 +103,7 @@ func tokenFromRequest(r *http.Request) (string, error) {
 	// Check the cookie for a token.
 	cookie, err := r.Cookie(CookieName)
 	if errors.Contains(err, http.ErrNoCookie) {
-		return "", errors.New("no cookie found")
+		return "", errors.New("no authorisation token found")
 	}
 	if err != nil {
 		return "", errors.AddContext(err, "cookie exists but it's not valid")
