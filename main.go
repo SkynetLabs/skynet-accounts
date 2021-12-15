@@ -105,14 +105,13 @@ func main() {
 	if portal == "" {
 		log.Fatal("missing env var " + envPortal)
 	}
-	database.PortalName = portal
-	portalAddr := "https://" + portal
-	jwt.JWTPortalName = portalAddr
-	email.PortalAddress = portalAddr
+	database.PortalName = "https://" + portal
+	jwt.JWTPortalName = database.PortalName
+	email.PortalAddress = database.PortalName
 	email.PortalAddressAccounts = "https://account." + portal
 	email.ServerLockID = os.Getenv(envServerDomain)
 	if email.ServerLockID == "" {
-		email.ServerLockID = portalAddr
+		email.ServerLockID = database.PortalName
 		logger.Warningf(`Environment variable %s is missing! This server's identity 
 			is set to the default '%s' value. That is OK only if this server is running on its own 
 			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
