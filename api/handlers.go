@@ -983,7 +983,6 @@ func (api *API) userRecoverPOST(w http.ResponseWriter, req *http.Request, _ http
 		return
 	}
 
-
 	// Parse the request's body.
 	var payload accountRecoveryPOST
 	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)

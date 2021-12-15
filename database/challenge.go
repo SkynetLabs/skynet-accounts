@@ -47,7 +47,7 @@ var (
 	// PortalName is the name this portal uses to announce itself to the world.
 	// Its value is controlled by the PORTAL_DOMAIN environment variable.
 	// This name does not have a protocol prefix.
-	PortalName = "siasky.net"
+	PortalName = "https://siasky.net"
 )
 
 type (
@@ -140,7 +140,7 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 		return nil, primitive.ObjectID{}, errors.AddContext(err, "failed to parse recipient")
 	}
 	// The recipient should match the portal name.
-	if recipientURL.Host != PortalName {
+	if fmt.Sprintf("%s://%s", recipientURL.Scheme, recipientURL.Host) != PortalName {
 		return nil, primitive.ObjectID{}, fmt.Errorf("invalid recipient host %v != %v", recipientURL.Host, PortalName)
 	}
 	// Require HTTPS
