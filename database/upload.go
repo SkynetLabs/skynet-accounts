@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/skynet"
+	"github.com/SkynetLabs/skynet-accounts/skynet"
 
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -20,9 +20,9 @@ type Upload struct {
 	Unpinned  bool               `bson:"unpinned" json:"-"`
 }
 
-// UploadResponseDTO is the representation of an upload we send as response to
+// UploadResponse is the representation of an upload we send as response to
 // the caller.
-type UploadResponseDTO struct {
+type UploadResponse struct {
 	ID         string    `bson:"_id" json:"id"`
 	Skylink    string    `bson:"skylink" json:"skylink"`
 	Name       string    `bson:"name" json:"name"`
@@ -31,12 +31,12 @@ type UploadResponseDTO struct {
 	Timestamp  time.Time `bson:"timestamp" json:"uploadedOn"`
 }
 
-// UploadsResponseDTO defines the final format of our response to the caller.
-type UploadsResponseDTO struct {
-	Items    []UploadResponseDTO `json:"items"`
-	Offset   int                 `json:"offset"`
-	PageSize int                 `json:"pageSize"`
-	Count    int                 `json:"count"`
+// UploadsResponse defines the final format of our response to the caller.
+type UploadsResponse struct {
+	Items    []UploadResponse `json:"items"`
+	Offset   int              `json:"offset"`
+	PageSize int              `json:"pageSize"`
+	Count    int              `json:"count"`
 }
 
 // UploadByID fetches a single upload from the DB.
@@ -75,7 +75,7 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 
 // UploadsBySkylink fetches a page of uploads of this skylink and the total
 // number of such uploads.
-func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]UploadResponseDTO, int, error) {
+func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]UploadResponse, int, error) {
 	if skylink.ID.IsZero() {
 		return nil, 0, errors.New("invalid skylink")
 	}
@@ -113,7 +113,7 @@ func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int
 
 // UploadsByUser fetches a page of uploads by this user and the total number of
 // such uploads.
-func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int) ([]UploadResponseDTO, int, error) {
+func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int) ([]UploadResponse, int, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
 	}
@@ -129,13 +129,13 @@ func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int
 
 // uploadsBy fetches a page of uploads, filtered by an arbitrary match criteria.
 // It also reports the total number of records in the list.
-func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]UploadResponseDTO, int, error) {
+func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]UploadResponse, int, error) {
 	if err := validateOffsetPageSize(offset, pageSize); err != nil {
 		return nil, 0, err
 	}
 	cnt, err := db.count(ctx, db.staticUploads, matchStage)
 	if err != nil || cnt == 0 {
-		return []UploadResponseDTO{}, 0, err
+		return []UploadResponse{}, 0, err
 	}
 	c, err := db.staticUploads.Aggregate(ctx, generateUploadsPipeline(matchStage, offset, pageSize))
 	if err != nil {
@@ -143,11 +143,11 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 
-	uploads := make([]UploadResponseDTO, pageSize)
+	uploads := make([]UploadResponse, pageSize)
 	err = c.All(ctx, &uploads)
 	if err != nil {
 		return nil, 0, err

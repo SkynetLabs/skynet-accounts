@@ -1,10 +1,12 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/gorilla/securecookie"
 	"github.com/joho/godotenv"
 )
@@ -22,15 +24,31 @@ const (
 	// envCookieEncKey holds the name of the env var which holds the key we use
 	// to encrypt cookies.
 	envCookieEncKey = "COOKIE_ENC_KEY"
+	// secureCookieKeySize defines the size of the hash key and encryption key
+	// we want to use for setting our cookie.
+	secureCookieKeySize = 32
 )
 
 var (
 	secureCookie = func() *securecookie.SecureCookie {
 		_ = godotenv.Load()
+		hashKeyStr := os.Getenv(envCookieHashKey)
+		encKeyStr := os.Getenv(envCookieEncKey)
+		if build.Release == "testing" {
+			if len(hashKeyStr) < secureCookieKeySize {
+				hashKeyStr = string(securecookie.GenerateRandomKey(secureCookieKeySize))
+			}
+			if len(encKeyStr) < secureCookieKeySize {
+				encKeyStr = string(securecookie.GenerateRandomKey(secureCookieKeySize))
+			}
+		}
+		if len(hashKeyStr) < secureCookieKeySize || len(encKeyStr) < secureCookieKeySize {
+			panic(fmt.Sprintf("Both %s and %s are required environment variables and need to contain at least 32 bytes of hex-encoded entropy. %s, %s", envCookieHashKey, envCookieEncKey, hashKeyStr, encKeyStr))
+		}
 		// These keys need to be *exactly* 16 or 32 bytes long.
-		var hashKey = []byte(os.Getenv(envCookieHashKey))[:32]
-		var blockKey = []byte(os.Getenv(envCookieEncKey))[:32]
-		return securecookie.New(hashKey, blockKey)
+		var hashKey = []byte(hashKeyStr)[:secureCookieKeySize]
+		var encKey = []byte(encKeyStr)[:secureCookieKeySize]
+		return securecookie.New(hashKey, encKey)
 	}()
 )
 

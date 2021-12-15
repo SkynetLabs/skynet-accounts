@@ -1,0 +1,1 @@
+- Add the endpoints needed for challenge-response login and registration.

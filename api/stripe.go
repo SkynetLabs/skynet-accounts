@@ -9,11 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
-
+	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stripe/stripe-go/v71"
-	"github.com/stripe/stripe-go/v71/customer"
 	"github.com/stripe/stripe-go/v71/price"
 	"github.com/stripe/stripe-go/v71/sub"
 	"github.com/stripe/stripe-go/v71/webhook"
@@ -32,34 +30,16 @@ var (
 
 	// True is a helper for when we need to pass a *bool to Stripe.
 	True = true
-	// False is a helper for when we need to pass a *bool to Stripe.
-	False = false
 
 	// TODO These should be in the DB.
 
-	// stripePlansTest maps Stripe plans to specific tiers.
-	// DO NOT USE THESE DIRECTLY! Use stripePlans() instead.
-	stripePlansTest = map[string]int{
-		//"prod_J2FBsxvEl4VoUK": database.TierFree,
-		"prod_J3m6xMfDiz2LGE": database.TierPremium5,
-		"prod_J3m6ioQg90kZj5": database.TierPremium20,
-		"prod_J3m6IuVyh3XOc5": database.TierPremium80,
-	}
 	// stripePricesTest maps Stripe plan prices to specific tiers.
 	// DO NOT USE THESE DIRECTLY! Use stripePrices() instead.
 	stripePricesTest = map[string]int{
-		//"price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
+		// "price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
 		"price_1IReXpIzjULiPWN66PvsxHL4": database.TierPremium5,
 		"price_1IReY5IzjULiPWN6AxPytHEG": database.TierPremium20,
 		"price_1IReYFIzjULiPWN6DqN2DwjN": database.TierPremium80,
-	}
-	// stripePlansProd maps Stripe plans to specific tiers.
-	// DO NOT USE THESE DIRECTLY! Use stripePlans() instead.
-	stripePlansProd = map[string]int{
-		"prod_J2FJE4gMqrOSwn": database.TierFree,
-		"prod_J06NWykm9SRvWw": database.TierPremium5,
-		"prod_J19xHMxmCmBScY": database.TierPremium20,
-		"prod_J19xoBYOMbSlq4": database.TierPremium80,
 	}
 	// stripePricesProd maps Stripe plan prices to specific tiers.
 	// DO NOT USE THESE DIRECTLY! Use stripePrices() instead.
@@ -95,7 +75,7 @@ func (api *API) stripeWebhookPOST(w http.ResponseWriter, req *http.Request, _ ht
 		api.WriteError(w, err, code)
 		return
 	}
-	api.staticLogger.Debugf("Webhook event: %+v", event)
+	api.staticLogger.Tracef("Webhook event: %+v", event)
 
 	// Here we handle the entire class of subscription events.
 	// https://stripe.com/docs/billing/subscriptions/overview#build-your-own-handling-for-recurring-charge-failures
@@ -232,9 +212,9 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		// It seems weird that the Plan.ID is actually a price id but this
 		// is what we get from Stripe.
 		u.Tier = stripePrices()[mostRecentSub.Plan.ID]
-		u.SubscribedUntil = time.Unix(mostRecentSub.CurrentPeriodEnd, 0).UTC()
+		u.SubscribedUntil = time.Unix(mostRecentSub.CurrentPeriodEnd, 0).UTC().Truncate(time.Millisecond)
 		u.SubscriptionStatus = string(mostRecentSub.Status)
-		u.SubscriptionCancelAt = time.Unix(mostRecentSub.CancelAt, 0)
+		u.SubscriptionCancelAt = time.Unix(mostRecentSub.CancelAt, 0).UTC().Truncate(time.Millisecond)
 		u.SubscriptionCancelAtPeriodEnd = mostRecentSub.CancelAtPeriodEnd
 	}
 	// Cancel all subs aside from the latest one.
@@ -260,66 +240,9 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	if err == nil {
 		api.staticLogger.Tracef("Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
 	}
+	// Re-set the tier cache for this user, in case their tier changed.
+	api.staticUserTierCache.Set(u)
 	return err
-}
-
-// assignTier sets the user's account to the given tier, both on Stripe's side
-// and in the DB.
-func (api *API) assignTier(ctx context.Context, tier int, u *database.User) error {
-	plan := planForTier(tier)
-	oldTier := u.Tier
-	cp := &stripe.CustomerParams{
-		Plan: &plan,
-	}
-	_, err := customer.Update(u.StripeID, cp)
-	if err != nil {
-		return errors.AddContext(err, "failed to update customer on Stripe")
-	}
-	err = api.staticDB.UserSetTier(ctx, u, tier)
-	if err != nil {
-		err = errors.AddContext(err, "failed to update user in DB")
-		// Try to revert the change on Stripe's side.
-		plan = planForTier(oldTier)
-		cp = &stripe.CustomerParams{
-			Plan: &plan,
-		}
-		_, err2 := customer.Update(u.StripeID, cp)
-		if err2 != nil {
-			err2 = errors.AddContext(err2, "failed to revert the change on Stripe")
-		}
-		return errors.Compose(err, err2)
-	}
-	return nil
-}
-
-// planForTier is a small helper that returns the proper Stripe plan id for the
-// given Skynet tier.
-func planForTier(t int) string {
-	for plan, tier := range stripePlans() {
-		if tier == t {
-			return plan
-		}
-	}
-	return ""
-}
-
-// priceForTier is a small helper that returns the proper Stripe price id for
-// the given Skynet tier.
-func priceForTier(t int) string {
-	for plan, tier := range stripePrices() {
-		if tier == t {
-			return plan
-		}
-	}
-	return ""
-}
-
-// stripePlans returns a mapping of Stripe plan ids to Skynet tiers.
-func stripePlans() map[string]int {
-	if StripeTestMode {
-		return stripePlansTest
-	}
-	return stripePlansProd
 }
 
 // stripePrices returns a mapping of Stripe price ids to Skynet tiers.

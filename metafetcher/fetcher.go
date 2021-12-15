@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 
-	"github.com/NebulousLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/database"
 
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -29,22 +28,19 @@ type Message struct {
 // MetaFetcher is a background task that listens for messages on its queue and
 // then processes them.
 type MetaFetcher struct {
-	Queue chan Message
-
+	Queue  chan Message
 	db     *database.DB
-	portal string
 	logger *logrus.Logger
 }
 
 // New returns a new MetaFetcher instance and starts its internal queue watcher.
-func New(ctx context.Context, db *database.DB, portal string, logger *logrus.Logger) *MetaFetcher {
+func New(ctx context.Context, db *database.DB, logger *logrus.Logger) *MetaFetcher {
 	if logger == nil {
 		logger = logrus.New()
 	}
 	mf := MetaFetcher{
 		Queue:  make(chan Message, 1000),
 		db:     db,
-		portal: portal,
 		logger: logger,
 	}
 
@@ -57,10 +53,15 @@ func New(ctx context.Context, db *database.DB, portal string, logger *logrus.Log
 // incoming message in a separate goroutine.
 func (mf *MetaFetcher) threadedStartQueueWatcher(ctx context.Context) {
 	for m := range mf.Queue {
-		// Process each message in a separate goroutine because fetching the
-		// meta might take a long time (30 seconds) and we don't want to block
-		// the queue.
-		go mf.processMessage(ctx, m)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			// Process each message in a separate goroutine because fetching the
+			// meta might take a long time (30 seconds) and we don't want to block
+			// the queue.
+			go mf.processMessage(ctx, m)
+		}
 	}
 }
 
@@ -99,6 +100,9 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 	}
 	client := http.Client{}
 	res, err := client.Do(&req)
+	if err == nil {
+		defer res.Body.Close()
+	}
 	if err != nil || res.StatusCode > 399 {
 		var statusCode int
 		if res != nil {
@@ -113,12 +117,11 @@ func (mf *MetaFetcher) processMessage(ctx context.Context, m Message) {
 		go func() { mf.Queue <- m }()
 		return
 	}
-	bodyBytes, err := ioutil.ReadAll(res.Body)
 	var meta struct {
 		Filename string `json:"filename"`
 		Length   int64  `json:"length"`
 	}
-	err = json.Unmarshal(bodyBytes, &meta)
+	err = json.NewDecoder(res.Body).Decode(&meta)
 	if err != nil {
 		mf.logger.Debugf("Failed to parse skyfile metadata: %s", err)
 		return

@@ -3,8 +3,8 @@ BUILD_TIME=$(shell date)
 GIT_REVISION=$(shell git rev-parse --short HEAD)
 GIT_DIRTY=$(shell git diff-index --quiet HEAD -- || echo "✗-")
 
-ldflags= -X github.com/NebulousLabs/skynet-accounts/build.GitRevision=${GIT_DIRTY}${GIT_REVISION} \
--X "github.com/NebulousLabs/skynet-accounts/build.BuildTime=${BUILD_TIME}"
+ldflags= -X github.com/SkynetLabs/skynet-accounts/build.GitRevision=${GIT_DIRTY}${GIT_REVISION} \
+-X "github.com/SkynetLabs/skynet-accounts/build.BuildTime=${BUILD_TIME}"
 
 racevars= history_size=3 halt_on_error=1 atexit_sleep_ms=2000
 
@@ -15,10 +15,10 @@ all: release
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./ ./api ./build ./database ./lib
+pkgs = ./ ./api ./build ./database ./email ./hash ./jwt ./lib ./metafetcher ./skynet
 
 # integration-pkgs defines the packages which contain integration tests
-integration-pkgs = ./test
+integration-pkgs = ./test ./test/api ./test/database ./test/email
 
 # fmt calls go fmt on all packages.
 fmt:
@@ -34,47 +34,68 @@ vet:
 # markdown-spellcheck runs codespell on all markdown files that are not
 # vendored.
 markdown-spellcheck:
+	pip install codespell 1>/dev/null 2>&1
 	git ls-files "*.md" :\!:"vendor/**" | xargs codespell --check-filenames
 
 # lint runs golangci-lint (which includes golint, a spellcheck of the codebase,
 # and other linters), the custom analyzers, and also a markdown spellchecker.
-lint: markdown-spellcheck lint-analyze
+lint: clean fmt markdown-spellcheck vet
 	golint ./...
 	golangci-lint run -c .golangci.yml
+	go mod tidy
+	analyze -lockcheck -- $(pkgs)
 
 # lint-ci runs golint.
 lint-ci:
 # golint is skipped on Windows.
 ifneq ("$(OS)","Windows_NT")
 # Linux
-	go get golang.org/x/lint/golint
+	go get -d golang.org/x/lint/golint
 	golint -min_confidence=1.0 -set_exit_status $(pkgs)
+	go mod tidy
 endif
 
-# lint-analyze runs the custom analyzers.
-lint-analyze:
-	analyze -lockcheck -- $(pkgs)
+# Credentials and port we are going to use for our test MongoDB instance.
+MONGO_USER=admin
+MONGO_PASSWORD=aO4tV5tC1oU3oQ7u
+MONGO_PORT=17017
+
+# call_mongo is a helper function that executes a query in an `eval` call to the
+# test mongo instance.
+define call_mongo
+    docker exec skynet-accounts-mongo-test-db mongo -u $(MONGO_USER) -p $(MONGO_PASSWORD) --port $(MONGO_PORT) --eval $(1)
+endef
 
 # start-mongo starts a local mongoDB container with no persistence.
 # We first prepare for the start of the container by making sure the test
 # keyfile has the right permissions, then we clear any potential leftover
 # containers with the same name. After we start the container we initialise a
-# single node replica set.
+# single node replica set. All the output is discarded because it's noisy and
+# if it causes a failure we'll immediately know where it is even without it.
 start-mongo:
+	-docker stop skynet-accounts-mongo-test-db 1>/dev/null 2>&1
+	-docker rm skynet-accounts-mongo-test-db 1>/dev/null 2>&1
 	chmod 400 $(shell pwd)/test/fixtures/mongo_keyfile
-	-docker stop skynet-accounts-mongo-test-db
-	-docker rm skynet-accounts-mongo-test-db
 	docker run \
      --rm \
      --detach \
      --name skynet-accounts-mongo-test-db \
-     -p 127.0.0.1:17017:27017 \
-     -e MONGO_INITDB_ROOT_USERNAME=admin \
-     -e MONGO_INITDB_ROOT_PASSWORD=aO4tV5tC1oU3oQ7u \
-     mongo
+     -p $(MONGO_PORT):$(MONGO_PORT) \
+     -e MONGO_INITDB_ROOT_USERNAME=$(MONGO_USER) \
+     -e MONGO_INITDB_ROOT_PASSWORD=$(MONGO_PASSWORD) \
+     -v $(shell pwd)/test/fixtures/mongo_keyfile:/data/mgkey \
+	mongo:4.4.1 mongod --port=$(MONGO_PORT) --replSet=skynet --keyFile=/data/mgkey 1>/dev/null 2>&1
+	# wait for mongo to start before we try to configure it
+	status=1 ; while [[ $$status -gt 0 ]]; do \
+		sleep 1 ; \
+		$(call call_mongo,"") 1>/dev/null 2>&1 ; \
+		status=$$? ; \
+	done
+	# Initialise a single node replica set.
+	$(call call_mongo,"rs.initiate({_id: \"skynet\", members: [{ _id: 0, host: \"localhost:$(MONGO_PORT)\" }]})") 1>/dev/null 2>&1
 
 stop-mongo:
-	docker stop skynet-accounts-mongo-test-db
+	-docker stop skynet-accounts-mongo-test-db
 
 # debug builds and installs debug binaries. This will also install the utils.
 debug:
@@ -101,15 +122,27 @@ release-util:
 check:
 	go test --exec=true ./...
 
+bench: clean fmt
+	go test -tags='debug testing netgo' -timeout=500s -run=XXX -bench=. $(pkgs) -count=$(count)
+
 test:
 	go test -short -tags='debug testing netgo' -timeout=5s $(pkgs) -run=. -count=$(count)
-test-long: clean fmt vet lint-ci
+
+test-long: lint lint-ci
 	@mkdir -p cover
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
 
-# test-int always returns a zero exit value! Only use it manually!
+# These env var values are for testing only. They can be freely changed.
 test-int: test-long start-mongo
-	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count) ; \
-	make stop-mongo
+	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count)
+	-make stop-mongo
 
-.PHONY: all fmt install release clean check test test-int test-long stop-mongo
+# test-single allows us to run a single integration test.
+# Make sure to start MongoDB yourself!
+# Example: make test-single RUN=TestHandlers
+test-single: export COOKIE_HASH_KEY="7eb32cfab5014d14394648dae1cf4e606727eee2267f6a50213cd842e61c5bce"
+test-single: export COOKIE_ENC_KEY="65d31d12b80fc57df16d84c02a9bb62e2bc3b633388b05e49ef8abfdf0d35cf3"
+test-single:
+	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=$(RUN) -count=$(count)
+
+.PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo

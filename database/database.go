@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/NebulousLabs/skynet-accounts/lib"
+	"github.com/SkynetLabs/skynet-accounts/lib"
 
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -35,6 +35,19 @@ var (
 	// dbRegistryWritesCollection defines the name of the "registry_writes"
 	// collection within skynet's database.
 	dbRegistryWritesCollection = "registry_writes"
+	// dbEmails defines the name of the "emails" collection within skynet's
+	// database.
+	dbEmails = "emails"
+	// dbChallenges defines the name of the "challenges" collection within
+	// skynet's database.
+	dbChallenges = "challenges"
+	// dbUnconfirmedUserUpdates defines the name of the collection which holds
+	// all user pubKey updates until their respective challenge has been
+	// responded to and they are applied.
+	dbUnconfirmedUserUpdates = "unconfirmed_user_updates"
+	// dbConfiguration defines the name of the db table with configuration
+	// settings.
+	dbConfiguration = "configuration"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -45,13 +58,13 @@ var (
 	// mongoReadPreference defines the DB's read preference. The options are:
 	// primary, primaryPreferred, secondary, secondaryPreferred, nearest.
 	// See https://docs.mongodb.com/manual/core/read-preference/
-	mongoReadPreference = "nearest"
+	mongoReadPreference = "primary"
 	// mongoWriteConcern describes the level of acknowledgment requested from
 	// MongoDB.
 	mongoWriteConcern = "majority"
 	// mongoWriteConcernTimeout specifies a time limit, in milliseconds, for
 	// the write concern to be satisfied.
-	mongoWriteConcernTimeout = "1000"
+	mongoWriteConcernTimeout = "30000"
 
 	// ErrGeneralInternalFailure is returned when we do not want to disclose
 	// what kind of error occurred. This should always be coupled with another
@@ -70,15 +83,19 @@ var (
 type (
 	// DB represents a MongoDB database connection.
 	DB struct {
-		staticDB             *mongo.Database
-		staticUsers          *mongo.Collection
-		staticSkylinks       *mongo.Collection
-		staticUploads        *mongo.Collection
-		staticDownloads      *mongo.Collection
-		staticRegistryReads  *mongo.Collection
-		staticRegistryWrites *mongo.Collection
-		staticDep            lib.Dependencies
-		staticLogger         *logrus.Logger
+		staticDB                     *mongo.Database
+		staticUsers                  *mongo.Collection
+		staticSkylinks               *mongo.Collection
+		staticUploads                *mongo.Collection
+		staticDownloads              *mongo.Collection
+		staticRegistryReads          *mongo.Collection
+		staticRegistryWrites         *mongo.Collection
+		staticEmails                 *mongo.Collection
+		staticChallenges             *mongo.Collection
+		staticUnconfirmedUserUpdates *mongo.Collection
+		staticConfiguration          *mongo.Collection
+		staticDeps                   lib.Dependencies
+		staticLogger                 *logrus.Logger
 	}
 
 	// DBCredentials is a helper struct that binds together all values needed for
@@ -93,6 +110,11 @@ type (
 
 // New returns a new DB connection based on the passed parameters.
 func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, error) {
+	return NewCustomDB(ctx, dbName, creds, logger)
+}
+
+// NewCustomDB returns a new DB connection based on the passed parameters.
+func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger *logrus.Logger) (*DB, error) {
 	connStr := connectionString(creds)
 	c, err := mongo.NewClient(options.Client().ApplyURI(connStr))
 	if err != nil {
@@ -111,14 +133,18 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 		return nil, err
 	}
 	db := &DB{
-		staticDB:             database,
-		staticUsers:          database.Collection(dbUsersCollection),
-		staticSkylinks:       database.Collection(dbSkylinksCollection),
-		staticUploads:        database.Collection(dbUploadsCollection),
-		staticDownloads:      database.Collection(dbDownloadsCollection),
-		staticRegistryReads:  database.Collection(dbRegistryReadsCollection),
-		staticRegistryWrites: database.Collection(dbRegistryWritesCollection),
-		staticLogger:         logger,
+		staticDB:                     database,
+		staticUsers:                  database.Collection(dbUsersCollection),
+		staticSkylinks:               database.Collection(dbSkylinksCollection),
+		staticUploads:                database.Collection(dbUploadsCollection),
+		staticDownloads:              database.Collection(dbDownloadsCollection),
+		staticRegistryReads:          database.Collection(dbRegistryReadsCollection),
+		staticRegistryWrites:         database.Collection(dbRegistryWritesCollection),
+		staticEmails:                 database.Collection(dbEmails),
+		staticChallenges:             database.Collection(dbChallenges),
+		staticUnconfirmedUserUpdates: database.Collection(dbUnconfirmedUserUpdates),
+		staticConfiguration:          database.Collection(dbConfiguration),
+		staticLogger:                 logger,
 	}
 	return db, nil
 }
@@ -126,6 +152,11 @@ func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, 
 // Disconnect closes the connection to the database in an orderly fashion.
 func (db *DB) Disconnect(ctx context.Context) error {
 	return db.staticDB.Client().Disconnect(ctx)
+}
+
+// NewSession starts a new Mongo session.
+func (db *DB) NewSession() (mongo.Session, error) {
+	return db.staticDB.Client().StartSession()
 }
 
 // connectionString is a helper that returns a valid MongoDB connection string
@@ -201,7 +232,56 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("user_id"),
 			},
 		},
+		dbEmails: {
+			{
+				Keys:    bson.D{{"failed_attempts", 1}},
+				Options: options.Index().SetName("failed_attempts"),
+			},
+			{
+				Keys:    bson.D{{"locked_by", 1}},
+				Options: options.Index().SetName("locked_by"),
+			},
+			{
+				Keys:    bson.D{{"sent_at", 1}},
+				Options: options.Index().SetName("sent_at"),
+			},
+			{
+				Keys:    bson.D{{"sent_by", 1}},
+				Options: options.Index().SetName("sent_by"),
+			},
+		},
+		dbChallenges: {
+			{
+				Keys:    bson.D{{"challenge", 1}},
+				Options: options.Index().SetName("challenge"),
+			},
+			{
+				Keys:    bson.D{{"type", 1}},
+				Options: options.Index().SetName("type"),
+			},
+			{
+				Keys:    bson.D{{"expires_at", 1}},
+				Options: options.Index().SetName("expires_at"),
+			},
+		},
+		dbUnconfirmedUserUpdates: {
+			{
+				Keys:    bson.D{{"challenge_id", 1}},
+				Options: options.Index().SetName("challenge_id"),
+			},
+			{
+				Keys:    bson.D{{"expires_at", 1}},
+				Options: options.Index().SetName("expires_at"),
+			},
+		},
+		dbConfiguration: {
+			{
+				Keys:    bson.D{{"key", 1}},
+				Options: options.Index().SetName("key_unique").SetUnique(true),
+			},
+		},
 	}
+
 	for collName, models := range schema {
 		coll, err := ensureCollection(ctx, db, collName)
 		if err != nil {
@@ -237,7 +317,7 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 
 // generateUploadsPipeline generates a mongo pipeline for transforming
 // an `Upload` or `Download` struct into the respective
-// `<Up/Down>loadResponseDTO` struct.
+// `<Up/Down>loadResponse` struct.
 //
 // The Mongo query we want to ultimately execute is:
 //	db.downloads.aggregate([
@@ -266,7 +346,7 @@ func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipe
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
-			{"localField", "skylink_id"}, // field in the downloads collection
+			{"localField", "skylink_id"}, // field in the uploads collection
 			{"foreignField", "_id"},      // field in the skylinks collection
 			{"as", "fromSkylinks"},
 		}},
@@ -309,7 +389,7 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 		}},
 	}
 	// This stage checks if the download has a non-zero `bytes` field and if so,
-	// it takes it as the download's size. Otherwise it reports the full
+	// it takes it as the download's size, otherwise it reports the full
 	// skylink's size as download's size.
 	projectStage := bson.D{{"$project", bson.D{
 		{"skylink", 1},
@@ -338,7 +418,7 @@ func (db *DB) count(ctx context.Context, coll *mongo.Collection, matchStage bson
 	}
 	defer func() {
 		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Traceln("Error on closing DB cursor.", errDef)
+			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
 		}
 	}()
 
