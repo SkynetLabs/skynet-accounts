@@ -132,16 +132,20 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 	}
 	// Now that we know the challenge type, we can get the recipient as well.
 	recipientOffset := ChallengeSize + len([]byte(cType))
+	// Extract recipient from response.
 	recipient := string(resp[recipientOffset:])
-	// Make sure the recipient has a schema. It usually won't. We check for
-	// `http` only in order to cover both `http://` and `https://`
-	if !strings.HasPrefix(recipient, "http") {
-		recipient = "https://" + recipient
-	}
 	// Check if the recipient is the current portal or any of its subdomains.
 	recipientURL, err := url.Parse(recipient)
-	if err != nil || recipientURL.Host != PortalName {
-		return nil, primitive.ObjectID{}, errors.New("invalid recipient " + string(resp[recipientOffset:]))
+	if err != nil {
+		return nil, primitive.ObjectID{}, errors.AddContext(err, "failed to parse recipient")
+	}
+	// The recipient should match the portal name.
+	if recipientURL.Host != PortalName {
+		return nil, primitive.ObjectID{}, fmt.Errorf("invalid recipient host %v != %v", recipientURL.Host, PortalName)
+	}
+	// Require HTTPS
+	if recipientURL.Scheme != "https" {
+		return nil, primitive.ObjectID{}, fmt.Errorf("invalid scheme %v, should be https", recipientURL.Scheme)
 	}
 	// Fetch the challenge from the DB.
 	filter := bson.M{
