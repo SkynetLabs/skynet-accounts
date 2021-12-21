@@ -53,9 +53,11 @@ var (
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
 		TierAnonymous: {
-			TierName:          "anonymous",
-			UploadBandwidth:   5 * mbpsToBytesPerSecond,
-			DownloadBandwidth: 20 * mbpsToBytesPerSecond,
+			TierName:        "anonymous",
+			UploadBandwidth: 5 * mbpsToBytesPerSecond,
+			// TODO: temporarily lowered the download bandwidth on the anon tier
+			// from 20mbps to 5mpbs
+			DownloadBandwidth: 5 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  0,
 			RegistryDelay:     250,
@@ -117,6 +119,8 @@ type (
 		RecoveryToken                    string             `bson:"recovery_token,omitempty" json:"-"`
 		Sub                              string             `bson:"sub" json:"sub"`
 		Tier                             int                `bson:"tier" json:"tier"`
+		CreatedAt                        time.Time          `bson:"created_at" json:"createdAt"`
+		MigratedAt                       time.Time          `bson:"migrated_at" json:"migratedAt"`
 		SubscribedUntil                  time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
 		SubscriptionStatus               string             `bson:"subscription_status" json:"subscriptionStatus"`
 		SubscriptionCancelAt             time.Time          `bson:"subscription_cancel_at" json:"subscriptionCancelAt"`

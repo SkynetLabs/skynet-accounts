@@ -105,14 +105,13 @@ func main() {
 	if portal == "" {
 		log.Fatal("missing env var " + envPortal)
 	}
-	database.PortalName = portal
-	portalAddr := "https://" + portal
-	jwt.JWTPortalName = portalAddr
-	email.PortalAddress = portalAddr
+	database.PortalName = "https://" + portal
+	jwt.JWTPortalName = database.PortalName
+	email.PortalAddress = database.PortalName
 	email.PortalAddressAccounts = "https://account." + portal
 	email.ServerLockID = os.Getenv(envServerDomain)
 	if email.ServerLockID == "" {
-		email.ServerLockID = portalAddr
+		email.ServerLockID = database.PortalName
 		logger.Warningf(`Environment variable %s is missing! This server's identity 
 			is set to the default '%s' value. That is OK only if this server is running on its own 
 			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
@@ -142,7 +141,7 @@ func main() {
 		// Set the FROM address to outgoing emails. This can be overridden by
 		// the ACCOUNTS_EMAIL_FROM optional environment variable.
 		if uri.User != nil {
-			email.From = uri.User.String()
+			email.From = uri.User.Username()
 		}
 		if emailFrom := os.Getenv(envEmailFrom); emailFrom != "" {
 			email.From = emailFrom
