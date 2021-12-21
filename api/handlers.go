@@ -23,12 +23,6 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-var (
-	// ExposeJWT is a temporary variable that instructs the login flow to expose
-	// the JWT of the user under the Skynet-Token header.
-	ExposeJWT bool
-)
-
 type (
 	// LimitsPublic provides public information of the various limits this
 	// portal has.
@@ -207,9 +201,6 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
-	if ExposeJWT {
-		w.Header().Set("Skynet-Token", tokenStr)
-	}
 	// Write a secure cookie containing the JWT token of the user. This allows
 	// us to verify the user's identity and permissions (i.e. tier) without
 	// requesting their credentials or accessing the DB.
@@ -219,6 +210,7 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Skynet-Token", tokenStr)
 	api.WriteSuccess(w)
 }
 
@@ -233,9 +225,6 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	if ExposeJWT {
-		w.Header().Set("Skynet-Token", string(tkBytes))
-	}
 	// Write the JWT to an encrypted cookie.
 	err = writeCookie(w, string(tkBytes), tk.Expiration().UTC().Unix())
 	if err != nil {
@@ -243,6 +232,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Skynet-Token", string(tkBytes))
 	if returnUser {
 		api.WriteJSON(w, UserGETFromUser(u))
 	} else {

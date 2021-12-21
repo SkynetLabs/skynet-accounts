@@ -148,9 +148,6 @@ func main() {
 			email.From = emailFrom
 		}
 	}
-	if os.Getenv("ACCOUNTS_EXPOSE_JWT") != "" {
-		api.ExposeJWT = true
-	}
 
 	// Set up key components:
 
