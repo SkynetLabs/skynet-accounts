@@ -211,6 +211,7 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Skynet-Token", tokenStr)
 	api.WriteSuccess(w)
 }
 
@@ -232,6 +233,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Skynet-Token", string(tkBytes))
 	if returnUser {
 		api.WriteJSON(w, UserGETFromUser(u))
 	} else {
