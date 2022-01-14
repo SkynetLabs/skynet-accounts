@@ -33,8 +33,9 @@ vet:
 
 # markdown-spellcheck runs codespell on all markdown files that are not
 # vendored.
+#
+# To manually install, run pip install codespell 1>/dev/null 2>&1
 markdown-spellcheck:
-	pip install codespell 1>/dev/null 2>&1
 	git ls-files "*.md" :\!:"vendor/**" | xargs codespell --check-filenames
 
 # lint runs golangci-lint (which includes golint, a spellcheck of the codebase,
