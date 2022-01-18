@@ -12,7 +12,7 @@ All local secrets are loaded from a `.env` file in the root directory of the pro
 Those are (example values):
 
 ```.env
-ACCOUNTS_EMAIL_URI="smtps://test:test@mailslurper:1025/?skip_ssl_verify=true"
+ACCOUNTS_EMAIL_URI="smtps://<email address>:<email password>@<smtp server for email>/?skip_ssl_verify=true"
 ACCOUNTS_JWKS_FILE="/accounts/conf/jwks.json"
 COOKIE_DOMAIN="siasky.net"
 COOKIE_HASH_KEY="any thirty-two byte string is ok"
@@ -36,7 +36,7 @@ SKYNET_ACCOUNTS_LOG_LEVEL=trace
 
 Meaning of environment variables:
 
-* ACCOUNTS_EMAIL_URI is the full email URI (including credentials) for sending emails.
+* ACCOUNTS_EMAIL_URI is the full email URI (including credentials) for sending emails. example `ACCOUNTS_EMAIL_URI=smtps://hello@gmail.com:MYSUP3R$TRONGPW@smtp.gmail.com:465/?skip_ssl_verify=false`
 * ACCOUNTS_EMAIL_FROM allows us to set the FROM email on our outgoing emails. If it's not set we will use the user from
   ACCOUNTS_EMAIL_URI.
 * ACCOUNTS_JWKS_FILE is the file which contains the JWKS `accounts` uses to sign the JWTs it issues for its users. It
