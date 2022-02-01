@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
@@ -26,6 +27,8 @@ var (
 	// envAccountsJWKSFile holds the name of the environment variable which
 	// holds the path to the JWKS file we need to use. Optional.
 	envAccountsJWKSFile = "ACCOUNTS_JWKS_FILE"
+	// envJWTTTL holds the name of the environment variable for JWT TTL.
+	envJWTTTL = "ACCOUNTS_JWT_TTL"
 	// envDBHost holds the name of the environment variable for DB host.
 	envDBHost = "SKYNET_DB_HOST"
 	// envDBPort holds the name of the environment variable for DB port.
@@ -126,6 +129,11 @@ func main() {
 	}
 	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
 		jwt.AccountsJWKSFile = jwks
+	}
+	// Parse the optional env var that controls the TTL of the JWTs we generate.
+	jwtTTL, err := strconv.ParseInt(os.Getenv(envJWTTTL), 10, 32)
+	if err == nil && jwtTTL > 0 {
+		jwt.JWTTTL = int(jwtTTL)
 	}
 	// Fetch configuration data for sending emails.
 	emailURI := os.Getenv(envEmailURI)
