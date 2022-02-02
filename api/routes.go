@@ -40,6 +40,12 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.validate(api.userUploadsDELETE)))
 	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
 
+	// Endpoints for user API keys.
+	api.staticRouter.POST("/user/apikey", api.WithDBSession(api.validate(api.userAPIKeyPOST)))
+	api.staticRouter.GET("/user/apikey", api.WithDBSession(api.validate(api.userAPIKeyGET)))
+	api.staticRouter.GET("/user/apikey/:keyID", api.WithDBSession(api.validate(api.userAPIKeyGET)))
+	api.staticRouter.DELETE("/user/apikey/:keyID", api.WithDBSession(api.validate(api.userAPIKeyDELETE)))
+
 	// Endpoints for email communication with the user.
 	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET))) // TODO POST
 	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.validate(api.userReconfirmPOST)))
