@@ -61,10 +61,10 @@ You can generate the necessary `jwks.json` file and proper keys for the two `COO
 ```
 git clone https://github.com/SkynetLabs/skynet-accounts.git
 cd skynet-accounts
-make docker-genenv
+make docker-generate
 ```
-This will generate the needed information in a `docker/` directory. The `COOKIE`
-variables are in the `docker/env` file and the JWKS is in the `docker/jwks.json`
+This will generate the needed information in an `output/` directory. The `COOKIE`
+variables are in the `output/env` file and the JWKS is in the `output/jwks.json`
 file.
 
 ## License
