@@ -78,6 +78,10 @@ func TestHandlers(t *testing.T) {
 		{name: "Challenge-Response/Registration", test: testRegistration},
 		// GET /register, POST /register, GET /login, POST /login
 		{name: "Challenge-Response/Login", test: testLogin},
+		// GET /user/apikey, POST /user/apikey, DELETE /user/apikey/:apiKey
+		{name: "APIKeysFlow", test: testAPIKeysFlow},
+		// POST /user/apikey, GET /user/stats?api_key
+		{name: "APIKeysUsage", test: testAPIKeysUsage},
 	}
 
 	// Run subtests

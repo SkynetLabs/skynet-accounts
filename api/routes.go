@@ -151,7 +151,6 @@ func tokenFromRequest(r *http.Request) (jwt2.Token, string, error) {
 		tokenStr = strings.TrimSpace(parts[1])
 	} else {
 		// Check the cookie for a token.
-
 		cookie, err := r.Cookie(CookieName)
 		if errors.Contains(err, http.ErrNoCookie) {
 			return nil, "", errors.New("no authorisation token found")

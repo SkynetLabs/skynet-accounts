@@ -186,7 +186,7 @@ func (at *AccountsTester) Close() error {
 	return nil
 }
 
-// CreateUserPost is a helper method.
+// CreateUserPost is a helper method that creates a new user.
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) CreateUserPost(emailAddr, password string) (r *http.Response, body []byte, err error) {
