@@ -59,7 +59,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 
 	// Initialise the environment.
 	email.PortalAddress = testPortalAddr
-	jwt.JWTPortalName = testPortalAddr
+	jwt.PortalName = testPortalAddr
 	jwt.AccountsJWKSFile = pathToJWKSFile
 	err := jwt.LoadAccountsKeySet(logger)
 	if err != nil {

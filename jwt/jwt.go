@@ -39,10 +39,10 @@ var (
 
 	// JWTPortalName is the issuing service we are using for our JWTs. This
 	// value can be overwritten by main.go is PORTAL_DOMAIN is set.
-	JWTPortalName = "https://siasky.net"
+	PortalName = "https://siasky.net"
 
 	// JWTTTL defines the lifetime of the JWT token in seconds.
-	JWTTTL = 720 * 3600
+	TTL = 720 * 3600
 )
 
 type (
@@ -319,9 +319,9 @@ func tokenForUser(emailAddr, sub string) (jwt.Token, error) {
 	}
 	now := time.Now().UTC()
 	t := jwt.New()
-	err1 := t.Set("exp", now.Unix()+int64(JWTTTL))
+	err1 := t.Set("exp", now.Unix()+int64(TTL))
 	err2 := t.Set("iat", now.Unix())
-	err3 := t.Set("iss", JWTPortalName)
+	err3 := t.Set("iss", PortalName)
 	err4 := t.Set("sub", sub)
 	err5 := t.Set("session", session)
 	err := errors.Compose(err1, err2, err3, err4, err5)

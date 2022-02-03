@@ -168,30 +168,6 @@ func cleanMongoDB(ctx context.Context, mgr *mongo.Database) ([]string, error) {
 	return emails, nil
 }
 
-func deleteUserDataByID(ctx context.Context, db *mongo.Database, id string) {
-	uid, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		panic(err)
-	}
-	filter := bson.M{"_id": uid}
-	if _, err = db.Collection("users").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-	filter = bson.M{"user_id": uid}
-	if _, err = db.Collection("uploads").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-	if _, err = db.Collection("downloads").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-	if _, err = db.Collection("registry_reads").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-	if _, err = db.Collection("registry_writes").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-}
-
 func updateUsersMongoDB(users map[string]cru, creds database.DBCredentials) {
 	ctx := context.Background()
 	mg, err := connMongoDB(ctx, creds)

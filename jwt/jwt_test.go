@@ -88,7 +88,7 @@ func TestValidateToken_Expired(t *testing.T) {
 	tk := jwt.New()
 	err1 := tk.Set("exp", now.Unix()-1)
 	err2 := tk.Set("iat", now.Unix()-10)
-	err3 := tk.Set("iss", JWTPortalName)
+	err3 := tk.Set("iss", PortalName)
 	err4 := tk.Set("sub", sub)
 	err5 := tk.Set("session", session)
 	err = errors.Compose(err1, err2, err3, err4, err5)

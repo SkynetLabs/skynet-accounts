@@ -39,7 +39,7 @@ markdown-spellcheck:
 
 # lint runs golangci-lint (which includes golint, a spellcheck of the codebase,
 # and other linters), the custom analyzers, and also a markdown spellchecker.
-lint: clean fmt markdown-spellcheck vet
+lint: fmt markdown-spellcheck vet
 	golint ./...
 	golangci-lint run -c .golangci.yml
 	go mod tidy
@@ -122,7 +122,7 @@ release-util:
 check:
 	go test --exec=true ./...
 
-bench: clean fmt
+bench: fmt
 	go test -tags='debug testing netgo' -timeout=500s -run=XXX -bench=. $(pkgs) -count=$(count)
 
 test:

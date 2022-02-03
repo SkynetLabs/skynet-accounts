@@ -109,7 +109,7 @@ func main() {
 		log.Fatal("missing env var " + envPortal)
 	}
 	database.PortalName = "https://" + portal
-	jwt.JWTPortalName = database.PortalName
+	jwt.PortalName = database.PortalName
 	email.PortalAddress = database.PortalName
 	email.PortalAddressAccounts = "https://account." + portal
 	email.ServerLockID = os.Getenv(envServerDomain)
@@ -133,7 +133,7 @@ func main() {
 	// Parse the optional env var that controls the TTL of the JWTs we generate.
 	jwtTTL, err := strconv.ParseInt(os.Getenv(envJWTTTL), 10, 32)
 	if err == nil && jwtTTL > 0 {
-		jwt.JWTTTL = int(jwtTTL)
+		jwt.TTL = int(jwtTTL)
 	}
 	// Fetch configuration data for sending emails.
 	emailURI := os.Getenv(envEmailURI)
