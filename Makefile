@@ -161,8 +161,9 @@ test-single:
 
 # docker-generate is a docker command for env var generation
 #
-# The sleep is to handle a slight delay in the jwks.json file being generated in
-# the docker container. Without it the file is blank.
+# The sleep is to allow time for the docker container to start up after `docker
+# run` before stopping the container with `docker stop`. Without it the
+# generated files can be blank.
 docker-generate: clean
 	@mkdir output
 	@docker build -f ./lib/Dockerfile -t accounts-genenv .
