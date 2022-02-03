@@ -190,15 +190,9 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	// Fetch a JWT token from the request. This token will tell us who the user
 	// is and until when their current session is going to stay valid.
-	tokenStr, err := tokenFromRequest(req)
+	token, tokenStr, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Debugln("Error fetching token from request:", err)
-		api.WriteError(w, err, http.StatusUnauthorized)
-		return
-	}
-	token, err := jwt.ValidateToken(tokenStr)
-	if err != nil {
-		api.staticLogger.Debugln("Error validating token:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
@@ -384,17 +378,21 @@ func (api *API) userGET(w http.ResponseWriter, req *http.Request, _ httprouter.P
 
 // userLimitsGET returns the speed limits which apply to this user.
 func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	t, err := tokenFromRequest(req)
+	// First check for an API key.
+	ak, err := apiKeyFromRequest(req)
+	if err == nil {
+		u, err := api.staticDB.UserByAPIKey(req.Context(), ak)
+		if err == nil {
+			api.WriteJSON(w, database.UserLimits[u.Tier])
+			return
+		}
+	}
+	token, _, err := tokenFromRequest(req)
 	if err != nil {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 		return
 	}
-	tk, err := jwt.ValidateToken(t)
-	if err != nil {
-		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
-		return
-	}
-	s, exists := tk.Get("sub")
+	s, exists := token.Get("sub")
 	if !exists {
 		api.staticLogger.Warnln("Token without a sub.")
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
