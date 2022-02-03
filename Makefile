@@ -166,10 +166,8 @@ test-single:
 docker-generate: clean
 	@mkdir output
 	@docker build -f ./lib/Dockerfile -t accounts-genenv .
-	@docker run --name genenv -d accounts-genenv
+	@docker run -v ${PWD}/output:/app --name genenv -d accounts-genenv
 	sleep 3
-	@docker cp genenv:/app/env ./output/env
-	@docker cp genenv:/app/jwks.json ./output/jwks.json
 	@docker stop genenv || true && docker rm --force genenv
 
 .PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo docker-generate
