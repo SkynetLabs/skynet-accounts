@@ -110,7 +110,6 @@ func main() {
 	}
 	database.PortalName = "https://" + portal
 	jwt.PortalName = database.PortalName
-	email.PortalAddress = database.PortalName
 	email.PortalAddressAccounts = "https://account." + portal
 	email.ServerLockID = os.Getenv(envServerDomain)
 	if email.ServerLockID == "" {

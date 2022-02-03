@@ -58,7 +58,6 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	logger := logrus.New()
 
 	// Initialise the environment.
-	email.PortalAddress = testPortalAddr
 	jwt.PortalName = testPortalAddr
 	jwt.AccountsJWKSFile = pathToJWKSFile
 	err := jwt.LoadAccountsKeySet(logger)

@@ -37,11 +37,11 @@ var (
 	// expired token.
 	ErrTokenExpired = errors.New("token expired")
 
-	// JWTPortalName is the issuing service we are using for our JWTs. This
+	// PortalName is the issuing service we are using for our JWTs. This
 	// value can be overwritten by main.go is PORTAL_DOMAIN is set.
 	PortalName = "https://siasky.net"
 
-	// JWTTTL defines the lifetime of the JWT token in seconds.
+	// TTL defines the lifetime of the JWT token in seconds.
 	TTL = 720 * 3600
 )
 
