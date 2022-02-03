@@ -32,3 +32,4 @@ debug.test
 
 # docker builds
 docker
+output

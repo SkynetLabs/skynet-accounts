@@ -16,13 +16,13 @@ all: release
 # Also ensures that any docker containers are gone in the event of an error on a
 # previous run
 clean:
-	@docker stop genenv || true && docker rm genenv || true
+	@docker stop genenv || true && docker rm --force genenv
 ifneq ("$(OS)","Windows_NT")
 # Linux
-	rm -rf cover docker 
+	rm -rf cover output 
 else
 # Windows
-	- DEL /F /Q cover docker
+	- DEL /F /Q cover output
 endif
 
 # count says how many times to run the tests.
@@ -159,17 +159,17 @@ test-single: export COOKIE_ENC_KEY="65d31d12b80fc57df16d84c02a9bb62e2bc3b633388b
 test-single:
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=$(RUN) -count=$(count)
 
-# docker-genenv is a docker command for env var generation
+# docker-generate is a docker command for env var generation
 #
 # The sleep is to handle a slight delay in the jwks.json file being generated in
 # the docker container. Without it the file is blank.
-docker-genenv: clean
-	@mkdir docker
-	@docker build . -t accounts-genenv
+docker-generate: clean
+	@mkdir output
+	@docker build -f ./lib/Dockerfile -t accounts-genenv .
 	@docker run --name genenv -d accounts-genenv
 	sleep 3
-	@docker cp genenv:/app/env ./docker/env
-	@docker cp genenv:/app/jwks.json ./docker/jwks.json
-	@docker stop genenv || true && docker rm genenv || true
+	@docker cp genenv:/app/env ./output/env
+	@docker cp genenv:/app/jwks.json ./output/jwks.json
+	@docker stop genenv || true && docker rm --force genenv
 
-.PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo docker-genenv
+.PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo docker-generate
