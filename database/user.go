@@ -160,12 +160,12 @@ type (
 )
 
 // UserByAPIKey returns the user who owns the given API key.
-func (db *DB) UserByAPIKey(ctx context.Context, ak string) (*User, error) {
+func (db *DB) UserByAPIKey(ctx context.Context, ak APIKey) (*User, error) {
 	sr := db.staticAPIKeys.FindOne(ctx, bson.M{"key": ak})
 	if sr.Err() != nil {
 		return nil, sr.Err()
 	}
-	var apiKey APIKey
+	var apiKey APIKeyRecord
 	err := sr.Decode(&apiKey)
 	if err != nil {
 		return nil, err

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/fastrand"
@@ -26,27 +27,27 @@ func TestAPIKeyFromRequest(t *testing.T) {
 	}
 
 	// API key from request form.
-	token := t.Name()
+	token := randomAPIKeyString()
 	req.Form.Add("api_key", token)
 	tk, err := apiKeyFromRequest(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tk != token {
+	if string(tk) != token {
 		t.Fatalf("Expected '%s', got '%s'.", token, tk)
 	}
 
 	// API key from headers. Expect this to take precedence over request form.
-	token2 := t.Name() + "2"
+	token2 := randomAPIKeyString()
 	req.Header.Set(APIKeyHeader, token2)
 	tk, err = apiKeyFromRequest(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tk == token {
+	if string(tk) == token {
 		t.Fatal("Form token took precedence over headers token.")
 	}
-	if tk != token2 {
+	if string(tk) != token2 {
 		t.Fatalf("Expected '%s', got '%s'.", token2, tk)
 	}
 }
@@ -125,4 +126,9 @@ func TestTokenFromRequest(t *testing.T) {
 	if err == nil {
 		t.Fatal("Invalid token passed validation. Token:", invalidToken)
 	}
+}
+
+// randomAPIKeyString is a helper.
+func randomAPIKeyString() string {
+	return base64.URLEncoding.EncodeToString(fastrand.Bytes(database.PubKeySize))
 }

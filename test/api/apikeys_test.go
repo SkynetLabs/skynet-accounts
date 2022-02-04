@@ -21,7 +21,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	at.Cookie = test.ExtractCookie(r)
 
-	aks := make([]database.APIKey, 0)
+	aks := make([]database.APIKeyRecord, 0)
 
 	// List all API keys this user has. Expect the list to be empty.
 	r, body, err := at.Get("/user/apikeys", nil)
@@ -41,7 +41,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ak1 database.APIKey
+	var ak1 database.APIKeyRecord
 	err = json.Unmarshal(body, &ak1)
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ak2 database.APIKey
+	var ak2 database.APIKeyRecord
 	err = json.Unmarshal(body, &ak2)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Delete an API key.
-	r, body, err = at.Delete("/user/apikeys/"+ak1.Key, nil)
+	r, body, err = at.Delete("/user/apikeys/"+string(ak1.Key), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Stop using the cookie, so we can test the API key.
 	at.Cookie = nil
-	var ak database.APIKey
+	var ak database.APIKeyRecord
 	err = json.Unmarshal(body, &ak)
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	// variable. The main thing we want to see here is whether we get
 	// an `Unauthorized` error or not but we'll validate the stats as well.
 	params := url.Values{}
-	params.Add("api_key", ak.Key)
+	params.Add("api_key", string(ak.Key))
 	_, body, err = at.Get("/user/stats", params)
 	if err != nil {
 		t.Fatal(err, string(body))

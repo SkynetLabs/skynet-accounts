@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	jwt2 "github.com/lestrrat-go/jwx/jwt"
 
@@ -19,6 +20,8 @@ var (
 	// ErrNoAPIKey is an error returned when we expect an API key but we don't
 	// find one.
 	ErrNoAPIKey = errors.New("no api key found")
+	// ErrInvalidAPIKey is an error returned when the given API key is invalid.
+	ErrInvalidAPIKey = errors.New("invalid api key")
 )
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
@@ -116,7 +119,7 @@ func (api *API) logRequest(r *http.Request) {
 }
 
 // tokenFromAPIKey returns a token, generated for the owner of the given API key.
-func (api *API) tokenFromAPIKey(ctx context.Context, ak string) (jwt2.Token, error) {
+func (api *API) tokenFromAPIKey(ctx context.Context, ak database.APIKey) (jwt2.Token, error) {
 	u, err := api.staticDB.UserByAPIKey(ctx, ak)
 	if err != nil {
 		return nil, err
@@ -127,15 +130,19 @@ func (api *API) tokenFromAPIKey(ctx context.Context, ak string) (jwt2.Token, err
 
 // apiKeyFromRequest extracts the API key from the request and returns it.
 // It first checks the headers and then the query.
-func apiKeyFromRequest(r *http.Request) (string, error) {
+func apiKeyFromRequest(r *http.Request) (database.APIKey, error) {
 	// Check the headers for an API key.
-	ak := r.Header.Get(APIKeyHeader)
+	akStr := r.Header.Get(APIKeyHeader)
 	// If there is no API key in the headers, try the query.
-	if ak == "" {
-		ak = r.FormValue("api_key")
+	if akStr == "" {
+		akStr = r.FormValue("api_key")
 	}
-	if ak == "" {
+	if akStr == "" {
 		return "", ErrNoAPIKey
+	}
+	ak := database.APIKey(akStr)
+	if !ak.IsValid() {
+		return "", ErrInvalidAPIKey
 	}
 	return ak, nil
 }
