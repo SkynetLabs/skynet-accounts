@@ -382,10 +382,13 @@ func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httpro
 	ak, err := apiKeyFromRequest(req)
 	if err == nil {
 		u, err := api.staticDB.UserByAPIKey(req.Context(), ak)
-		if err == nil {
-			api.WriteJSON(w, database.UserLimits[u.Tier])
+		if err != nil {
+			api.staticLogger.Traceln("Error while fetching user by API key:", err)
+			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 			return
 		}
+		api.WriteJSON(w, database.UserLimits[u.Tier])
+		return
 	}
 	token, _, err := tokenFromRequest(req)
 	if err != nil {

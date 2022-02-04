@@ -51,9 +51,9 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.validate(api.userDownloadsGET)))
 
 	// Endpoints for user API keys.
-	api.staticRouter.POST("/user/apikey", api.WithDBSession(api.validate(api.userAPIKeyPOST)))
-	api.staticRouter.GET("/user/apikey", api.WithDBSession(api.validate(api.userAPIKeyGET)))
-	api.staticRouter.DELETE("/user/apikey/:apiKey", api.WithDBSession(api.validate(api.userAPIKeyDELETE)))
+	api.staticRouter.POST("/user/apikeys", api.WithDBSession(api.validate(api.userAPIKeyPOST)))
+	api.staticRouter.GET("/user/apikeys", api.WithDBSession(api.validate(api.userAPIKeyGET)))
+	api.staticRouter.DELETE("/user/apikeys/:apiKey", api.WithDBSession(api.validate(api.userAPIKeyDELETE)))
 
 	// Endpoints for email communication with the user.
 	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noValidate(api.userConfirmGET))) // TODO POST
@@ -132,7 +132,7 @@ func apiKeyFromRequest(r *http.Request) (string, error) {
 	ak := r.Header.Get(APIKeyHeader)
 	// If there is no API key in the headers, try the query.
 	if ak == "" {
-		ak = r.Form.Get("api_key")
+		ak = r.FormValue("api_key")
 	}
 	if ak == "" {
 		return "", ErrNoAPIKey

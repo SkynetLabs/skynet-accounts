@@ -82,16 +82,11 @@ func (db *DB) APIKeyList(ctx context.Context, user User) ([]*APIKey, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
-	aks := make([]*APIKey, 0)
 	c, err := db.staticAPIKeys.Find(ctx, bson.M{"user_id": user.ID})
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if errDef := c.Close(ctx); errDef != nil {
-			db.staticLogger.Debugln("Error on closing DB cursor.", errDef)
-		}
-	}()
+	var aks []*APIKey
 	err = c.All(ctx, &aks)
 	if err != nil {
 		return nil, err

@@ -5,6 +5,7 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/julienschmidt/httprouter"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // userAPIKeyPOST creates a new API key for the user.
@@ -61,6 +62,10 @@ func (api *API) userAPIKeyDELETE(w http.ResponseWriter, req *http.Request, ps ht
 	}
 	ak := ps.ByName("apiKey")
 	err = api.staticDB.APIKeyDelete(req.Context(), *u, ak)
+	if err == mongo.ErrNoDocuments {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
