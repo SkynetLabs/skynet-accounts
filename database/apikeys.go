@@ -47,23 +47,6 @@ func (db *DB) APIKeyCreate(ctx context.Context, user User) (*APIKey, error) {
 	return &ak, nil
 }
 
-// APIKeyFetch fetches an API key from the DB.
-func (db *DB) APIKeyFetch(ctx context.Context, user User, id primitive.ObjectID) (*APIKey, error) {
-	if user.ID.IsZero() {
-		return nil, errors.New("invalid user")
-	}
-	var ak APIKey
-	sr := db.staticAPIKeys.FindOne(ctx, bson.M{"user_id": user.ID, "_id": id})
-	if sr.Err() != nil {
-		return nil, sr.Err()
-	}
-	err := sr.Decode(&ak)
-	if err != nil {
-		return nil, err
-	}
-	return &ak, nil
-}
-
 // APIKeyDelete deletes an API key.
 func (db *DB) APIKeyDelete(ctx context.Context, user User, ak string) error {
 	if user.ID.IsZero() {
