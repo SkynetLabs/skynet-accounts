@@ -11,6 +11,20 @@ racevars= history_size=3 halt_on_error=1 atexit_sleep_ms=2000
 # all will build and install release binaries
 all: release
 
+# clean removes all directories that get automatically created during
+# development.
+# Also ensures that any docker containers are gone in the event of an error on a
+# previous run
+clean:
+	@docker stop genenv || true && docker rm --force genenv
+ifneq ("$(OS)","Windows_NT")
+# Linux
+	rm -rf cover output 
+else
+# Windows
+	- DEL /F /Q cover output
+endif
+
 # count says how many times to run the tests.
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
@@ -145,4 +159,16 @@ test-single: export COOKIE_ENC_KEY="65d31d12b80fc57df16d84c02a9bb62e2bc3b633388b
 test-single:
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=$(RUN) -count=$(count)
 
-.PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo
+# docker-generate is a docker command for env var generation
+#
+# The sleep is to allow time for the docker container to start up after `docker
+# run` before stopping the container with `docker stop`. Without it the
+# generated files can be blank.
+docker-generate: clean
+	@mkdir output
+	@docker build -f ./env/Dockerfile -t accounts-genenv .
+	@docker run -v ${PWD}/output:/app --name genenv -d accounts-genenv
+	sleep 3
+	@docker stop genenv || true && docker rm --force genenv
+
+.PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo docker-generate

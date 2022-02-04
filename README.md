@@ -52,39 +52,20 @@ Meaning of environment variables:
   instance it's supposed to use.
 * STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET allow us to process user payments made via Stripe.
 
-### Generating a JWKS
+### Generating a JWKS and Cookie Keys
 
 The JSON Web Key Set is a set of cryptographic keys used to sign the JSON Web Tokens `accounts` issues for its users.
-These tokens are used to authorise users in front of the service and are required for its operation.
+These tokens are used to authorize users in front of the service and are required for its operation.
 
-If you don't know how to generate your own JWKS you can use this code snippet:
-
-```go
-package main
-
-import (
-	"encoding/json"
-	"log"
-	"os"
-
-	"github.com/ory/hydra/jwk"
-)
-
-func main() {
-	gen := jwk.RS256Generator{
-		KeyLength: 2048,
-	}
-	jwks, err := gen.Generate("", "sig")
-	if err != nil {
-		log.Fatal(err)
-	}
-	jsonbuf, err := json.MarshalIndent(jwks, "", "  ")
-	if err != nil {
-		log.Fatalf("failed to generate JSON: %s", err)
-	}
-	os.Stdout.Write(jsonbuf)
-}
+You can generate the necessary `jwks.json` file and proper keys for the two `COOKIE` variables by cloning this repo and running:
 ```
+git clone https://github.com/SkynetLabs/skynet-accounts.git
+cd skynet-accounts
+make docker-generate
+```
+This will generate the needed information in an `output/` directory. The `COOKIE`
+variables are in the `output/env` file and the JWKS is in the `output/jwks.json`
+file.
 
 ## License
 
