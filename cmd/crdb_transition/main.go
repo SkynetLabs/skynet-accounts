@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	dbMigrations = "migration_crdb"
+	collMigrations = "migration_crdb"
 )
 
 // cru represents a user in CockroachDB
@@ -235,7 +235,7 @@ func mongoEmailsUnique(ctx context.Context, db *mongo.Database) error {
 }
 
 func latestMigrationTS(ctx context.Context, mgr *mongo.Database) (time.Time, error) {
-	coll := mgr.Collection(dbMigrations)
+	coll := mgr.Collection(collMigrations)
 	sr := coll.FindOne(ctx, bson.M{})
 	var oldTimestamp time.Time
 	if sr.Err() != nil && sr.Err() != mongo.ErrNoDocuments {
@@ -257,7 +257,7 @@ func latestMigrationTS(ctx context.Context, mgr *mongo.Database) (time.Time, err
 }
 
 func setLatestMigrationTS(ctx context.Context, mgr *mongo.Database, t time.Time) error {
-	coll := mgr.Collection(dbMigrations)
+	coll := mgr.Collection(collMigrations)
 	filter := bson.M{}
 	update := bson.M{"$set": bson.M{"timestamp": t}}
 	opts := &options.UpdateOptions{Upsert: &database.True}
