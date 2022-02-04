@@ -167,12 +167,12 @@ func tokenFromRequest(r *http.Request) (jwt2.Token, error) {
 		}
 		err = secureCookie.Decode(CookieName, cookie.Value, &tokenStr)
 		if err != nil {
-			return nil, err
+			return nil, errors.AddContext(err, "failed to decode token")
 		}
 	}
 	token, err := jwt.ValidateToken(tokenStr)
 	if err != nil {
-		return nil, err
+		return nil, errors.AddContext(err, "failed to validate token")
 	}
 	return token, nil
 }
