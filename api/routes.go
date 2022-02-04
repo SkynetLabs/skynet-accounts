@@ -16,7 +16,7 @@ import (
 var (
 	// APIKeyHeader holds the name of the header we use for API keys. This
 	// header name matches the established standard used by Swagger and others.
-	APIKeyHeader = "X-API-KEY"
+	APIKeyHeader = "Skynet-API-Key"
 	// ErrNoAPIKey is an error returned when we expect an API key but we don't
 	// find one.
 	ErrNoAPIKey = errors.New("no api key found")
@@ -135,7 +135,7 @@ func apiKeyFromRequest(r *http.Request) (database.APIKey, error) {
 	akStr := r.Header.Get(APIKeyHeader)
 	// If there is no API key in the headers, try the query.
 	if akStr == "" {
-		akStr = r.FormValue("api_key")
+		akStr = r.FormValue("apiKey")
 	}
 	if akStr == "" {
 		return "", ErrNoAPIKey

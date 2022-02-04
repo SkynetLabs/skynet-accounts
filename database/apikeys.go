@@ -9,6 +9,7 @@ import (
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 /**
@@ -66,8 +67,14 @@ func (db *DB) APIKeyDelete(ctx context.Context, user User, ak string) error {
 		"key":     ak,
 		"user_id": user.ID,
 	}
-	_, err := db.staticAPIKeys.DeleteOne(ctx, filter)
-	return err
+	dr, err := db.staticAPIKeys.DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+	if dr.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 // APIKeyList lists all API keys that belong to the user.

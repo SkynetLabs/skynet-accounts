@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/url"
 	"testing"
 
@@ -97,6 +98,12 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	if ak2.Key != aks[0].Key {
 		t.Fatalf("Missing key '%s'! Set: %+v", ak2.Key, aks)
 	}
+
+	// Try to delete the same key again. Expect a Bad Request.
+	r, body, err = at.Delete("/user/apikeys/"+string(ak1.Key), nil)
+	if r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("Expected status 400, got %d.", r.StatusCode)
+	}
 }
 
 // testAPIKeysUsage makes sure that we can use API keys to make API calls.
@@ -135,7 +142,7 @@ func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	// variable. The main thing we want to see here is whether we get
 	// an `Unauthorized` error or not but we'll validate the stats as well.
 	params := url.Values{}
-	params.Add("api_key", string(ak.Key))
+	params.Add("apiKey", string(ak.Key))
 	_, body, err = at.Get("/user/stats", params)
 	if err != nil {
 		t.Fatal(err, string(body))

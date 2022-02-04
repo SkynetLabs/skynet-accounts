@@ -28,7 +28,7 @@ func TestAPIKeyFromRequest(t *testing.T) {
 
 	// API key from request form.
 	token := randomAPIKeyString()
-	req.Form.Add("api_key", token)
+	req.Form.Add("apiKey", token)
 	tk, err := apiKeyFromRequest(req)
 	if err != nil {
 		t.Fatal(err)
