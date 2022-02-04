@@ -166,7 +166,7 @@ test-single:
 # generated files can be blank.
 docker-generate: clean
 	@mkdir output
-	@docker build -f ./lib/Dockerfile -t accounts-genenv .
+	@docker build -f ./env/Dockerfile -t accounts-genenv .
 	@docker run -v ${PWD}/output:/app --name genenv -d accounts-genenv
 	sleep 3
 	@docker stop genenv || true && docker rm --force genenv

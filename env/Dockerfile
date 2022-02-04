@@ -18,11 +18,10 @@ RUN go mod download
 RUN go get github.com/ory/hydra/jwk
 
 # Copy in the main_dockerfile as main.go
-COPY ./lib/main_dockerfile ./main.go
+COPY ./env/main_dockerfile ./main.go
 
 # Build the go program and name the output binary file
 RUN go build -o /genenv
 
 # Run the binary
 CMD [ "/genenv" ]
-

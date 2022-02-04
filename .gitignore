@@ -30,6 +30,5 @@ debug.test
 **/.DS_Store
 *.env
 
-# docker builds
-docker
+# Output folder for env var generation
 output
