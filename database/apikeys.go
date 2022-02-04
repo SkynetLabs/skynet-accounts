@@ -26,7 +26,7 @@ type (
 	APIKeyRecord struct {
 		ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 		UserID    primitive.ObjectID `bson:"user_id" json:"-"`
-		Key       APIKey             `bson:"key" json:"key"`
+		Key       APIKey             `bson:"key" json:"-"`
 		CreatedAt time.Time          `bson:"created_at" json:"createdAt"`
 	}
 )
@@ -59,12 +59,16 @@ func (db *DB) APIKeyCreate(ctx context.Context, user User) (*APIKeyRecord, error
 }
 
 // APIKeyDelete deletes an API key.
-func (db *DB) APIKeyDelete(ctx context.Context, user User, ak string) error {
+func (db *DB) APIKeyDelete(ctx context.Context, user User, akID string) error {
 	if user.ID.IsZero() {
 		return errors.New("invalid user")
 	}
+	id, err := primitive.ObjectIDFromHex(akID)
+	if err != nil {
+		return errors.AddContext(err, "invalid API key ID")
+	}
 	filter := bson.M{
-		"key":     ak,
+		"_id":     id,
 		"user_id": user.ID,
 	}
 	dr, err := db.staticAPIKeys.DeleteOne(ctx, filter)

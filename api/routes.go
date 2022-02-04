@@ -56,7 +56,7 @@ func (api *API) buildHTTPRoutes() {
 	// Endpoints for user API keys.
 	api.staticRouter.POST("/user/apikeys", api.WithDBSession(api.withAuth(api.userAPIKeyPOST)))
 	api.staticRouter.GET("/user/apikeys", api.WithDBSession(api.withAuth(api.userAPIKeyGET)))
-	api.staticRouter.DELETE("/user/apikeys/:apiKey", api.WithDBSession(api.withAuth(api.userAPIKeyDELETE)))
+	api.staticRouter.DELETE("/user/apikeys/:id", api.WithDBSession(api.withAuth(api.userAPIKeyDELETE)))
 
 	// Endpoints for email communication with the user.
 	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noAuth(api.userConfirmGET))) // TODO POST

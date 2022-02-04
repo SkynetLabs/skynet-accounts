@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/julienschmidt/httprouter"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -25,7 +26,16 @@ func (api *API) userAPIKeyPOST(w http.ResponseWriter, req *http.Request, _ httpr
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteJSON(w, ak)
+	// Make the Key visible in JSON form. We do that with an anonymous struct
+	// because we don't envision that being needed anywhere else in the project.
+	akWithKey := struct {
+		database.APIKeyRecord
+		Key database.APIKey `bson:"key" json:"key"`
+	}{
+		*ak,
+		ak.Key,
+	}
+	api.WriteJSON(w, akWithKey)
 }
 
 // userAPIKeyGET lists all API keys associated with the user.
@@ -60,8 +70,8 @@ func (api *API) userAPIKeyDELETE(w http.ResponseWriter, req *http.Request, ps ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	ak := ps.ByName("apiKey")
-	err = api.staticDB.APIKeyDelete(req.Context(), *u, ak)
+	akID := ps.ByName("id")
+	err = api.staticDB.APIKeyDelete(req.Context(), *u, akID)
 	if err == mongo.ErrNoDocuments {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return

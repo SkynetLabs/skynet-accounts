@@ -79,7 +79,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Delete an API key.
-	r, body, err = at.Delete("/user/apikeys/"+string(ak1.Key), nil)
+	r, body, err = at.Delete("/user/apikeys/"+ak1.ID.Hex(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to delete the same key again. Expect a Bad Request.
-	r, body, err = at.Delete("/user/apikeys/"+string(ak1.Key), nil)
+	r, body, err = at.Delete("/user/apikeys/"+ak1.ID.Hex(), nil)
 	if r.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected status 400, got %d.", r.StatusCode)
 	}
