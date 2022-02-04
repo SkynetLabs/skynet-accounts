@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/base64"
 	"net/http"
 	"strings"
@@ -54,14 +55,16 @@ func TestAPIKeyFromRequest(t *testing.T) {
 
 // TestTokenFromRequest ensures that tokenFromRequest works as expected.
 func TestTokenFromRequest(t *testing.T) {
-	// FIXME This is a weird and ugly workaround for the fact that I don't know
-	// 	how to refer to a file relative to the project's root dir.
 	jwt.AccountsJWKSFile = "../jwt/fixtures/jwks.json"
 	err := jwt.LoadAccountsKeySet(logrus.New())
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, tkBytes, err := jwt.TokenForUser(t.Name()+"@siasky.net", t.Name()+"_sub")
+	tk, err := jwt.TokenForUser(t.Name()+"@siasky.net", t.Name()+"_sub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tkBytes, err := jwt.TokenSerialize(tk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +74,7 @@ func TestTokenFromRequest(t *testing.T) {
 	}
 
 	// Token from request with no token.
-	_, _, err = tokenFromRequest(req)
+	_, err = tokenFromRequest(req)
 	if err == nil || !strings.Contains(err.Error(), "no authorisation token found") {
 		t.Fatalf("Expected 'no authorisation token found', got %v", err)
 	}
@@ -92,37 +95,51 @@ func TestTokenFromRequest(t *testing.T) {
 		SameSite: 1,    // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00
 	}
 	req.AddCookie(cookie)
-	_, tkStr, err := tokenFromRequest(req)
+	tk, err = tokenFromRequest(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tkStr != string(tkBytes) {
-		t.Fatalf("Expected '%s', got '%s'", string(tkBytes), tkStr)
+	tkB, err := jwt.TokenSerialize(tk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subtle.ConstantTimeCompare(tkB, tkBytes) == 0 {
+		t.Log(string(tkB), "\n", string(tkBytes))
+		t.Fatal("Token mismatch.")
 	}
 
 	// Token from request with a header and a cookie. Expect the header to take
 	// precedence.
-	_, tkBytes2, err := jwt.TokenForUser(t.Name()+"2@siasky.net", t.Name()+"2_sub")
+	tk2, err := jwt.TokenForUser(t.Name()+"2@siasky.net", t.Name()+"2_sub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tkBytes2, err := jwt.TokenSerialize(tk2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("Authorization", "Bearer "+string(tkBytes2))
-	_, tkStr, err = tokenFromRequest(req)
+	tk, err = tokenFromRequest(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tkStr == string(tkBytes) {
+	tkB, err = jwt.TokenSerialize(tk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subtle.ConstantTimeCompare(tkB, tkBytes) == 1 {
 		t.Fatal("Cookie token got precedence over header token.")
 	}
-	if tkStr != string(tkBytes2) {
-		t.Fatalf("Expected '%s', got '%s'", string(tkBytes2), tkStr)
+
+	if subtle.ConstantTimeCompare(tkB, tkBytes2) == 0 {
+		t.Fatal("Token mismatch.")
 	}
 
 	// Invalid token. ValidateToken is tested elsewhere, all we aim for here is
 	// to make sure it's being called.
 	invalidToken := base64.StdEncoding.EncodeToString(fastrand.Bytes(len(tkBytes)))
 	req.Header.Set("Authorization", "Bearer "+invalidToken)
-	_, _, err = tokenFromRequest(req)
+	_, err = tokenFromRequest(req)
 	if err == nil {
 		t.Fatal("Invalid token passed validation. Token:", invalidToken)
 	}

@@ -97,7 +97,7 @@ func (api *API) withAuth(h httprouter.Handle) httprouter.Handle {
 			}
 		} else {
 			// No API key. Let's check for a token in the request.
-			token, _, err = tokenFromRequest(req)
+			token, err = tokenFromRequest(req)
 			if err != nil {
 				api.staticLogger.Debugln("Error fetching token from request:", err)
 				api.WriteError(w, err, http.StatusUnauthorized)
@@ -124,7 +124,7 @@ func (api *API) tokenFromAPIKey(ctx context.Context, ak database.APIKey) (jwt2.T
 	if err != nil {
 		return nil, err
 	}
-	tk, _, err := jwt.TokenForUser(u.Email, u.Sub)
+	tk, err := jwt.TokenForUser(u.Email, u.Sub)
 	return tk, err
 }
 
@@ -150,7 +150,7 @@ func apiKeyFromRequest(r *http.Request) (database.APIKey, error) {
 // tokenFromRequest extracts the JWT token from the request and returns it.
 // It first checks the request headers and then the cookies.
 // The token is validated before being returned.
-func tokenFromRequest(r *http.Request) (jwt2.Token, string, error) {
+func tokenFromRequest(r *http.Request) (jwt2.Token, error) {
 	var tokenStr string
 	// Check the headers for a token.
 	parts := strings.Split(r.Header.Get("Authorization"), "Bearer")
@@ -160,19 +160,19 @@ func tokenFromRequest(r *http.Request) (jwt2.Token, string, error) {
 		// Check the cookie for a token.
 		cookie, err := r.Cookie(CookieName)
 		if errors.Contains(err, http.ErrNoCookie) {
-			return nil, "", errors.New("no authorisation token found")
+			return nil, errors.New("no authorisation token found")
 		}
 		if err != nil {
-			return nil, "", errors.AddContext(err, "cookie exists but it's not valid")
+			return nil, errors.AddContext(err, "cookie exists but it's not valid")
 		}
 		err = secureCookie.Decode(CookieName, cookie.Value, &tokenStr)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 	}
 	token, err := jwt.ValidateToken(tokenStr)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return token, tokenStr, nil
+	return token, nil
 }

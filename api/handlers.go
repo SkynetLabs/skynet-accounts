@@ -190,22 +190,28 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 	// Fetch a JWT token from the request. This token will tell us who the user
 	// is and until when their current session is going to stay valid.
-	token, tokenStr, err := tokenFromRequest(req)
+	token, err := tokenFromRequest(req)
 	if err != nil {
 		api.staticLogger.Debugln("Error fetching token from request:", err)
 		api.WriteError(w, err, http.StatusUnauthorized)
 		return
 	}
+	tokenBytes, err := jwt.TokenSerialize(token)
+	if err != nil {
+		api.staticLogger.Debugln("Error serializing token:", err)
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
 	// Write a secure cookie containing the JWT token of the user. This allows
 	// us to verify the user's identity and permissions (i.e. tier) without
 	// requesting their credentials or accessing the DB.
-	err = writeCookie(w, tokenStr, token.Expiration().UTC().Unix())
+	err = writeCookie(w, string(tokenBytes), token.Expiration().UTC().Unix())
 	if err != nil {
 		api.staticLogger.Debugln("Error writing cookie:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Skynet-Token", tokenStr)
+	w.Header().Set("Skynet-Token", string(tokenBytes))
 	api.WriteSuccess(w)
 }
 
@@ -213,10 +219,16 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 // login cookie.
 func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bool) {
 	// Generate a JWT.
-	tk, tkBytes, err := jwt.TokenForUser(u.Email, u.Sub)
+	tk, err := jwt.TokenForUser(u.Email, u.Sub)
 	if err != nil {
 		api.staticLogger.Debugf("Error creating a token for user: %+v\n", err)
 		err = errors.AddContext(err, "failed to create a token for user")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	tkBytes, err := jwt.TokenSerialize(tk)
+	if err != nil {
+		api.staticLogger.Debugln("Failed to serialize token:", err)
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -390,7 +402,7 @@ func (api *API) userLimitsGET(w http.ResponseWriter, req *http.Request, _ httpro
 		api.WriteJSON(w, database.UserLimits[u.Tier])
 		return
 	}
-	token, _, err := tokenFromRequest(req)
+	token, err := tokenFromRequest(req)
 	if err != nil {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 		return

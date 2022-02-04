@@ -25,9 +25,13 @@ func TestJWT(t *testing.T) {
 	email := t.Name() + "@siasky.net"
 	sub := "this is a sub"
 	fakeSub := "fake sub"
-	_, tkBytes, err := TokenForUser(email, sub)
+	tk, err := TokenForUser(email, sub)
 	if err != nil {
 		t.Fatal("failed to generate token:", err)
+	}
+	tkBytes, err := TokenSerialize(tk)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// Happy case.
@@ -119,7 +123,7 @@ func TestTokenFromContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, _, err := TokenForUser(email, sub)
+	tk, err := TokenForUser(email, sub)
 	if err != nil {
 		t.Fatal("failed to generate token:", err)
 	}
