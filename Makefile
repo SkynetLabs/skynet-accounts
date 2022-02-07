@@ -19,7 +19,7 @@ clean:
 	@docker stop genenv || true && docker rm --force genenv
 ifneq ("$(OS)","Windows_NT")
 # Linux
-	rm -rf cover output 
+	rm -rf cover output
 else
 # Windows
 	- DEL /F /Q cover output
@@ -144,11 +144,11 @@ test:
 
 test-long: lint lint-ci
 	@mkdir -p cover
-	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
+	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=60s $(pkgs) -run=$(run) -count=$(count)
 
 # These env var values are for testing only. They can be freely changed.
 test-int: test-long start-mongo
-	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count)
+	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=600s $(integration-pkgs) -run=$(run) -count=$(count)
 	-make stop-mongo
 
 # test-single allows us to run a single integration test.
@@ -157,7 +157,7 @@ test-int: test-long start-mongo
 test-single: export COOKIE_HASH_KEY="7eb32cfab5014d14394648dae1cf4e606727eee2267f6a50213cd842e61c5bce"
 test-single: export COOKIE_ENC_KEY="65d31d12b80fc57df16d84c02a9bb62e2bc3b633388b05e49ef8abfdf0d35cf3"
 test-single:
-	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=$(RUN) -count=$(count)
+	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=$(run) -count=$(count)
 
 # docker-generate is a docker command for env var generation
 #
