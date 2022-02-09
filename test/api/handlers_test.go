@@ -50,34 +50,22 @@ func TestHandlers(t *testing.T) {
 
 	// Specify subtests to run
 	tests := []subtest{
-		// GET /health
 		{name: "Health", test: testHandlerHealthGET},
-		// POST /user, POST /login
 		{name: "UserCreate", test: testHandlerUserPOST},
-		// POST /login, POST /logout, POST /user
 		{name: "LoginLogout", test: testHandlerLoginPOST},
-		// PUT /user
 		{name: "UserEdit", test: testUserPUT},
-		// PUT /user
 		{name: "UserAddPubKey", test: testUserAddPubKey},
-		// DELETE /user
 		{name: "UserDelete", test: testUserDELETE},
-		// GET /user/limits
 		{name: "UserLimits", test: testUserLimits},
-		// DELETE /user/uploads/:skylink, GET /user/uploads
 		{name: "UserDeleteUploads", test: testUserUploadsDELETE},
-		// GET /user/confirm, POST /user/reconfirm
 		{name: "UserConfirmReconfirmEmail", test: testUserConfirmReconfirmEmailGET},
-		// GET /user/recover, POST /user/recover, POST /login
 		{name: "UserAccountRecovery", test: testUserAccountRecovery},
-		// POST /track/upload/:skylink, POST /track/download/:skylink, POST /track/registry/read, POST /track/registry/write, GET /user/stats
 		{name: "StandardTrackingFlow", test: testTrackingAndStats},
-		// POST /user, POST /login, PUT /user, GET /user, POST /logout
 		{name: "StandardUserFlow", test: testUserFlow},
-		// GET /register, POST /register
 		{name: "Challenge-Response/Registration", test: testRegistration},
-		// GET /register, POST /register, GET /login, POST /login
 		{name: "Challenge-Response/Login", test: testLogin},
+		{name: "APIKeysFlow", test: testAPIKeysFlow},
+		{name: "APIKeysUsage", test: testAPIKeysUsage},
 	}
 
 	// Run subtests

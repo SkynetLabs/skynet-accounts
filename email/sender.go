@@ -28,16 +28,6 @@ var (
 	// environment variable.
 	From = "noreply@siasky.net"
 
-	// PortalAddress defines the URI where we can access our portal. Its value
-	// comes from the PORTAL_DOMAIN environment variable, preceded by the
-	// appropriate schema.
-	PortalAddress = build.Select(
-		build.Var{
-			Dev:      "",
-			Testing:  "https://siasky.net",
-			Standard: "",
-		},
-	).(string)
 	// PortalAddressAccounts defines the URI where we can access the accounts
 	// sub-site.
 	PortalAddressAccounts = build.Select(

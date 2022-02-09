@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	dbMigrations = "migration_crdb"
+	collMigrations = "migration_crdb"
 )
 
 // cru represents a user in CockroachDB
@@ -168,30 +168,6 @@ func cleanMongoDB(ctx context.Context, mgr *mongo.Database) ([]string, error) {
 	return emails, nil
 }
 
-func deleteUserDataByID(ctx context.Context, db *mongo.Database, id string) {
-	uid, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		panic(err)
-	}
-	filter := bson.M{"_id": uid}
-	if _, err = db.Collection("users").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-	filter = bson.M{"user_id": uid}
-	if _, err = db.Collection("uploads").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-	if _, err = db.Collection("downloads").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-	if _, err = db.Collection("registry_reads").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-	if _, err = db.Collection("registry_writes").DeleteOne(ctx, filter); err != nil {
-		panic(err)
-	}
-}
-
 func updateUsersMongoDB(users map[string]cru, creds database.DBCredentials) {
 	ctx := context.Background()
 	mg, err := connMongoDB(ctx, creds)
@@ -259,7 +235,7 @@ func mongoEmailsUnique(ctx context.Context, db *mongo.Database) error {
 }
 
 func latestMigrationTS(ctx context.Context, mgr *mongo.Database) (time.Time, error) {
-	coll := mgr.Collection(dbMigrations)
+	coll := mgr.Collection(collMigrations)
 	sr := coll.FindOne(ctx, bson.M{})
 	var oldTimestamp time.Time
 	if sr.Err() != nil && sr.Err() != mongo.ErrNoDocuments {
@@ -281,7 +257,7 @@ func latestMigrationTS(ctx context.Context, mgr *mongo.Database) (time.Time, err
 }
 
 func setLatestMigrationTS(ctx context.Context, mgr *mongo.Database, t time.Time) error {
-	coll := mgr.Collection(dbMigrations)
+	coll := mgr.Collection(collMigrations)
 	filter := bson.M{}
 	update := bson.M{"$set": bson.M{"timestamp": t}}
 	opts := &options.UpdateOptions{Upsert: &database.True}
