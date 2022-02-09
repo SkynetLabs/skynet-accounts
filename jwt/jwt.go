@@ -94,6 +94,29 @@ func TokenForUser(email, sub string) (jwt.Token, error) {
 	return tk, nil
 }
 
+// TokenFields extracts and returns some fields of interest from the JWT token.
+func TokenFields(t jwt.Token) (sub string, email string, token jwt.Token, err error) {
+	s, ok := t.Get("sub")
+	if !ok || s.(string) == "" {
+		err = errors.New("sub field missing")
+		return
+	}
+	sess, ok := t.Get("session")
+	if !ok {
+		err = errors.New("session field missing")
+		return
+	}
+	session := sess.(map[string]interface{})
+	identity := session["identity"].(map[string]interface{})
+	traits := identity["traits"].(map[string]interface{})
+	if traits != nil {
+		email = traits["email"].(string)
+	}
+	sub = s.(string)
+	token = t
+	return
+}
+
 // TokenFromContext extracts the JWT token from the
 // context and returns the contained user sub, claims and the token itself.
 //
@@ -159,23 +182,7 @@ func TokenFromContext(ctx context.Context) (sub string, email string, token jwt.
 		err = errors.New(fmt.Sprintf("invalid token type: %s", reflect.TypeOf(ctx.Value(ctxValue("token"))).String()))
 		return
 	}
-	s, ok := t.Get("sub")
-	if !ok || s.(string) == "" {
-		err = errors.New("sub field missing")
-		return
-	}
-	sess, ok := t.Get("session")
-	if !ok {
-		err = errors.New("session field missing")
-		return
-	}
-	session := sess.(map[string]interface{})
-	identity := session["identity"].(map[string]interface{})
-	traits := identity["traits"].(map[string]interface{})
-	email = traits["email"].(string)
-	sub = s.(string)
-	token = t
-	return
+	return TokenFields(t)
 }
 
 // TokenSerialize is a helper method that allows us to serialize a token.

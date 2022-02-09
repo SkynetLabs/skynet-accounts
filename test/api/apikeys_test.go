@@ -133,7 +133,12 @@ func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Stop using the cookie, so we can test the API key.
 	at.Cookie = nil
-	var ak database.APIKeyRecord
+	// We use a custom struct and not the APIKeyRecord one because that one does
+	// not render the key in JSON form and therefore it won't unmarshal it,
+	// either.
+	var ak struct {
+		Key database.APIKey
+	}
 	err = json.Unmarshal(body, &ak)
 	if err != nil {
 		t.Fatal(err)

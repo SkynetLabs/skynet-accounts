@@ -4,23 +4,12 @@ import (
 	"net/http"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
-	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/julienschmidt/httprouter"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // userAPIKeyPOST creates a new API key for the user.
-func (api *API) userAPIKeyPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := jwt.TokenFromContext(req.Context())
-	if err != nil {
-		api.WriteError(w, err, http.StatusUnauthorized)
-		return
-	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	ak, err := api.staticDB.APIKeyCreate(req.Context(), *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -39,17 +28,7 @@ func (api *API) userAPIKeyPOST(w http.ResponseWriter, req *http.Request, _ httpr
 }
 
 // userAPIKeyGET lists all API keys associated with the user.
-func (api *API) userAPIKeyGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	sub, _, _, err := jwt.TokenFromContext(req.Context())
-	if err != nil {
-		api.WriteError(w, err, http.StatusUnauthorized)
-		return
-	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+func (api *API) userAPIKeyGET(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	aks, err := api.staticDB.APIKeyList(req.Context(), *u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -59,19 +38,9 @@ func (api *API) userAPIKeyGET(w http.ResponseWriter, req *http.Request, _ httpro
 }
 
 // userAPIKeyDELETE removes an API key.
-func (api *API) userAPIKeyDELETE(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	sub, _, _, err := jwt.TokenFromContext(req.Context())
-	if err != nil {
-		api.WriteError(w, err, http.StatusUnauthorized)
-		return
-	}
-	u, err := api.staticDB.UserBySub(req.Context(), sub, true)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+func (api *API) userAPIKeyDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	akID := ps.ByName("id")
-	err = api.staticDB.APIKeyDelete(req.Context(), *u, akID)
+	err := api.staticDB.APIKeyDelete(req.Context(), *u, akID)
 	if err == mongo.ErrNoDocuments {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
