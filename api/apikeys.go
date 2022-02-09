@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
@@ -24,6 +25,7 @@ func (api *API) userAPIKeyPOST(w http.ResponseWriter, req *http.Request, _ httpr
 	}
 	ak, err := api.staticDB.APIKeyCreate(req.Context(), *u)
 	if errors.Contains(err, database.ErrMaxNumAPIKeysExceeded) {
+		err = errors.AddContext(err, "the maximum number of API keys a user can create is "+strconv.Itoa(database.MaxNumAPIKeysPerUser))
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
