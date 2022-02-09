@@ -6,6 +6,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/julienschmidt/httprouter"
+	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -22,6 +23,10 @@ func (api *API) userAPIKeyPOST(w http.ResponseWriter, req *http.Request, _ httpr
 		return
 	}
 	ak, err := api.staticDB.APIKeyCreate(req.Context(), *u)
+	if errors.Contains(err, database.ErrMaxNumAPIKeysExceeded) {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

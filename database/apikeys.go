@@ -19,6 +19,17 @@ machines. API keys can be revoked when they are no longer needed or if they get
 compromised. This is done by deleting them from this service.
 */
 
+var (
+	// MaxNumAPIKeysPerUser sets the limit for number of API keys a single user
+	// can create. If a user reaches that limit they can always delete some API
+	// keys in order to make space for new ones. This value is configurable via
+	// the ACCOUNTS_MAX_NUM_API_KEYS_PER_USER environment variable.
+	MaxNumAPIKeysPerUser = 1000
+	// ErrMaxNumAPIKeysExceeded is returned when a user tries to create a new
+	// API key after already having the maximum allowed number.
+	ErrMaxNumAPIKeysExceeded = errors.New("maximum number of api keys exceeded")
+)
+
 type (
 	// APIKey is a base64URL-encoded representation of []byte with length PubKeySize
 	APIKey string
@@ -44,6 +55,13 @@ func (ak APIKey) IsValid() bool {
 func (db *DB) APIKeyCreate(ctx context.Context, user User) (*APIKeyRecord, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
+	}
+	n, err := db.staticAPIKeys.CountDocuments(ctx, bson.M{"user_id": user.ID})
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to ensure user can create a new API key")
+	}
+	if n > int64(MaxNumAPIKeysPerUser) {
+		return nil, ErrMaxNumAPIKeysExceeded
 	}
 	ak := APIKeyRecord{
 		UserID:    user.ID,
