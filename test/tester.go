@@ -58,8 +58,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	logger := logrus.New()
 
 	// Initialise the environment.
-	email.PortalAddress = testPortalAddr
-	jwt.JWTPortalName = testPortalAddr
+	jwt.PortalName = testPortalAddr
 	jwt.AccountsJWKSFile = pathToJWKSFile
 	err := jwt.LoadAccountsKeySet(logger)
 	if err != nil {
@@ -187,7 +186,7 @@ func (at *AccountsTester) Close() error {
 	return nil
 }
 
-// CreateUserPost is a helper method.
+// CreateUserPost is a helper method that creates a new user.
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) CreateUserPost(emailAddr, password string) (r *http.Response, body []byte, err error) {

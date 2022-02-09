@@ -25,9 +25,13 @@ func TestJWT(t *testing.T) {
 	email := t.Name() + "@siasky.net"
 	sub := "this is a sub"
 	fakeSub := "fake sub"
-	_, tkBytes, err := TokenForUser(email, sub)
+	tk, err := TokenForUser(email, sub)
 	if err != nil {
 		t.Fatal("failed to generate token:", err)
+	}
+	tkBytes, err := TokenSerialize(tk)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// Happy case.
@@ -88,7 +92,7 @@ func TestValidateToken_Expired(t *testing.T) {
 	tk := jwt.New()
 	err1 := tk.Set("exp", now.Unix()-1)
 	err2 := tk.Set("iat", now.Unix()-10)
-	err3 := tk.Set("iss", JWTPortalName)
+	err3 := tk.Set("iss", PortalName)
 	err4 := tk.Set("sub", sub)
 	err5 := tk.Set("session", session)
 	err = errors.Compose(err1, err2, err3, err4, err5)
@@ -119,7 +123,7 @@ func TestTokenFromContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, _, err := TokenForUser(email, sub)
+	tk, err := TokenForUser(email, sub)
 	if err != nil {
 		t.Fatal("failed to generate token:", err)
 	}

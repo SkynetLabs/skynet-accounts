@@ -22,7 +22,7 @@ func TestChallengeResponse_LoadFromReader(t *testing.T) {
 	var chr ChallengeResponse
 	// Generate some valid data.
 	sk, _ := crypto.GenerateKeyPair()
-	response := append(fastrand.Bytes(ChallengeSize), append([]byte(ChallengeTypeLogin), []byte(jwt.JWTPortalName)...)...)
+	response := append(fastrand.Bytes(ChallengeSize), append([]byte(ChallengeTypeLogin), []byte(jwt.PortalName)...)...)
 	signature := ed25519.Sign(sk[:], response)
 	payload := challengeResponseRequest{
 		Signature: hex.EncodeToString(fastrand.Bytes(16)),
