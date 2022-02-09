@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/mail"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/hash"
-	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"gitlab.com/NebulousLabs/errors"
@@ -258,27 +256,9 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
-// UserBySub returns the user with the given sub. If `create` is `true` it will
-// create the user if it doesn't exist.
-func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
+// UserBySub returns the user with the given sub.
+func (db *DB) UserBySub(ctx context.Context, sub string) (*User, error) {
 	users, err := db.managedUsersBySub(ctx, sub)
-	if create && errors.Contains(err, ErrUserNotFound) {
-		_, email, err := jwt.UserDetailsFromJWT(ctx)
-		if err != nil {
-			// Log the error but don't do anything differently.
-			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
-		}
-		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
-		// If we're successful or hit any error, other than a duplicate key we
-		// want to just return. Hitting a duplicate key error means we ran into
-		// a race condition and we can easily recover from that.
-		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-			return u, err
-		}
-		// Recover from the race condition by fetching the existing user from
-		// the DB.
-		users, err = db.managedUsersBySub(ctx, sub)
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -322,11 +302,14 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier int) (*User, error) {
-	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
-	// emailAddr, err := lib.NormalizeEmail(emailAddr)
-	// if err != nil {
-	// 	return nil, errors.AddContext(err, "invalid email address")
-	// }
+	// Ensure the email is valid if it's passed. We allow empty emails.
+	if emailAddr != "" {
+		addr, err := mail.ParseAddress(emailAddr)
+		if err != nil {
+			return nil, errors.AddContext(err, "invalid email address")
+		}
+		emailAddr = addr.Address
+	}
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
@@ -346,11 +329,8 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	if len(users) > 0 {
 		return nil, ErrUserAlreadyExists
 	}
-	// TODO Review this when we fully migrate away from Kratos.
 	// Generate a password hash, if a password is provided. A password might not
-	// be provided if the user is generated externally, e.g. in Kratos. We can
-	// remove that option in the future when `accounts` is the only system
-	// managing users but for the moment we still need it.
+	// be provided if the user is registered from MySky with a pubkey.
 	var passHash []byte
 	if pass != "" {
 		passHash, err = hash.Generate(pass)

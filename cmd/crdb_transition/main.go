@@ -175,7 +175,7 @@ func updateUsersMongoDB(users map[string]cru, creds database.DBCredentials) {
 		panic(err)
 	}
 	for sub, ucr := range users {
-		u, err := mg.UserBySub(ctx, sub, false)
+		u, err := mg.UserBySub(ctx, sub)
 		if errors.Contains(err, database.ErrUserNotFound) {
 			u, err = mg.UserCreate(ctx, ucr.Email, "", ucr.Sub, database.TierFree)
 		}

@@ -118,7 +118,7 @@ func (api *API) mustAuth(h HandlerWithUser) httprouter.Handle {
 				api.WriteError(w, err, http.StatusUnauthorized)
 				return
 			}
-			u, err = api.staticDB.UserBySub(req.Context(), sub, false)
+			u, err = api.staticDB.UserBySub(req.Context(), sub)
 			if err != nil {
 				api.staticLogger.Debugln("Error fetching user by token from request:", err)
 				api.WriteError(w, err, http.StatusUnauthorized)

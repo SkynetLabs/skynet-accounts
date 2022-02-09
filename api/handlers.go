@@ -394,7 +394,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	// their data from the DB.
 	tier, ok := api.staticUserTierCache.Get(sub)
 	if !ok {
-		u, err := api.staticDB.UserBySub(req.Context(), sub, false)
+		u, err := api.staticDB.UserBySub(req.Context(), sub)
 		if err != nil {
 			api.staticLogger.Debugf("Failed to fetch user from DB for sub '%s'. Error: %s", sub, err.Error())
 			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])

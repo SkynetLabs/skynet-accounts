@@ -299,7 +299,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Make sure the user's pubKey is properly set.
-	u3, err := at.DB.UserBySub(at.Ctx, u.Sub, false)
+	u3, err := at.DB.UserBySub(at.Ctx, u.Sub)
 	if err != nil {
 		t.Fatal(err)
 	}
