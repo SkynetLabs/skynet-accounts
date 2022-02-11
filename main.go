@@ -54,6 +54,11 @@ var (
 	// envStripeAPIKey hold the name of the environment variable for Stripe's
 	// API key. It's only required when integrating with Stripe.
 	envStripeAPIKey = "STRIPE_API_KEY"
+	// envMaxNumAPIKeysPerUser hold the name of the environment variable which
+	// sets the limit for number of API keys a single user can create. If a user
+	// reaches that limit they can always delete some API keys in order to make
+	// space for new ones.
+	envMaxNumAPIKeysPerUser = "ACCOUNTS_MAX_NUM_API_KEYS_PER_USER"
 )
 
 // loadDBCredentials creates a new DB connection based on credentials found in
@@ -130,9 +135,9 @@ func main() {
 		jwt.AccountsJWKSFile = jwks
 	}
 	// Parse the optional env var that controls the TTL of the JWTs we generate.
-	jwtTTL, err := strconv.ParseInt(os.Getenv(envJWTTTL), 10, 32)
+	jwtTTL, err := strconv.Atoi(os.Getenv(envJWTTTL))
 	if err == nil && jwtTTL > 0 {
-		jwt.TTL = int(jwtTTL)
+		jwt.TTL = jwtTTL
 	}
 	// Fetch configuration data for sending emails.
 	emailURI := os.Getenv(envEmailURI)
@@ -153,6 +158,14 @@ func main() {
 		if emailFrom := os.Getenv(envEmailFrom); emailFrom != "" {
 			email.From = emailFrom
 		}
+	}
+	// Fetch the configuration for maximum number of API keys allowed per user.
+	maxAPIKeys, err := strconv.Atoi(os.Getenv(envMaxNumAPIKeysPerUser))
+	if err != nil {
+		log.Printf("Warning: Failed to parse %s env var. Error: %s", envMaxNumAPIKeysPerUser, err.Error())
+	}
+	if maxAPIKeys > 0 {
+		database.MaxNumAPIKeysPerUser = maxAPIKeys
 	}
 
 	// Set up key components:

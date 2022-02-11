@@ -2,15 +2,22 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/julienschmidt/httprouter"
+	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // userAPIKeyPOST creates a new API key for the user.
 func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	ak, err := api.staticDB.APIKeyCreate(req.Context(), *u)
+	if errors.Contains(err, database.ErrMaxNumAPIKeysExceeded) {
+		err = errors.AddContext(err, "the maximum number of API keys a user can create is "+strconv.Itoa(database.MaxNumAPIKeysPerUser))
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

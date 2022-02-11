@@ -4,13 +4,13 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/sirupsen/logrus"
+	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 )
 
@@ -75,8 +75,8 @@ func TestTokenFromRequest(t *testing.T) {
 
 	// Token from request with no token.
 	_, err = tokenFromRequest(req)
-	if err == nil || !strings.Contains(err.Error(), "no authorisation token found") {
-		t.Fatalf("Expected 'no authorisation token found', got %v", err)
+	if err == nil || !errors.Contains(err, ErrNoToken) {
+		t.Fatalf("Expected '%s', got %v", ErrNoToken.Error(), err)
 	}
 
 	// Token from request with a cookie.
