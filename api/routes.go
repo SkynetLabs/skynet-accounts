@@ -38,36 +38,36 @@ func (api *API) buildHTTPRoutes() {
 
 	api.staticRouter.GET("/login", api.WithDBSession(api.noAuth(api.loginGET)))
 	api.staticRouter.POST("/login", api.WithDBSession(api.noAuth(api.loginPOST)))
-	api.staticRouter.POST("/logout", api.WithDBSession(api.mustAuth(api.logoutPOST)))
+	api.staticRouter.POST("/logout", api.WithDBSession(api.withAuth(api.logoutPOST)))
 	api.staticRouter.GET("/register", api.WithDBSession(api.noAuth(api.registerGET)))
 	api.staticRouter.POST("/register", api.WithDBSession(api.noAuth(api.registerPOST)))
 
 	// Endpoints at which Nginx reports portal usage.
-	api.staticRouter.POST("/track/upload/:skylink", api.WithDBSession(api.mustAuth(api.trackUploadPOST)))
-	api.staticRouter.POST("/track/download/:skylink", api.WithDBSession(api.mustAuth(api.trackDownloadPOST)))
-	api.staticRouter.POST("/track/registry/read", api.WithDBSession(api.mustAuth(api.trackRegistryReadPOST)))
-	api.staticRouter.POST("/track/registry/write", api.WithDBSession(api.mustAuth(api.trackRegistryWritePOST)))
+	api.staticRouter.POST("/track/upload/:skylink", api.WithDBSession(api.withAuth(api.trackUploadPOST)))
+	api.staticRouter.POST("/track/download/:skylink", api.WithDBSession(api.withAuth(api.trackDownloadPOST)))
+	api.staticRouter.POST("/track/registry/read", api.WithDBSession(api.withAuth(api.trackRegistryReadPOST)))
+	api.staticRouter.POST("/track/registry/write", api.WithDBSession(api.withAuth(api.trackRegistryWritePOST)))
 
 	api.staticRouter.POST("/user", api.WithDBSession(api.noAuth(api.userPOST))) // This will be removed in the future.
-	api.staticRouter.GET("/user", api.WithDBSession(api.mustAuth(api.userGET)))
-	api.staticRouter.PUT("/user", api.WithDBSession(api.mustAuth(api.userPUT)))
-	api.staticRouter.DELETE("/user", api.WithDBSession(api.mustAuth(api.userDELETE)))
+	api.staticRouter.GET("/user", api.WithDBSession(api.withAuth(api.userGET)))
+	api.staticRouter.PUT("/user", api.WithDBSession(api.withAuth(api.userPUT)))
+	api.staticRouter.DELETE("/user", api.WithDBSession(api.withAuth(api.userDELETE)))
 	api.staticRouter.GET("/user/limits", api.noAuth(api.userLimitsGET))
-	api.staticRouter.GET("/user/stats", api.mustAuth(api.userStatsGET))
-	api.staticRouter.GET("/user/pubkey/register", api.WithDBSession(api.mustAuth(api.userPubKeyRegisterGET)))
-	api.staticRouter.POST("/user/pubkey/register", api.WithDBSession(api.mustAuth(api.userPubKeyRegisterPOST)))
-	api.staticRouter.GET("/user/uploads", api.WithDBSession(api.mustAuth(api.userUploadsGET)))
-	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.mustAuth(api.userUploadsDELETE)))
-	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.mustAuth(api.userDownloadsGET)))
+	api.staticRouter.GET("/user/stats", api.withAuth(api.userStatsGET))
+	api.staticRouter.GET("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterGET)))
+	api.staticRouter.POST("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterPOST)))
+	api.staticRouter.GET("/user/uploads", api.WithDBSession(api.withAuth(api.userUploadsGET)))
+	api.staticRouter.DELETE("/user/uploads/:skylink", api.WithDBSession(api.withAuth(api.userUploadsDELETE)))
+	api.staticRouter.GET("/user/downloads", api.WithDBSession(api.withAuth(api.userDownloadsGET)))
 
 	// Endpoints for user API keys.
-	api.staticRouter.POST("/user/apikeys", api.WithDBSession(api.mustAuth(api.userAPIKeyPOST)))
-	api.staticRouter.GET("/user/apikeys", api.WithDBSession(api.mustAuth(api.userAPIKeyGET)))
-	api.staticRouter.DELETE("/user/apikeys/:id", api.WithDBSession(api.mustAuth(api.userAPIKeyDELETE)))
+	api.staticRouter.POST("/user/apikeys", api.WithDBSession(api.withAuth(api.userAPIKeyPOST)))
+	api.staticRouter.GET("/user/apikeys", api.WithDBSession(api.withAuth(api.userAPIKeyGET)))
+	api.staticRouter.DELETE("/user/apikeys/:id", api.WithDBSession(api.withAuth(api.userAPIKeyDELETE)))
 
 	// Endpoints for email communication with the user.
 	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noAuth(api.userConfirmGET))) // TODO POST
-	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.mustAuth(api.userReconfirmPOST)))
+	api.staticRouter.POST("/user/reconfirm", api.WithDBSession(api.withAuth(api.userReconfirmPOST)))
 	api.staticRouter.POST("/user/recover/request", api.WithDBSession(api.noAuth(api.userRecoverRequestPOST)))
 	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noAuth(api.userRecoverPOST)))
 
@@ -86,8 +86,8 @@ func (api *API) noAuth(h HandlerWithUser) httprouter.Handle {
 	}
 }
 
-// mustAuth ensures that the user making the request has logged in.
-func (api *API) mustAuth(h HandlerWithUser) httprouter.Handle {
+// withAuth ensures that the user making the request has logged in.
+func (api *API) withAuth(h HandlerWithUser) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.logRequest(req)
 		var u *database.User
