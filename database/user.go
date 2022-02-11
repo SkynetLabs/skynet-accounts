@@ -258,11 +258,7 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 
 // UserBySub returns the user with the given sub.
 func (db *DB) UserBySub(ctx context.Context, sub string) (*User, error) {
-	users, err := db.managedUsersBySub(ctx, sub)
-	if err != nil {
-		return nil, err
-	}
-	return users[0], nil
+	return db.managedUserBySub(ctx, sub)
 }
 
 // UserConfirmEmail confirms that the email to which the passed confirmation
@@ -310,23 +306,24 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		}
 		emailAddr = addr.Address
 	}
-	// Check for an existing user with this email.
-	users, err := db.managedUsersByField(ctx, "email", emailAddr)
-	if err != nil && !errors.Contains(err, ErrUserNotFound) {
-		return nil, errors.AddContext(err, "failed to query DB")
-	}
-	if len(users) > 0 {
-		return nil, ErrUserAlreadyExists
-	}
 	if sub == "" {
 		return nil, errors.New("empty sub is not allowed")
 	}
-	// Check for an existing user with this sub.
-	users, err = db.managedUsersBySub(ctx, sub)
+
+	// Check for an existing user with this email.
+	_, err := db.UserByEmail(ctx, emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
-	if len(users) > 0 {
+	if !errors.Contains(err, ErrUserNotFound) {
+		return nil, ErrUserAlreadyExists
+	}
+	// Check for an existing user with this sub.
+	_, err = db.managedUserBySub(ctx, sub)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if !errors.Contains(err, ErrUserNotFound) {
 		return nil, ErrUserAlreadyExists
 	}
 	// Generate a password hash, if a password is provided. A password might not
@@ -391,11 +388,11 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		}
 	}
 	// Check for an existing user with this sub.
-	users, err = db.managedUsersBySub(ctx, sub)
+	_, err = db.managedUserBySub(ctx, sub)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
-	if len(users) > 0 {
+	if !errors.Contains(err, ErrUserNotFound) {
 		return nil, ErrUserAlreadyExists
 	}
 	// Generate a password hash, if a password is provided. A password might not
@@ -551,10 +548,22 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	return users, nil
 }
 
-// managedUsersBySub fetches all users that have the given sub. This should
+// managedUserBySub fetches all users that have the given sub. This should
 // normally be up to one user.
-func (db *DB) managedUsersBySub(ctx context.Context, sub string) ([]*User, error) {
-	return db.managedUsersByField(ctx, "sub", sub)
+func (db *DB) managedUserBySub(ctx context.Context, sub string) (*User, error) {
+	sr := db.staticUsers.FindOne(ctx, bson.M{"sub": sub})
+	if sr.Err() == mongo.ErrNoDocuments {
+		return nil, ErrUserNotFound
+	}
+	if sr.Err() != nil {
+		return nil, sr.Err()
+	}
+	var u User
+	err := sr.Decode(&u)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 // userStats reports statistical information about the user.
