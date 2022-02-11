@@ -22,6 +22,9 @@ var (
 	ErrNoAPIKey = errors.New("no api key found")
 	// ErrInvalidAPIKey is an error returned when the given API key is invalid.
 	ErrInvalidAPIKey = errors.New("invalid api key")
+	// ErrNoToken is returned when we expected a JWT token to be provided but it
+	// was not.
+	ErrNoToken = errors.New("no authorisation token found")
 )
 
 // buildHTTPRoutes registers all HTTP routes and their handlers.
@@ -160,7 +163,7 @@ func tokenFromRequest(r *http.Request) (jwt2.Token, error) {
 		// Check the cookie for a token.
 		cookie, err := r.Cookie(CookieName)
 		if errors.Contains(err, http.ErrNoCookie) {
-			return nil, errors.New("no authorisation token found")
+			return nil, ErrNoToken
 		}
 		if err != nil {
 			return nil, errors.AddContext(err, "cookie exists but it's not valid")
