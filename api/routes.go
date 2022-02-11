@@ -119,9 +119,14 @@ func (api *API) mustAuth(h HandlerWithUser) httprouter.Handle {
 				return
 			}
 			u, err = api.staticDB.UserBySub(req.Context(), sub)
+			if errors.Contains(err, database.ErrUserNotFound) {
+				api.staticLogger.Debugln("User that created this token no longer exists:", err)
+				api.WriteError(w, err, http.StatusUnauthorized)
+				return
+			}
 			if err != nil {
 				api.staticLogger.Debugln("Error fetching user by token from request:", err)
-				api.WriteError(w, err, http.StatusUnauthorized)
+				api.WriteError(w, err, http.StatusInternalServerError)
 				return
 			}
 		}
