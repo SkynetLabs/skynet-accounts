@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -23,6 +21,12 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/mongo"
+)
+
+const (
+	// LimitBodySizeSmall defines a size limit for requests that we don't expect
+	// to contain a lot of data.
+	LimitBodySizeSmall = 4 * skynet.KiB
 )
 
 type (
@@ -97,7 +101,7 @@ func (api *API) loginGET(_ *database.User, w http.ResponseWriter, req *http.Requ
 	var pk database.PubKey
 	err := pk.LoadString(req.FormValue("pubKey"))
 	if err != nil {
-		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
+		api.WriteError(w, database.ErrInvalidPublikKey, http.StatusBadRequest)
 		return
 	}
 	_, err = api.staticDB.UserByPubKey(req.Context(), pk)
@@ -120,7 +124,7 @@ func (api *API) loginGET(_ *database.User, w http.ResponseWriter, req *http.Requ
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Get the body, we might need to use it several times.
-	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, LimitBodySizeSmall))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
 		return
@@ -249,11 +253,10 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 }
 
 // logoutPOST ends a user session by removing a cookie
-func (api *API) logoutPOST(u *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	if u == nil {
-		api.WriteError(w, errors.New("user not logged in"), http.StatusUnauthorized)
-		return
-	}
+func (api *API) logoutPOST(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	// Remove the user's cookie. We achieve that by overwriting the cookie with
+	// a new one, which has its expiration time in the past. The browser will
+	// remove it for us.
 	err := writeCookie(w, "", time.Now().UTC().Unix()-1)
 	if err != nil {
 		api.staticLogger.Debugln("Error deleting cookie:", err)
@@ -278,7 +281,7 @@ func (api *API) registerGET(_ *database.User, w http.ResponseWriter, req *http.R
 	var pk database.PubKey
 	err = pk.LoadString(req.FormValue("pubKey"))
 	if err != nil {
-		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
+		api.WriteError(w, database.ErrInvalidPublikKey, http.StatusBadRequest)
 		return
 	}
 	// Check if this pubkey is already associated with a user.
@@ -308,7 +311,7 @@ func (api *API) registerPOST(_ *database.User, w http.ResponseWriter, req *http.
 		return
 	}
 	// Get the body, we might need to use it several times.
-	body, err := ioutil.ReadAll(io.LimitReader(req.Body, 4*skynet.KiB))
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, LimitBodySizeSmall))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "empty request body"), http.StatusBadRequest)
 		return
@@ -447,7 +450,7 @@ func (api *API) userPOST(_ *database.User, w http.ResponseWriter, req *http.Requ
 	}
 	// Parse the request's body.
 	var payload credentialsPOST
-	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	err = parseRequestBodyJSON(req.Body, LimitBodySizeSmall, &payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
@@ -496,7 +499,7 @@ func (api *API) userPOST(_ *database.User, w http.ResponseWriter, req *http.Requ
 func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Read and parse the request body.
 	var payload userUpdatePOST
-	err := parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	err := parseRequestBodyJSON(req.Body, LimitBodySizeSmall, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -600,9 +603,10 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 // userPubKeyRegisterGET generates an update challenge for the caller.
 func (api *API) userPubKeyRegisterGET(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	ctx := req.Context()
-	pk, err := hex.DecodeString(req.FormValue("pubKey"))
-	if err != nil || len(pk) != database.PubKeySize {
-		api.WriteError(w, errors.New("invalid pubKey provided"), http.StatusBadRequest)
+	var pk database.PubKey
+	err := pk.LoadString(req.FormValue("pubKey"))
+	if err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	_, err = api.staticDB.UserByPubKey(ctx, pk)
@@ -640,7 +644,7 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 	ctx := req.Context()
 	// Get the challenge response.
 	var chr database.ChallengeResponse
-	err := chr.LoadFromReader(io.LimitReader(req.Body, 4*skynet.KiB))
+	err := chr.LoadFromReader(io.LimitReader(req.Body, LimitBodySizeSmall))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "missing or invalid challenge response"), http.StatusBadRequest)
 		return
@@ -651,12 +655,10 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 		return
 	}
 	// Check if the pubkey is already associated with the current user.
-	for _, upk := range u.PubKeys {
-		if subtle.ConstantTimeCompare(upk, pk) == 1 {
-			// This pubkey already belongs to the user. Log them in and return.
-			api.loginUser(w, u, true)
-			return
-		}
+	if u.HasKey(pk) {
+		// This pubkey already belongs to the user. Log them in and return.
+		api.loginUser(w, u, true)
+		return
 	}
 	// Check if the pubkey from the UnconfirmedUserUpdate is already associated
 	// with a user. That might have happened between the challenge creation and
@@ -814,7 +816,7 @@ func (api *API) userRecoverRequestPOST(_ *database.User, w http.ResponseWriter, 
 	var payload struct {
 		Email string `json:"email"`
 	}
-	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	err = parseRequestBodyJSON(req.Body, LimitBodySizeSmall, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -895,7 +897,7 @@ func (api *API) userRecoverPOST(_ *database.User, w http.ResponseWriter, req *ht
 
 	// Parse the request's body.
 	var payload accountRecoveryPOST
-	err = parseRequestBodyJSON(req.Body, 4*skynet.KiB, &payload)
+	err = parseRequestBodyJSON(req.Body, LimitBodySizeSmall, &payload)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return

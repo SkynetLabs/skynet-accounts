@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net/mail"
 	"sync"
@@ -812,6 +813,17 @@ func (db *DB) userRegistryReadStats(ctx context.Context, userID primitive.Object
 		return 0, 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
 	}
 	return reads, reads * skynet.CostBandwidthRegistryRead, nil
+}
+
+// HasKey checks if the given pubkey is among the pubkeys registered for the
+// user.
+func (u User) HasKey(pk PubKey) bool {
+	for _, upk := range u.PubKeys {
+		if subtle.ConstantTimeCompare(upk, pk) == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // monthStart returns the start of the user's subscription month.
