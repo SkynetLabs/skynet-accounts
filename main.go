@@ -19,7 +19,6 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
-	"github.com/stripe/stripe-go/v71"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -160,12 +159,14 @@ func main() {
 		}
 	}
 	// Fetch the configuration for maximum number of API keys allowed per user.
-	maxAPIKeys, err := strconv.Atoi(os.Getenv(envMaxNumAPIKeysPerUser))
-	if err != nil {
-		log.Printf("Warning: Failed to parse %s env var. Error: %s", envMaxNumAPIKeysPerUser, err.Error())
-	}
-	if maxAPIKeys > 0 {
-		database.MaxNumAPIKeysPerUser = maxAPIKeys
+	if maxAPIKeysStr := os.Getenv(envMaxNumAPIKeysPerUser); maxAPIKeysStr != "" {
+		maxAPIKeys, err := strconv.Atoi(maxAPIKeysStr)
+		if err != nil {
+			log.Printf("Warning: Failed to parse %s env var. Error: %s", envMaxNumAPIKeysPerUser, err.Error())
+		}
+		if maxAPIKeys > 0 {
+			database.MaxNumAPIKeysPerUser = maxAPIKeys
+		}
 	}
 
 	// Set up key components:
