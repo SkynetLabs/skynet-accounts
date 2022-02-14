@@ -371,25 +371,35 @@ func (api *API) userGET(u *database.User, w http.ResponseWriter, _ *http.Request
 func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// First check for an API key.
 	ak, err := apiKeyFromRequest(req)
+	respAnon := database.UserLimitsResponse{
+		LoggedIn: false,
+		TierID:   database.TierAnonymous,
+		Limits:   database.UserLimits[database.TierAnonymous],
+	}
 	if err == nil {
 		u, err := api.staticDB.UserByAPIKey(req.Context(), ak)
 		if err != nil {
 			api.staticLogger.Traceln("Error while fetching user by API key:", err)
-			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+			api.WriteJSON(w, respAnon)
 			return
 		}
-		api.WriteJSON(w, database.UserLimits[u.Tier])
+		resp := database.UserLimitsResponse{
+			LoggedIn: true,
+			TierID:   u.Tier,
+			Limits:   database.UserLimits[u.Tier],
+		}
+		api.WriteJSON(w, resp)
 		return
 	}
 	token, err := tokenFromRequest(req)
 	if err != nil {
-		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+		api.WriteJSON(w, respAnon)
 		return
 	}
 	s, exists := token.Get("sub")
 	if !exists {
 		api.staticLogger.Warnln("Token without a sub.")
-		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+		api.WriteJSON(w, respAnon)
 		return
 	}
 	sub := s.(string)
@@ -400,7 +410,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 		u, err := api.staticDB.UserBySub(req.Context(), sub)
 		if err != nil {
 			api.staticLogger.Debugf("Failed to fetch user from DB for sub '%s'. Error: %s", sub, err.Error())
-			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+			api.WriteJSON(w, respAnon)
 			return
 		}
 		api.staticUserTierCache.Set(u)
@@ -409,7 +419,12 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	if !ok {
 		build.Critical("Failed to fetch user from UserTierCache right after setting it.")
 	}
-	api.WriteJSON(w, database.UserLimits[tier])
+	resp := database.UserLimitsResponse{
+		LoggedIn: true,
+		TierID:   tier,
+		Limits:   database.UserLimits[tier],
+	}
+	api.WriteJSON(w, resp)
 }
 
 // userStatsGET returns statistics about an existing user.

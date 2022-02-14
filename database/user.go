@@ -131,6 +131,13 @@ type (
 		// the first position in the list.
 		PubKeys []PubKey `bson:"pub_keys" json:"-"`
 	}
+	// UserLimitsResponse is the JSON object the handler returns to the caller
+	// on GET /user/limits.
+	UserLimitsResponse struct {
+		LoggedIn bool       `json:"loggedIn"`
+		TierID   int        `json:"tierID"`
+		Limits   TierLimits `json:"limits"`
+	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
 		RawStorageUsed     int64 `json:"rawStorageUsed"`

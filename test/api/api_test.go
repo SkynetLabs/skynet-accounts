@@ -205,13 +205,16 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ul database.TierLimits
+	var ul database.UserLimitsResponse
 	err = json.Unmarshal(b, &ul)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ul.TierName != database.UserLimits[database.TierFree].TierName {
-		t.Fatalf("Expected tier '%s', got '%s'", database.UserLimits[database.TierFree].TierName, ul.TierName)
+	if !ul.LoggedIn {
+		t.Fatal("Expected to get `loggedIn == true")
+	}
+	if ul.TierID != database.TierFree {
+		t.Fatalf("Expected tier id '%d', got '%d'", database.TierFree, ul.TierID)
 	}
 	// Now set their SubscribedUntil in the future, so their subscription tier
 	// is active.
@@ -245,8 +248,8 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ul.TierName != database.UserLimits[database.TierAnonymous].TierName {
-		t.Fatalf("Expected tier '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, ul.TierName)
+	if ul.TierID != database.TierAnonymous {
+		t.Fatalf("Expected tier id '%d', got '%d'", database.TierAnonymous, ul.TierID)
 	}
 	// Delete the uploaded file, so the user's quota recovers.
 	// This call should invalidate the tier cache.
@@ -261,7 +264,7 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
-		t.Fatalf("Expected tier '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
+	if ul.TierID != database.TierPremium20 {
+		t.Fatalf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
 	}
 }
