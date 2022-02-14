@@ -15,6 +15,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
+	"github.com/stripe/stripe-go/v71"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/joho/godotenv"

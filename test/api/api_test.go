@@ -210,9 +210,6 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ul.LoggedIn {
-		t.Fatal("Expected to get `loggedIn == true")
-	}
 	if ul.TierID != database.TierFree {
 		t.Fatalf("Expected tier id '%d', got '%d'", database.TierFree, ul.TierID)
 	}

@@ -372,9 +372,8 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	// First check for an API key.
 	ak, err := apiKeyFromRequest(req)
 	respAnon := database.UserLimitsResponse{
-		LoggedIn: false,
-		TierID:   database.TierAnonymous,
-		Limits:   database.UserLimits[database.TierAnonymous],
+		TierID:     database.TierAnonymous,
+		TierLimits: database.UserLimits[database.TierAnonymous],
 	}
 	if err == nil {
 		u, err := api.staticDB.UserByAPIKey(req.Context(), ak)
@@ -384,9 +383,8 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			return
 		}
 		resp := database.UserLimitsResponse{
-			LoggedIn: true,
-			TierID:   u.Tier,
-			Limits:   database.UserLimits[u.Tier],
+			TierID:     u.Tier,
+			TierLimits: database.UserLimits[u.Tier],
 		}
 		api.WriteJSON(w, resp)
 		return
@@ -420,9 +418,8 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 		build.Critical("Failed to fetch user from UserTierCache right after setting it.")
 	}
 	resp := database.UserLimitsResponse{
-		LoggedIn: true,
-		TierID:   tier,
-		Limits:   database.UserLimits[tier],
+		TierID:     tier,
+		TierLimits: database.UserLimits[tier],
 	}
 	api.WriteJSON(w, resp)
 }
