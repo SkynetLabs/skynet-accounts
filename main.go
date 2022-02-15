@@ -15,11 +15,11 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
+	"github.com/joho/godotenv"
+	"github.com/stripe/stripe-go/v71"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
-	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
-	"github.com/stripe/stripe-go/v71"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -96,22 +96,17 @@ func logLevel() logrus.Level {
 	return logrus.InfoLevel
 }
 
-func main() {
+// parseEnvironmentVariables is responsible for reading and validating all
+// environment variables we support - both required and optional ones.
+func parseEnvironmentVariables(logger *logrus.Logger) (*database.DBCredentials, string, error) {
 	// Load the environment variables from the .env file.
 	// Existing variables take precedence and won't be overwritten.
 	_ = godotenv.Load()
 
-	// Initialise the global context and logger. These will be used throughout
-	// the service. Once the context is closed, all background threads will
-	// wind themselves down.
-	ctx := context.Background()
-	logger := logrus.New()
-	logger.SetLevel(logLevel())
-
 	// portal tells us which Skynet portal to use for downloading skylinks.
 	portal := os.Getenv(envPortal)
 	if portal == "" {
-		log.Fatal("missing env var " + envPortal)
+		return nil, "", errors.New("missing env var " + envPortal)
 	}
 	database.PortalName = "https://" + portal
 	jwt.PortalName = database.PortalName
@@ -119,13 +114,14 @@ func main() {
 	email.ServerLockID = os.Getenv(envServerDomain)
 	if email.ServerLockID == "" {
 		email.ServerLockID = database.PortalName
-		logger.Warningf(`Environment variable %s is missing! This server's identity 
-			is set to the default '%s' value. That is OK only if this server is running on its own 
+		logger.Warningf(`Environment variable %s is missing! This server's identity
+			is set to the default '%s' value. That is OK only if this server is running on its own
 			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
 	}
+
 	dbCreds, err := loadDBCredentials()
 	if err != nil {
-		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
+		return nil, "", errors.AddContext(err, "failed to fetch DB credentials")
 	}
 	if sk := os.Getenv(envStripeAPIKey); sk != "" {
 		stripe.Key = sk
@@ -135,20 +131,27 @@ func main() {
 		jwt.AccountsJWKSFile = jwks
 	}
 	// Parse the optional env var that controls the TTL of the JWTs we generate.
-	jwtTTL, err := strconv.Atoi(os.Getenv(envJWTTTL))
-	if err == nil && jwtTTL > 0 {
+	if jwtTTLStr := os.Getenv(envJWTTTL); jwtTTLStr != "" {
+		jwtTTL, err := strconv.Atoi(jwtTTLStr)
+		if err != nil {
+			return nil, "", fmt.Errorf("Failed to parse env var %s: %s", envJWTTTL, err)
+		}
+		if jwtTTL == 0 {
+			return nil, "", fmt.Errorf("The %s env var is set to zero, which is an invalid value. It needs to be non-negative or not be present.")
+		}
 		jwt.TTL = jwtTTL
 	}
+
 	// Fetch configuration data for sending emails.
 	emailURI := os.Getenv(envEmailURI)
 	{
 		if emailURI == "" {
-			log.Fatal(envEmailURI + " is empty")
+			return nil, "", errors.New(envEmailURI + " is empty")
 		}
 		// Validate the given URI.
 		uri, err := url.Parse(emailURI)
 		if err != nil {
-			log.Fatal(errors.AddContext(err, "invalid email URI given in "+envEmailURI))
+			return nil, "", errors.AddContext(err, "invalid email URI given in "+envEmailURI)
 		}
 		// Set the FROM address to outgoing emails. This can be overridden by
 		// the ACCOUNTS_EMAIL_FROM optional environment variable.
@@ -168,6 +171,21 @@ func main() {
 		database.MaxNumAPIKeysPerUser = maxAPIKeys
 	}
 
+	return &dbCreds, emailURI, nil
+}
+
+func main() {
+	// Initialise the global context and logger. These will be used throughout
+	// the service. Once the context is closed, all background threads will
+	// wind themselves down.
+	ctx := context.Background()
+	logger := logrus.New()
+	logger.SetLevel(logLevel())
+	dbCreds, emailURI, err := parseEnvironmentVariables(logger)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Set up key components:
 
 	// Load the JWKS that we'll use to sign and validate JWTs.
@@ -176,7 +194,7 @@ func main() {
 		log.Fatal(errors.AddContext(err, fmt.Sprintf("failed to load JWKS file from %s", jwt.AccountsJWKSFile)))
 	}
 	// Connect to the database.
-	db, err := database.New(ctx, dbCreds, logger)
+	db, err := database.New(ctx, *dbCreds, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
