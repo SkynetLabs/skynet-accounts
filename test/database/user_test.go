@@ -206,12 +206,12 @@ func TestUserBySub(t *testing.T) {
 	sub := t.Name()
 	// Ensure we don't have a user with this sub and the method handles that
 	// correctly.
-	_, err = db.UserBySub(ctx, sub, false)
+	_, err = db.UserBySub(ctx, sub)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error %v, got %v.\n", database.ErrUserNotFound, err)
 	}
-	// Ensure creating a user via this method works as expected.
-	u, err := db.UserBySub(ctx, sub, true)
+	// Create a test user.
+	u, err := db.UserCreate(ctx, "", "", sub, database.TierFree)
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}
@@ -222,7 +222,7 @@ func TestUserBySub(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Ensure that once the user exists, we'll fetch it correctly.
-	u2, err := db.UserBySub(ctx, sub, false)
+	u2, err := db.UserBySub(ctx, sub)
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}
@@ -287,12 +287,11 @@ func TestUserCreate(t *testing.T) {
 	pass := t.Name() + "pass"
 	sub := t.Name() + "sub"
 
-	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
-	// // Try to create a user with an invalid email.
-	// _, err = db.UserCreate(ctx, "invalid email", pass, sub, database.TierFree)
-	// if err == nil {
-	// 	t.Fatal("Expected a malformed email error, got nil.")
-	// }
+	// Try to create a user with an invalid email.
+	_, err = db.UserCreate(ctx, "invalid email", pass, sub, database.TierFree)
+	if err == nil {
+		t.Fatal("Expected a malformed email error, got nil.")
+	}
 	// Add a user. Happy case.
 	u, err := db.UserCreate(ctx, email, pass, sub, database.TierFree)
 	if err != nil {
@@ -382,7 +381,7 @@ func TestUserSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u1, err := db.UserBySub(ctx, u.Sub, false)
+	u1, err := db.UserBySub(ctx, u.Sub)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +395,7 @@ func TestUserSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u1, err = db.UserBySub(ctx, u.Sub, false)
+	u1, err = db.UserBySub(ctx, u.Sub)
 	if err != nil {
 		t.Fatal(err)
 	}

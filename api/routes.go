@@ -27,6 +27,13 @@ var (
 	ErrNoToken = errors.New("no authorisation token found")
 )
 
+type (
+	// HandlerWithUser is a wrapper for httprouter.Handle which also includes
+	// a user parameter. This allows us to fetch the user making the request
+	// just once, during validation.
+	HandlerWithUser func(*database.User, http.ResponseWriter, *http.Request, httprouter.Params)
+)
+
 // buildHTTPRoutes registers all HTTP routes and their handlers.
 func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/health", api.noAuth(api.healthGET))
@@ -70,22 +77,23 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noAuth(api.stripeWebhookPOST)))
 	api.staticRouter.GET("/stripe/prices", api.noAuth(api.stripePricesGET))
 
-	api.staticRouter.GET("/.well-known/jwks.json", api.noAuth(api.wellKnownJwksGET))
+	api.staticRouter.GET("/.well-known/jwks.json", api.noAuth(api.wellKnownJWKSGET))
 }
 
 // noAuth is a pass-through method used for decorating the request and
 // logging relevant data.
-func (api *API) noAuth(h httprouter.Handle) httprouter.Handle {
+func (api *API) noAuth(h HandlerWithUser) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.logRequest(req)
-		h(w, req, ps)
+		h(nil, w, req, ps)
 	}
 }
 
 // withAuth ensures that the user making the request has logged in.
-func (api *API) withAuth(h httprouter.Handle) httprouter.Handle {
+func (api *API) withAuth(h HandlerWithUser) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.logRequest(req)
+		var u *database.User
 		var token jwt2.Token
 		// Check for an API key. We only return an error if an invalid API key
 		// is provided.
@@ -93,9 +101,10 @@ func (api *API) withAuth(h httprouter.Handle) httprouter.Handle {
 		if err == nil {
 			// We have an API key. Let's generate a token based on it.
 			token, err = api.tokenFromAPIKey(req.Context(), ak)
+			u, err = api.staticDB.UserByAPIKey(req.Context(), ak)
 			if err != nil {
-				api.staticLogger.Debugln("Error generating token for API key:", err)
-				api.WriteError(w, err, http.StatusUnauthorized)
+				api.staticLogger.Debugf("Error fetching user for API key %s. Error: %s", ak, err)
+				api.WriteError(w, errors.AddContext(err, "failed to fetch user by API key"), http.StatusUnauthorized)
 				return
 			}
 		} else {
@@ -106,10 +115,27 @@ func (api *API) withAuth(h httprouter.Handle) httprouter.Handle {
 				api.WriteError(w, err, http.StatusUnauthorized)
 				return
 			}
+			sub, _, _, err := jwt.TokenFields(token)
+			if err != nil {
+				api.staticLogger.Debugln("Error decoding token from request:", err)
+				api.WriteError(w, err, http.StatusUnauthorized)
+				return
+			}
+			u, err = api.staticDB.UserBySub(req.Context(), sub)
+			if errors.Contains(err, database.ErrUserNotFound) {
+				api.staticLogger.Debugln("User that created this token no longer exists:", err)
+				api.WriteError(w, err, http.StatusUnauthorized)
+				return
+			}
+			if err != nil {
+				api.staticLogger.Debugln("Error fetching user by token from request:", err)
+				api.WriteError(w, err, http.StatusInternalServerError)
+				return
+			}
 		}
 		// Embed the verified token in the context of the request.
 		ctx := jwt.ContextWithToken(req.Context(), token)
-		h(w, req.WithContext(ctx), ps)
+		h(u, w, req.WithContext(ctx), ps)
 	}
 }
 
