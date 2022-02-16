@@ -98,15 +98,11 @@ func logLevel() logrus.Level {
 
 // parseEnvironmentVariables is responsible for reading and validating all
 // environment variables we support - both required and optional ones.
-func parseEnvironmentVariables(logger *logrus.Logger) (*database.DBCredentials, string, error) {
-	// Load the environment variables from the .env file.
-	// Existing variables take precedence and won't be overwritten.
-	_ = godotenv.Load()
-
+func parseEnvironmentVariables(logger *logrus.Logger) (string, error) {
 	// portal tells us which Skynet portal to use for downloading skylinks.
 	portal := os.Getenv(envPortal)
 	if portal == "" {
-		return nil, "", errors.New("missing env var " + envPortal)
+		return "", errors.New("missing env var " + envPortal)
 	}
 	database.PortalName = "https://" + portal
 	jwt.PortalName = database.PortalName
@@ -114,15 +110,11 @@ func parseEnvironmentVariables(logger *logrus.Logger) (*database.DBCredentials, 
 	email.ServerLockID = os.Getenv(envServerDomain)
 	if email.ServerLockID == "" {
 		email.ServerLockID = database.PortalName
-		logger.Warningf(`Environment variable %s is missing! This server's identity
-			is set to the default '%s' value. That is OK only if this server is running on its own
-			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
+		logger.Warningf(`Environment variable %s is missing! This server's identity`+
+			` is set to the default '%s' value. That is OK only if this server is running on its own`+
+			` and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
 	}
 
-	dbCreds, err := loadDBCredentials()
-	if err != nil {
-		return nil, "", errors.AddContext(err, "failed to fetch DB credentials")
-	}
 	if sk := os.Getenv(envStripeAPIKey); sk != "" {
 		stripe.Key = sk
 		api.StripeTestMode = !strings.HasPrefix(stripe.Key, "sk_live_")
@@ -134,10 +126,10 @@ func parseEnvironmentVariables(logger *logrus.Logger) (*database.DBCredentials, 
 	if jwtTTLStr := os.Getenv(envJWTTTL); jwtTTLStr != "" {
 		jwtTTL, err := strconv.Atoi(jwtTTLStr)
 		if err != nil {
-			return nil, "", fmt.Errorf("Failed to parse env var %s: %s", envJWTTTL, err)
+			return "", fmt.Errorf("failed to parse env var %s: %s", envJWTTTL, err)
 		}
 		if jwtTTL == 0 {
-			return nil, "", fmt.Errorf("The %s env var is set to zero, which is an invalid value. It needs to be non-negative or not be present.")
+			return "", fmt.Errorf("the %s env var is set to zero, which is an invalid value (must be positive or unset)", envJWTTTL)
 		}
 		jwt.TTL = jwtTTL
 	}
@@ -146,12 +138,12 @@ func parseEnvironmentVariables(logger *logrus.Logger) (*database.DBCredentials, 
 	emailURI := os.Getenv(envEmailURI)
 	{
 		if emailURI == "" {
-			return nil, "", errors.New(envEmailURI + " is empty")
+			return "", errors.New(envEmailURI + " is empty")
 		}
 		// Validate the given URI.
 		uri, err := url.Parse(emailURI)
-		if err != nil {
-			return nil, "", errors.AddContext(err, "invalid email URI given in "+envEmailURI)
+		if err != nil || uri.Host == "" || uri.User == nil {
+			return "", errors.New("invalid email URI given in " + envEmailURI)
 		}
 		// Set the FROM address to outgoing emails. This can be overridden by
 		// the ACCOUNTS_EMAIL_FROM optional environment variable.
@@ -163,15 +155,18 @@ func parseEnvironmentVariables(logger *logrus.Logger) (*database.DBCredentials, 
 		}
 	}
 	// Fetch the configuration for maximum number of API keys allowed per user.
-	maxAPIKeys, err := strconv.Atoi(os.Getenv(envMaxNumAPIKeysPerUser))
-	if err != nil {
-		log.Printf("Warning: Failed to parse %s env var. Error: %s", envMaxNumAPIKeysPerUser, err.Error())
-	}
-	if maxAPIKeys > 0 {
-		database.MaxNumAPIKeysPerUser = maxAPIKeys
+	maxAPIKeysStr := os.Getenv(envMaxNumAPIKeysPerUser)
+	if maxAPIKeysStr != "" {
+		maxAPIKeys, err := strconv.Atoi(maxAPIKeysStr)
+		if err != nil {
+			log.Printf("Warning: Failed to parse %s env var. Error: %s", envMaxNumAPIKeysPerUser, err.Error())
+		}
+		if maxAPIKeys > 0 {
+			database.MaxNumAPIKeysPerUser = maxAPIKeys
+		}
 	}
 
-	return &dbCreds, emailURI, nil
+	return emailURI, nil
 }
 
 func main() {
@@ -181,7 +176,15 @@ func main() {
 	ctx := context.Background()
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
-	dbCreds, emailURI, err := parseEnvironmentVariables(logger)
+
+	// Load the environment variables from the .env file.
+	_ = godotenv.Load()
+	dbCreds, err := loadDBCredentials()
+	if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
+	}
+
+	emailURI, err := parseEnvironmentVariables(logger)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -194,7 +197,7 @@ func main() {
 		log.Fatal(errors.AddContext(err, fmt.Sprintf("failed to load JWKS file from %s", jwt.AccountsJWKSFile)))
 	}
 	// Connect to the database.
-	db, err := database.New(ctx, *dbCreds, logger)
+	db, err := database.New(ctx, dbCreds, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
