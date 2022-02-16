@@ -35,6 +35,7 @@ type (
 		Logger *logrus.Logger
 		// If set, this cookie will be attached to all requests.
 		Cookie *http.Cookie
+		Token  string
 
 		cancel context.CancelFunc
 	}
@@ -165,6 +166,9 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 	if at.Cookie != nil {
 		req.Header.Set("Cookie", at.Cookie.String())
 	}
+	if at.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+at.Token)
+	}
 	c := http.Client{}
 	r, err = c.Do(req)
 	if err != nil {
@@ -216,6 +220,9 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Respon
 	if at.Cookie != nil {
 		req.Header.Set("Cookie", at.Cookie.String())
 	}
+	if at.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+at.Token)
+	}
 	client := http.Client{}
 	r, err := client.Do(req)
 	if err != nil {
@@ -243,6 +250,9 @@ func (at *AccountsTester) request(method string, endpoint string, queryParams ur
 	}
 	if at.Cookie != nil {
 		req.Header.Set("Cookie", at.Cookie.String())
+	}
+	if at.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+at.Token)
 	}
 	client := http.Client{}
 	r, err := client.Do(req)
