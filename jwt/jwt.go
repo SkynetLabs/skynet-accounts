@@ -3,9 +3,7 @@ package jwt
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
-	"reflect"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
@@ -94,71 +92,8 @@ func TokenForUser(email, sub string) (jwt.Token, error) {
 	return tk, nil
 }
 
-// TokenFromContext extracts the JWT token from the
-// context and returns the contained user sub, claims and the token itself.
-//
-// Example claims structure:
-//
-// map[
-//    exp:1.607594172e+09
-//    iat:1.607593272e+09
-//    iss:https://siasky.net/
-//    jti:1e5872ae-71d8-49ec-a550-4fc6163cbbf2
-//    nbf:1.607593272e+09
-//    sub:695725d4-a345-4e68-919a-7395cb68484c
-//    session:map[
-//        active:true
-//        authenticated_at:2020-12-09T16:09:35.004003Z
-//        issued_at:2020-12-09T16:09:35.004042Z
-//        expires_at:2020-12-10T16:09:35.004003Z
-//        id:9911ad26-e47f-4ec4-86a1-fbbc7fd5073e
-//        identity:map[
-//            id:695725d4-a345-4e68-919a-7395cb68484c
-//            recovery_addresses:[
-//                map[
-//                    id:e2d847e1-1885-4edf-bccb-64b527b30096
-//                    value:ivaylo@nebulous.tech
-//                    via:email
-//                ]
-//            ]
-//            schema_id:default
-//            schema_url:https://siasky.net/secure/.ory/kratos/public/schemas/default
-//            traits:map[
-//                email:ivaylo@nebulous.tech
-//                name:map[
-//                    first:Ivaylo
-//                    last:Novakov
-//                ]—
-//            ]
-//            verifiable_addresses:[
-//                map[
-//                    id:953b0c1a-def9-4fa2-af23-fb36c00768d2
-//                    status:pending
-//                    value:ivaylo@nebulous.tech
-//                    verified:true
-//                    verified_at:2020-12-09T16:09:35.004042Z
-//                    via:email
-//                ]
-//            ]
-//        ]
-//    ]
-// ]
-func TokenFromContext(ctx context.Context) (sub string, email string, token jwt.Token, err error) {
-	defer func() {
-		// This handles a potential problem with the JWT token that would cause
-		// a panic during one of the type cases. It shouldn't happen with a
-		// properly formatted token and it's easier to read than constantly
-		// checking whether the conversion was successful.
-		if e := recover(); e != nil {
-			err = errors.New(fmt.Sprintf("failed to parse token from context. error: %v", e))
-			return
-		}
-	}()
-	t, ok := ctx.Value(ctxValue("token")).(jwt.Token)
-	if !ok {
-		err = errors.New(fmt.Sprintf("invalid token type: %s", reflect.TypeOf(ctx.Value(ctxValue("token"))).String()))
-		return
-	}
+// TokenFields extracts and returns some fields of interest from the JWT token.
+func TokenFields(t jwt.Token) (sub string, email string, token jwt.Token, err error) {
 	s, ok := t.Get("sub")
 	if !ok || s.(string) == "" {
 		err = errors.New("sub field missing")
@@ -172,7 +107,9 @@ func TokenFromContext(ctx context.Context) (sub string, email string, token jwt.
 	session := sess.(map[string]interface{})
 	identity := session["identity"].(map[string]interface{})
 	traits := identity["traits"].(map[string]interface{})
-	email = traits["email"].(string)
+	if traits != nil {
+		email = traits["email"].(string)
+	}
 	sub = s.(string)
 	token = t
 	return
@@ -185,17 +122,6 @@ func TokenSerialize(t jwt.Token) ([]byte, error) {
 		return nil, err
 	}
 	return jwt.Sign(t, sigAlgo, key)
-}
-
-// UserDetailsFromJWT extracts the user details from the JWT token embedded in
-// the context. We do it that way, so we can call this from anywhere in the code.
-func UserDetailsFromJWT(ctx context.Context) (sub, email string, err error) {
-	if ctx == nil {
-		err = errors.New("Invalid context")
-		return
-	}
-	sub, email, _, err = TokenFromContext(ctx)
-	return
 }
 
 // ValidateToken verifies the validity of a JWT token, both in terms of validity

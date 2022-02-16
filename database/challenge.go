@@ -44,6 +44,8 @@ var (
 	// response object is not valid, i.e. it's either missing one of its
 	// required fields or those do not follow the expected format.
 	ErrInvalidChallengeResponse = errors.New("invalid response")
+	// ErrInvalidPublikKey is returned when the provided public key is invalid.
+	ErrInvalidPublikKey = errors.New("invalid pubKey provided")
 	// PortalName is the name this portal uses to announce itself to the world.
 	// Its value is controlled by the PORTAL_DOMAIN environment variable.
 	// This name does not have a protocol prefix.
@@ -252,10 +254,10 @@ func (cr *ChallengeResponse) LoadFromReader(r io.Reader) error {
 func (pk *PubKey) LoadString(s string) error {
 	bytes, err := hex.DecodeString(s)
 	if err != nil {
-		return errors.AddContext(err, "invalid pubKey provided")
+		return errors.AddContext(err, ErrInvalidPublikKey.Error())
 	}
 	if len(bytes) != PubKeySize {
-		return errors.New("invalid pubKey provided")
+		return ErrInvalidPublikKey
 	}
 	*pk = bytes[:]
 	return nil

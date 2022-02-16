@@ -412,8 +412,8 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try to delete the same user again.
 	r, _, _ = at.Delete("/user", nil)
-	if r.StatusCode != http.StatusNotFound {
-		t.Fatalf("Expected %d Not Found, got %d.", http.StatusNotFound, r.StatusCode)
+	if r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected %d, got %d.", http.StatusUnauthorized, r.StatusCode)
 	}
 }
 

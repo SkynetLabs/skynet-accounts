@@ -16,18 +16,18 @@ import (
 // testAPIKeysFlow validates the creation, listing, and deletion of API keys.
 func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
-	r, _, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
+	r, body, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(body))
 	}
 	at.Cookie = test.ExtractCookie(r)
 
 	aks := make([]database.APIKeyRecord, 0)
 
 	// List all API keys this user has. Expect the list to be empty.
-	r, body, err := at.Get("/user/apikeys", nil)
+	r, body, err = at.Get("/user/apikeys", nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(body))
 	}
 	err = json.Unmarshal(body, &aks)
 	if err != nil {
@@ -40,7 +40,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	// Create a new API key.
 	r, body, err = at.Post("/user/apikeys", nil, nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(body))
 	}
 	var ak1 database.APIKeyRecord
 	err = json.Unmarshal(body, &ak1)
@@ -51,7 +51,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	// Create another API key.
 	r, body, err = at.Post("/user/apikeys", nil, nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(body))
 	}
 	var ak2 database.APIKeyRecord
 	err = json.Unmarshal(body, &ak2)
@@ -62,7 +62,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	// List all API keys this user has. Expect to find both keys we created.
 	r, body, err = at.Get("/user/apikeys", nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(body))
 	}
 	err = json.Unmarshal(body, &aks)
 	if err != nil {
@@ -81,12 +81,12 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	// Delete an API key.
 	r, body, err = at.Delete("/user/apikeys/"+ak1.ID.Hex(), nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(body))
 	}
 	// List all API keys this user has. Expect to find only the second one.
 	r, body, err = at.Get("/user/apikeys", nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, string(body))
 	}
 	err = json.Unmarshal(body, &aks)
 	if err != nil {
@@ -133,7 +133,12 @@ func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Stop using the cookie, so we can test the API key.
 	at.Cookie = nil
-	var ak database.APIKeyRecord
+	// We use a custom struct and not the APIKeyRecord one because that one does
+	// not render the key in JSON form and therefore it won't unmarshal it,
+	// either.
+	var ak struct {
+		Key database.APIKey
+	}
 	err = json.Unmarshal(body, &ak)
 	if err != nil {
 		t.Fatal(err)

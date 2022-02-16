@@ -2,15 +2,14 @@ package database
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net/mail"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/hash"
-	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"gitlab.com/NebulousLabs/errors"
@@ -258,31 +257,9 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
-// UserBySub returns the user with the given sub. If `create` is `true` it will
-// create the user if it doesn't exist.
-func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
-	users, err := db.managedUsersBySub(ctx, sub)
-	if create && errors.Contains(err, ErrUserNotFound) {
-		_, email, err := jwt.UserDetailsFromJWT(ctx)
-		if err != nil {
-			// Log the error but don't do anything differently.
-			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
-		}
-		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
-		// If we're successful or hit any error, other than a duplicate key we
-		// want to just return. Hitting a duplicate key error means we ran into
-		// a race condition and we can easily recover from that.
-		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-			return u, err
-		}
-		// Recover from the race condition by fetching the existing user from
-		// the DB.
-		users, err = db.managedUsersBySub(ctx, sub)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return users[0], nil
+// UserBySub returns the user with the given sub.
+func (db *DB) UserBySub(ctx context.Context, sub string) (*User, error) {
+	return db.managedUserBySub(ctx, sub)
 }
 
 // UserConfirmEmail confirms that the email to which the passed confirmation
@@ -322,35 +299,36 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier int) (*User, error) {
-	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
-	// emailAddr, err := lib.NormalizeEmail(emailAddr)
-	// if err != nil {
-	// 	return nil, errors.AddContext(err, "invalid email address")
-	// }
-	// Check for an existing user with this email.
-	users, err := db.managedUsersByField(ctx, "email", emailAddr)
-	if err != nil && !errors.Contains(err, ErrUserNotFound) {
-		return nil, errors.AddContext(err, "failed to query DB")
-	}
-	if len(users) > 0 {
-		return nil, ErrUserAlreadyExists
+	// Ensure the email is valid if it's passed. We allow empty emails.
+	if emailAddr != "" {
+		addr, err := mail.ParseAddress(emailAddr)
+		if err != nil {
+			return nil, errors.AddContext(err, "invalid email address")
+		}
+		emailAddr = addr.Address
 	}
 	if sub == "" {
 		return nil, errors.New("empty sub is not allowed")
 	}
-	// Check for an existing user with this sub.
-	users, err = db.managedUsersBySub(ctx, sub)
+
+	// Check for an existing user with this email.
+	_, err := db.UserByEmail(ctx, emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
-	if len(users) > 0 {
+	if !errors.Contains(err, ErrUserNotFound) {
 		return nil, ErrUserAlreadyExists
 	}
-	// TODO Review this when we fully migrate away from Kratos.
+	// Check for an existing user with this sub.
+	_, err = db.managedUserBySub(ctx, sub)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if !errors.Contains(err, ErrUserNotFound) {
+		return nil, ErrUserAlreadyExists
+	}
 	// Generate a password hash, if a password is provided. A password might not
-	// be provided if the user is generated externally, e.g. in Kratos. We can
-	// remove that option in the future when `accounts` is the only system
-	// managing users but for the moment we still need it.
+	// be provided if the user is registered from MySky with a pubkey.
 	var passHash []byte
 	if pass != "" {
 		passHash, err = hash.Generate(pass)
@@ -411,11 +389,11 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		}
 	}
 	// Check for an existing user with this sub.
-	users, err = db.managedUsersBySub(ctx, sub)
+	_, err = db.managedUserBySub(ctx, sub)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
-	if len(users) > 0 {
+	if !errors.Contains(err, ErrUserNotFound) {
 		return nil, ErrUserAlreadyExists
 	}
 	// Generate a password hash, if a password is provided. A password might not
@@ -571,10 +549,22 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	return users, nil
 }
 
-// managedUsersBySub fetches all users that have the given sub. This should
+// managedUserBySub fetches all users that have the given sub. This should
 // normally be up to one user.
-func (db *DB) managedUsersBySub(ctx context.Context, sub string) ([]*User, error) {
-	return db.managedUsersByField(ctx, "sub", sub)
+func (db *DB) managedUserBySub(ctx context.Context, sub string) (*User, error) {
+	sr := db.staticUsers.FindOne(ctx, bson.M{"sub": sub})
+	if sr.Err() == mongo.ErrNoDocuments {
+		return nil, ErrUserNotFound
+	}
+	if sr.Err() != nil {
+		return nil, sr.Err()
+	}
+	var u User
+	err := sr.Decode(&u)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 // userStats reports statistical information about the user.
@@ -823,6 +813,17 @@ func (db *DB) userRegistryReadStats(ctx context.Context, userID primitive.Object
 		return 0, 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
 	}
 	return reads, reads * skynet.CostBandwidthRegistryRead, nil
+}
+
+// HasKey checks if the given pubkey is among the pubkeys registered for the
+// user.
+func (u User) HasKey(pk PubKey) bool {
+	for _, upk := range u.PubKeys {
+		if subtle.ConstantTimeCompare(upk, pk) == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // monthStart returns the start of the user's subscription month.

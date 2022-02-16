@@ -1,14 +1,11 @@
 package jwt
 
 import (
-	"context"
 	"encoding/base64"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwt"
 	"github.com/sirupsen/logrus"
@@ -106,46 +103,5 @@ func TestValidateToken_Expired(t *testing.T) {
 	_, err = ValidateToken(string(bytes))
 	if err != ErrTokenExpired {
 		t.Fatalf("Expected an ErrTokenExpired, got %v", err)
-	}
-}
-
-// TestTokenFromContext ensures that TokenFromContext works as expected.
-// Note that this test does not cover validating the token's signature, as that
-// is handled when the token is inserted into the context by api.validate().
-func TestTokenFromContext(t *testing.T) {
-	err := LoadAccountsKeySet(logrus.New())
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Create a test token.
-	email := "user@email.com"
-	sub, err := lib.GenerateUUID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tk, err := TokenForUser(email, sub)
-	if err != nil {
-		t.Fatal("failed to generate token:", err)
-	}
-	// Embed the token in a new context.
-	ctx := ContextWithToken(context.Background(), tk)
-	// Happy case.
-	subNew, emailNew, tkNew, err := TokenFromContext(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if subNew != sub {
-		t.Fatalf("Expected sub to be %s, got %s.", sub, subNew)
-	}
-	if emailNew != email {
-		t.Fatalf("Expected email to be %s, got %s.", email, emailNew)
-	}
-	if !reflect.DeepEqual(tk, tkNew) {
-		t.Fatal("Fetched token is different from the original.")
-	}
-	// Test missing context.
-	_, _, _, err = TokenFromContext(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "failed to parse token from context") {
-		t.Fatalf("Expected error 'failed to parse token from context', got %v.", err)
 	}
 }
