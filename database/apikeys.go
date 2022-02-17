@@ -33,7 +33,8 @@ var (
 type (
 	// APIKey is a base64URL-encoded representation of []byte with length PubKeySize
 	APIKey string
-	// APIKeyRecord is a non-expiring authentication token generated on user demand.
+	// APIKeyRecord is a non-expiring authentication token generated on user
+	// demand.
 	APIKeyRecord struct {
 		ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 		UserID    primitive.ObjectID `bson:"user_id" json:"-"`

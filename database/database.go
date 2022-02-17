@@ -50,6 +50,9 @@ var (
 	collConfiguration = "configuration"
 	// collAPIKeys defines the name of the db table with API keys for users.
 	collAPIKeys = "api_keys"
+	// collPubAPIKeys defines the name of the db table with public API keys for
+	// users.
+	collPubAPIKeys = "pub_api_keys"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -97,6 +100,7 @@ type (
 		staticUnconfirmedUserUpdates *mongo.Collection
 		staticConfiguration          *mongo.Collection
 		staticAPIKeys                *mongo.Collection
+		staticPubAPIKeys             *mongo.Collection
 		staticDeps                   lib.Dependencies
 		staticLogger                 *logrus.Logger
 	}
@@ -148,6 +152,7 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 		staticUnconfirmedUserUpdates: database.Collection(collUnconfirmedUserUpdates),
 		staticConfiguration:          database.Collection(collConfiguration),
 		staticAPIKeys:                database.Collection(collAPIKeys),
+		staticPubAPIKeys:             database.Collection(collPubAPIKeys),
 		staticLogger:                 logger,
 	}
 	return db, nil
@@ -285,6 +290,16 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 			},
 		},
 		collAPIKeys: {
+			{
+				Keys:    bson.D{{"key", 1}},
+				Options: options.Index().SetName("key_unique").SetUnique(true),
+			},
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("user_id"),
+			},
+		},
+		collPubAPIKeys: {
 			{
 				Keys:    bson.D{{"key", 1}},
 				Options: options.Index().SetName("key_unique").SetUnique(true),

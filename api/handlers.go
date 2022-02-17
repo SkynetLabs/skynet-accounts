@@ -1048,7 +1048,7 @@ func (api *API) trackRegistryWritePOST(u *database.User, w http.ResponseWriter, 
 func (api *API) userUploadsDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sl := ps.ByName("skylink")
 	if !database.ValidSkylinkHash(sl) {
-		api.WriteError(w, errors.New("invalid skylink"), http.StatusBadRequest)
+		api.WriteError(w, database.ErrInvalidSkylink, http.StatusBadRequest)
 		return
 	}
 	skylink, err := api.staticDB.Skylink(req.Context(), sl)

@@ -64,7 +64,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 		return errors.New("invalid user")
 	}
 	if skylink.ID.IsZero() {
-		return errors.New("invalid skylink")
+		return ErrInvalidSkylink
 	}
 
 	// Check if there exists a download of this skylink by this user, updated
@@ -92,7 +92,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 // number of such downloads.
 func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]DownloadResponse, int, error) {
 	if skylink.ID.IsZero() {
-		return nil, 0, errors.New("invalid skylink")
+		return nil, 0, ErrInvalidSkylink
 	}
 	if err := validateOffsetPageSize(offset, pageSize); err != nil {
 		return nil, 0, err
