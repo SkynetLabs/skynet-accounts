@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -184,7 +185,8 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	api.staticLogger.Traceln("Processing subscription:", s.ID)
 	u, err := api.staticDB.UserByStripeID(ctx, s.Customer.ID)
 	if err != nil {
-		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
+		errMsg := fmt.Sprintf("failed to fetch user from DB for customer id %s", s.Customer.ID)
+		return errors.AddContext(err, errMsg)
 	}
 	// Get all active subscriptions for this customer. There should be only one
 	// (or none) but we'd better check.
@@ -225,7 +227,11 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		Prorate:    &True,
 	}
 	for _, subsc := range subs {
-		if subsc == nil || subsc.ID == "" || (mostRecentSub != nil && subsc.ID == mostRecentSub.ID) {
+		if subsc == nil || (mostRecentSub != nil && subsc.ID == mostRecentSub.ID) {
+			continue
+		}
+		if subsc.ID == "" {
+			api.staticLogger.Debugf("Empty subscription ID! User ID '%s', Stripe ID '%s', subscription object '%+v'", u.ID.Hex(), u.StripeID, subs)
 			continue
 		}
 		subsc, err = sub.Cancel(subsc.ID, &p)
