@@ -42,7 +42,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/login", api.WithDBSession(api.noAuth(api.loginGET)))
 	api.staticRouter.POST("/login", api.WithDBSession(api.noAuth(api.loginPOST)))
 	api.staticRouter.POST("/logout", api.withAuth(api.logoutPOST))
-	api.staticRouter.GET("/register", api.WithDBSession(api.noAuth(api.registerGET)))
+	api.staticRouter.GET("/register", api.noAuth(api.registerGET))
 	api.staticRouter.POST("/register", api.WithDBSession(api.noAuth(api.registerPOST)))
 
 	// Endpoints at which Nginx reports portal usage.
