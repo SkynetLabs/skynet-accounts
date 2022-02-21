@@ -445,6 +445,9 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if tl.TierID != database.TierFree {
 		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
 	}
+	if tl.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
+	}
 
 	// Call /user/limits without a cookie. Expect FreeAnonymous response.
 	at.Cookie = nil
@@ -458,6 +461,9 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 	if tl.TierID != database.TierAnonymous {
 		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierAnonymous, tl.TierID)
+	}
+	if tl.TierName != database.UserLimits[database.TierAnonymous].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, tl.TierName)
 	}
 }
 

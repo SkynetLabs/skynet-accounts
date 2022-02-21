@@ -210,6 +210,9 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if ul.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, ul.TierName)
+	}
 	if ul.TierID != database.TierFree {
 		t.Fatalf("Expected tier id '%d', got '%d'", database.TierFree, ul.TierID)
 	}
@@ -248,6 +251,9 @@ func TestUserTierCache(t *testing.T) {
 	if ul.TierID != database.TierAnonymous {
 		t.Fatalf("Expected tier id '%d', got '%d'", database.TierAnonymous, ul.TierID)
 	}
+	if ul.TierName != database.UserLimits[database.TierAnonymous].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, ul.TierName)
+	}
 	// Delete the uploaded file, so the user's quota recovers.
 	// This call should invalidate the tier cache.
 	_, _, err = at.Delete("/user/uploads/"+sl.Skylink, nil)
@@ -263,5 +269,8 @@ func TestUserTierCache(t *testing.T) {
 	}
 	if ul.TierID != database.TierPremium20 {
 		t.Fatalf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
+	}
+	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
 	}
 }
