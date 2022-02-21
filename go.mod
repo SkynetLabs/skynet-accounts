@@ -13,7 +13,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/klauspost/reedsolomon v1.9.15 // indirect
 	github.com/lestrrat-go/jwx v1.2.13
-	github.com/lib/pq v1.10.4
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stripe/stripe-go/v71 v71.48.0
 	github.com/tidwall/pretty v1.2.0 // indirect
