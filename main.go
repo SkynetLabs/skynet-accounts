@@ -160,7 +160,7 @@ func main() {
 		}
 	}
 	// Fetch the configuration for maximum number of API keys allowed per user.
-	if maxAPIKeysStr := os.Getenv(envMaxNumAPIKeysPerUser); maxAPIKeysStr != "" {
+	if maxAPIKeysStr, ok := os.LookupEnv(envMaxNumAPIKeysPerUser); !ok {
 		maxAPIKeys, err := strconv.Atoi(maxAPIKeysStr)
 		if err != nil {
 			log.Printf("Warning: Failed to parse %s env var. Error: %s", envMaxNumAPIKeysPerUser, err.Error())
