@@ -116,7 +116,7 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 func (api *API) WriteError(w http.ResponseWriter, err error, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
-	api.staticLogger.Debugln(code, err)
+	api.staticLogger.Errorln(code, err)
 	encodingErr := json.NewEncoder(w).Encode(errorWrap{Message: err.Error()})
 	if _, isJSONErr := encodingErr.(*json.SyntaxError); isJSONErr {
 		// Marshalling should only fail in the event of a developer error.
