@@ -205,7 +205,7 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ul database.UserLimitsResponse
+	var ul api.UserLimitsGET
 	err = json.Unmarshal(b, &ul)
 	if err != nil {
 		t.Fatal(err)

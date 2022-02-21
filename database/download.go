@@ -37,14 +37,6 @@ type DownloadResponse struct {
 	CreatedAt time.Time `bson:"created_at" json:"downloadedOn"`
 }
 
-// DownloadsResponse defines the final format of our response to the caller.
-type DownloadsResponse struct {
-	Items    []DownloadResponse `json:"items"`
-	Offset   int                `json:"offset"`
-	PageSize int                `json:"pageSize"`
-	Count    int                `json:"count"`
-}
-
 // DownloadByID fetches a single download from the DB.
 func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Download, error) {
 	var d Download

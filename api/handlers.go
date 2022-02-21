@@ -30,9 +30,27 @@ const (
 )
 
 type (
-	// LimitsPublic provides public information of the various limits this
+	// ChallengePublic is the response of GET /login, GET /register,
+	// GET /user/pubkey/register
+	ChallengePublic struct {
+		// Challenge is a hex-encoded representation of the []byte challenge.
+		Challenge string `bson:"challenge" json:"challenge"`
+	}
+	// DownloadsGET is the response of GET /user/downloads
+	DownloadsGET struct {
+		Items    []database.DownloadResponse `json:"items"`
+		Offset   int                         `json:"offset"`
+		PageSize int                         `json:"pageSize"`
+		Count    int                         `json:"count"`
+	}
+	// HealthGET is the response type of GET /health
+	HealthGET struct {
+		DBAlive bool `json:"dbAlive"`
+	}
+	// LimitsGET provides public information of the various limits this
 	// portal has.
-	LimitsPublic struct {
+	// This is the response of GET /limits
+	LimitsGET struct {
 		UserLimits []TierLimitsPublic `json:"userLimits"`
 	}
 	// TierLimitsPublic is a DTO specifically designed to inform the public
@@ -46,13 +64,24 @@ type (
 		RegistryDelay     int    `json:"registryDelay"` // ms
 		Storage           int64  `json:"storageLimit"`
 	}
-
+	// UploadsGET is the response of GET /user/uploads
+	UploadsGET struct {
+		Items    []database.UploadResponse `json:"items"`
+		Offset   int                       `json:"offset"`
+		PageSize int                       `json:"pageSize"`
+		Count    int                       `json:"count"`
+	}
 	// UserGET defines a representation of the User struct returned by all
 	// handlers. This allows us to tweak the fields of the struct before
 	// returning it.
 	UserGET struct {
 		database.User
 		EmailConfirmed bool `json:"emailConfirmed"`
+	}
+	// UserLimitsGET is response of GET /user/limits
+	UserLimitsGET struct {
+		TierID int `json:"tierID"`
+		database.TierLimits
 	}
 
 	// accountRecoveryPOST defines the payload we expect when a user is trying
@@ -69,9 +98,9 @@ type (
 		Password string `json:"password"`
 	}
 
-	// userUpdatePOST defines the fields of the User record that can be changed
+	// userUpdatePUT defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
-	userUpdatePOST struct {
+	userUpdatePUT struct {
 		Email    string `json:"email,omitempty"`
 		Password string `json:"password,omitempty"`
 		StripeID string `json:"stripeCustomerId,omitempty"`
@@ -80,9 +109,7 @@ type (
 
 // healthGET returns the status of the service
 func (api *API) healthGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	status := struct {
-		DBAlive bool `json:"dbAlive"`
-	}{}
+	var status HealthGET
 	err := api.staticDB.Ping(req.Context())
 	status.DBAlive = err == nil
 	api.WriteJSON(w, status)
@@ -90,7 +117,7 @@ func (api *API) healthGET(_ *database.User, w http.ResponseWriter, req *http.Req
 
 // limitsGET returns the speed limits of this portal.
 func (api *API) limitsGET(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	resp := LimitsPublic{
+	resp := LimitsGET{
 		UserLimits: api.staticTierLimits,
 	}
 	api.WriteJSON(w, resp)
@@ -118,7 +145,7 @@ func (api *API) loginGET(_ *database.User, w http.ResponseWriter, req *http.Requ
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteJSON(w, ch)
+	api.WriteJSON(w, ChallengePublic{ch.Challenge})
 }
 
 // loginPOST starts a user session by issuing a cookie
@@ -295,7 +322,7 @@ func (api *API) registerGET(_ *database.User, w http.ResponseWriter, req *http.R
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.WriteJSON(w, ch)
+	api.WriteJSON(w, ChallengePublic{ch.Challenge})
 }
 
 // registerPOST registers a new user based on a challenge-response.
@@ -371,7 +398,7 @@ func (api *API) userGET(u *database.User, w http.ResponseWriter, _ *http.Request
 func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// First check for an API key.
 	ak, err := apiKeyFromRequest(req)
-	respAnon := database.UserLimitsResponse{
+	respAnon := UserLimitsGET{
 		TierID:     database.TierAnonymous,
 		TierLimits: database.UserLimits[database.TierAnonymous],
 	}
@@ -382,7 +409,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			api.WriteJSON(w, respAnon)
 			return
 		}
-		resp := database.UserLimitsResponse{
+		resp := UserLimitsGET{
 			TierID:     u.Tier,
 			TierLimits: database.UserLimits[u.Tier],
 		}
@@ -417,7 +444,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	if !ok {
 		build.Critical("Failed to fetch user from UserTierCache right after setting it.")
 	}
-	resp := database.UserLimitsResponse{
+	resp := UserLimitsGET{
 		TierID:     tier,
 		TierLimits: database.UserLimits[tier],
 	}
@@ -510,14 +537,14 @@ func (api *API) userPOST(_ *database.User, w http.ResponseWriter, req *http.Requ
 // This method receives its parameters as a JSON object.
 func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Read and parse the request body.
-	var payload userUpdatePOST
+	var payload userUpdatePUT
 	err := parseRequestBodyJSON(req.Body, LimitBodySizeSmall, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	if payload == (userUpdatePOST{}) {
+	if payload == (userUpdatePUT{}) {
 		// The payload is empty, nothing to do.
 		api.WriteError(w, errors.New("empty request"), http.StatusBadRequest)
 		return
@@ -648,7 +675,7 @@ func (api *API) userPubKeyRegisterGET(u *database.User, w http.ResponseWriter, r
 		api.WriteError(w, errors.AddContext(err, "failed to store unconfirmed user update"), http.StatusInternalServerError)
 		return
 	}
-	api.WriteJSON(w, ch)
+	api.WriteJSON(w, ChallengePublic{ch.Challenge})
 }
 
 // userPubKeyRegisterPOST updates the user's pubKey based on a challenge-response.
@@ -726,7 +753,7 @@ func (api *API) userUploadsGET(u *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.UploadsResponse{
+	response := UploadsGET{
 		Items:    ups,
 		Offset:   offset,
 		PageSize: pageSize,
@@ -752,7 +779,7 @@ func (api *API) userDownloadsGET(u *database.User, w http.ResponseWriter, req *h
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	response := database.DownloadsResponse{
+	response := DownloadsGET{
 		Items:    downs,
 		Offset:   offset,
 		PageSize: pageSize,
