@@ -11,9 +11,9 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-// TestParseEnvironmentVariables ensures that we properly parse and validate all
+// TestParseConfiguration ensures that we properly parse and validate all
 // required environment variables.
-func TestParseEnvironmentVariables(t *testing.T) {
+func TestParseConfiguration(t *testing.T) {
 	logger := logrus.New()
 
 	// Missing PORTAL_DOMAIN
@@ -21,7 +21,7 @@ func TestParseEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = parseEnvironmentVariables(logger)
+	_, err = parseConfiguration(logger)
 	if err == nil || !strings.Contains(err.Error(), "missing env var "+envPortal) {
 		t.Fatal("Failed to error out on invalid", envPortal)
 	}
@@ -35,7 +35,7 @@ func TestParseEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = parseEnvironmentVariables(logger)
+	_, err = parseConfiguration(logger)
 	if email.ServerLockID != database.PortalName {
 		t.Fatalf("Expected ServerLockID to be %s, got %s", database.PortalName, email.ServerLockID)
 	}
@@ -49,7 +49,7 @@ func TestParseEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = parseEnvironmentVariables(logger)
+	_, err = parseConfiguration(logger)
 	if err == nil || !strings.Contains(err.Error(), "failed to parse env var "+envJWTTTL) {
 		t.Fatal("Failed to error out on invalid", envJWTTTL)
 	}
@@ -58,7 +58,7 @@ func TestParseEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = parseEnvironmentVariables(logger)
+	_, err = parseConfiguration(logger)
 	if err == nil || !strings.Contains(err.Error(), "env var is set to zero, which is an invalid value (must be positive or unset)") {
 		t.Fatal("Failed to error out on zero", envJWTTTL)
 	}
@@ -72,7 +72,7 @@ func TestParseEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = parseEnvironmentVariables(logger)
+	_, err = parseConfiguration(logger)
 	if err == nil || !strings.Contains(err.Error(), envEmailURI+" is empty") {
 		t.Fatal("Failed to error out on empty", envEmailURI)
 	}
@@ -81,7 +81,7 @@ func TestParseEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = parseEnvironmentVariables(logger)
+	_, err = parseConfiguration(logger)
 	if err == nil || !strings.Contains(err.Error(), "invalid email URI") {
 		t.Log(err)
 		t.Fatal("Failed to error out on invalid", envEmailURI)
@@ -92,12 +92,12 @@ func TestParseEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	// All values should be correct now.
-	emailURI, err := parseEnvironmentVariables(logger)
+	config, err := parseConfiguration(logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if emailURI != emailURIValue {
-		t.Fatalf("Expected email URI '%s', got '%s'", emailURIValue, emailURI)
+	if config.EmailURI != emailURIValue {
+		t.Fatalf("Expected email URI '%s', got '%s'", emailURIValue, config.EmailURI)
 	}
 }
 
