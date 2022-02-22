@@ -18,6 +18,10 @@ func TestParseConfiguration(t *testing.T) {
 	// Fetch current state of env and make sure we restore it on exit.
 	{
 		keys := []string{
+			envDBUser,
+			envDBPass,
+			envDBHost,
+			envDBPort,
 			envPortal,
 			envServerDomain,
 			envStripeAPIKey,
@@ -52,8 +56,33 @@ func TestParseConfiguration(t *testing.T) {
 
 	logger := logrus.New()
 
+	// Set required env vars to test values.
+	err := os.Setenv(envDBUser, "mongoUser")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Setenv(envDBPass, "mongoPass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Setenv(envDBHost, "mongoHost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Setenv(envDBPort, "1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	emailFrom := "disabled@example.net"
+	emailURIValue := fmt.Sprintf("smtps://%s:not-a-password@smtp.gmail.com:465/?skip_ssl_verify=false", emailFrom)
+	err = os.Setenv(envEmailURI, emailURIValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+
 	// Missing PORTAL_DOMAIN
-	err := os.Setenv(envPortal, "")
+	err = os.Setenv(envPortal, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,8 +102,11 @@ func TestParseConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	conf, err := parseConfiguration(logger)
-	if conf.ServerLockID != database.PortalName {
-		t.Fatalf("Expected ServerLockID to be %s, got %s", database.PortalName, conf.ServerLockID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conf.ServerLockID != conf.PortalName {
+		t.Fatalf("Expected ServerLockID to be %s, got %s", conf.PortalName, conf.ServerLockID)
 	}
 	serverDomain := "test.siasky.net"
 	err = os.Setenv(envServerDomain, serverDomain)
@@ -127,8 +159,6 @@ func TestParseConfiguration(t *testing.T) {
 	}
 
 	// Set all values
-	emailFrom := "disabled@example.net"
-	emailURIValue := fmt.Sprintf("smtps://%s:not-a-password@smtp.gmail.com:465/?skip_ssl_verify=false", emailFrom)
 	err = os.Setenv(envEmailURI, emailURIValue)
 	if err != nil {
 		t.Fatal(err)
@@ -208,20 +238,36 @@ func TestParseConfiguration(t *testing.T) {
 // TestLoadDBCredentials ensures that we validate that all required environment
 // variables are present.
 func TestLoadDBCredentials(t *testing.T) {
+	{
+		u := os.Getenv(envDBUser)
+		p := os.Getenv(envDBPass)
+		h := os.Getenv(envDBHost)
+		po := os.Getenv(envDBPort)
+		defer func() {
+			e1 := os.Setenv(envDBUser, u)
+			e2 := os.Setenv(envDBPass, p)
+			e3 := os.Setenv(envDBHost, h)
+			e4 := os.Setenv(envDBPort, po)
+			e := errors.Compose(e1, e2, e3, e4)
+			if e != nil {
+				t.Error(e)
+			}
+		}()
+	}
+
+	// Set valid test values.
+	e1 := os.Setenv(envDBUser, "mongoUser")
+	e2 := os.Setenv(envDBPass, "mongoPass")
+	e3 := os.Setenv(envDBHost, "mongoHost")
+	e4 := os.Setenv(envDBPort, "123")
+	e := errors.Compose(e1, e2, e3, e4)
+	if e != nil {
+		t.Error(e)
+	}
 	originals, err := loadDBCredentials()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		e1 := os.Setenv(envDBUser, originals.User)
-		e2 := os.Setenv(envDBPass, originals.Password)
-		e3 := os.Setenv(envDBHost, originals.Host)
-		e4 := os.Setenv(envDBPort, originals.Port)
-		e := errors.Compose(e1, e2, e3, e4)
-		if e != nil {
-			t.Error(e)
-		}
-	}()
 	// Missing user
 	err = os.Unsetenv(envDBUser)
 	if err != nil {
