@@ -8,6 +8,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/sirupsen/logrus"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 // TestParseEnvironmentVariables ensures that we properly parse and validate all
@@ -44,7 +45,7 @@ func TestParseEnvironmentVariables(t *testing.T) {
 	}
 
 	// Invalid ACCOUNTS_JWT_TTL
-	err = os.Setenv(envJWTTTL, "sadf")
+	err = os.Setenv(envJWTTTL, "invalid TTL value")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,17 +86,40 @@ func TestParseEnvironmentVariables(t *testing.T) {
 		t.Log(err)
 		t.Fatal("Failed to error out on invalid", envEmailURI)
 	}
-	err = os.Setenv(envEmailURI, "smtps://disabled@example.net:not-a-password@smtp.gmail.com:465/?skip_ssl_verify=false")
+	emailURIValue := "smtps://disabled@example.net:not-a-password@smtp.gmail.com:465/?skip_ssl_verify=false"
+	err = os.Setenv(envEmailURI, emailURIValue)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// All values should be correct now.
+	emailURI, err := parseEnvironmentVariables(logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if emailURI != emailURIValue {
+		t.Fatalf("Expected email URI '%s', got '%s'", emailURIValue, emailURI)
 	}
 }
 
 // TestLoadDBCredentials ensures that we validate that all required environment
 // variables are present.
 func TestLoadDBCredentials(t *testing.T) {
+	originals, err := loadDBCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		e1 := os.Setenv(envDBUser, originals.User)
+		e2 := os.Setenv(envDBPass, originals.Password)
+		e3 := os.Setenv(envDBHost, originals.Host)
+		e4 := os.Setenv(envDBPort, originals.Port)
+		e := errors.Compose(e1, e2, e3, e4)
+		if e != nil {
+			t.Error(e)
+		}
+	}()
 	// Missing user
-	err := os.Unsetenv(envDBUser)
+	err = os.Unsetenv(envDBUser)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +128,7 @@ func TestLoadDBCredentials(t *testing.T) {
 		t.Log(err)
 		t.Fatal("Failed to error out on missing", envDBUser)
 	}
-	err = os.Setenv(envDBUser, "user")
+	err = os.Setenv(envDBUser, originals.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +141,7 @@ func TestLoadDBCredentials(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "missing env var "+envDBPass) {
 		t.Fatal("Failed to error out on missing", envDBPass)
 	}
-	err = os.Setenv(envDBPass, "pass")
+	err = os.Setenv(envDBPass, originals.Password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +154,7 @@ func TestLoadDBCredentials(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "missing env var "+envDBHost) {
 		t.Fatal("Failed to error out on missing", envDBHost)
 	}
-	err = os.Setenv(envDBHost, "host")
+	err = os.Setenv(envDBHost, originals.Host)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +167,7 @@ func TestLoadDBCredentials(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "missing env var "+envDBPort) {
 		t.Fatal("Failed to error out on missing", envDBPort)
 	}
-	err = os.Setenv(envDBPort, "1234")
+	err = os.Setenv(envDBPort, originals.Port)
 	if err != nil {
 		t.Fatal(err)
 	}
