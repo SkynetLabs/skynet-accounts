@@ -23,7 +23,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-var (
+const (
 	// envAccountsJWKSFile holds the name of the environment variable which
 	// holds the path to the JWKS file we need to use. Optional.
 	envAccountsJWKSFile = "ACCOUNTS_JWKS_FILE"
