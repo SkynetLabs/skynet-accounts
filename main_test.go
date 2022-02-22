@@ -1,12 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
-	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -14,6 +15,41 @@ import (
 // TestParseConfiguration ensures that we properly parse and validate all
 // required environment variables.
 func TestParseConfiguration(t *testing.T) {
+	// Fetch current state of env and make sure we restore it on exit.
+	{
+		keys := []string{
+			envPortal,
+			envServerDomain,
+			envStripeAPIKey,
+			envAccountsJWKSFile,
+			envJWTTTL,
+			envEmailURI,
+			envEmailFrom,
+			envMaxNumAPIKeysPerUser,
+		}
+		values := make(map[string]string)
+		for _, k := range keys {
+			v, ok := os.LookupEnv(k)
+			if ok {
+				values[k] = v
+			}
+		}
+		defer func() {
+			errorList := make([]error, 0)
+			for _, k := range keys {
+				v, ok := values[k]
+				if ok {
+					errorList = append(errorList, os.Setenv(k, v))
+				} else {
+					errorList = append(errorList, os.Unsetenv(k))
+				}
+			}
+			if e := errors.Compose(errorList...); e != nil {
+				t.Error(e)
+			}
+		}()
+	}
+
 	logger := logrus.New()
 
 	// Missing PORTAL_DOMAIN
@@ -25,7 +61,8 @@ func TestParseConfiguration(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "missing env var "+envPortal) {
 		t.Fatal("Failed to error out on invalid", envPortal)
 	}
-	err = os.Setenv(envPortal, "siasky.net")
+	portal := "siasky.net"
+	err = os.Setenv(envPortal, portal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,11 +72,12 @@ func TestParseConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = parseConfiguration(logger)
-	if email.ServerLockID != database.PortalName {
-		t.Fatalf("Expected ServerLockID to be %s, got %s", database.PortalName, email.ServerLockID)
+	conf, err := parseConfiguration(logger)
+	if conf.ServerLockID != database.PortalName {
+		t.Fatalf("Expected ServerLockID to be %s, got %s", database.PortalName, conf.ServerLockID)
 	}
-	err = os.Setenv(envServerDomain, "test.siasky.net")
+	serverDomain := "test.siasky.net"
+	err = os.Setenv(envServerDomain, serverDomain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +100,8 @@ func TestParseConfiguration(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "env var is set to zero, which is an invalid value (must be positive or unset)") {
 		t.Fatal("Failed to error out on zero", envJWTTTL)
 	}
-	err = os.Setenv(envJWTTTL, "")
+	ttl := 123
+	err = os.Setenv(envJWTTTL, strconv.Itoa(ttl))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,18 +125,83 @@ func TestParseConfiguration(t *testing.T) {
 		t.Log(err)
 		t.Fatal("Failed to error out on invalid", envEmailURI)
 	}
-	emailURIValue := "smtps://disabled@example.net:not-a-password@smtp.gmail.com:465/?skip_ssl_verify=false"
+
+	// Set all values
+	emailFrom := "disabled@example.net"
+	emailURIValue := fmt.Sprintf("smtps://%s:not-a-password@smtp.gmail.com:465/?skip_ssl_verify=false", emailFrom)
 	err = os.Setenv(envEmailURI, emailURIValue)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// All values should be correct now.
+	sk := "sk_live_THIS_IS_A_LIVE_KEY"
+	err = os.Setenv(envStripeAPIKey, sk)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// All values should be correct now. Make sure we have the correct
+	// corresponding values in the returned configuration struct.
 	config, err := parseConfiguration(logger)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if config.EmailURI != emailURIValue {
-		t.Fatalf("Expected email URI '%s', got '%s'", emailURIValue, config.EmailURI)
+		t.Fatalf("Expected %s, got %s", emailURIValue, config.EmailURI)
+	}
+	if config.EmailFrom != emailFrom {
+		t.Fatalf("Expected %s, got %s", emailFrom, config.EmailFrom)
+	}
+	if config.PortalName != "https://"+portal {
+		t.Fatalf("Expected %s, got %s", "https://"+portal, config.PortalName)
+	}
+	if config.PortalAddressAccounts != "https://account."+portal {
+		t.Fatalf("Expected %s, got %s", "https://accounts."+portal, config.PortalAddressAccounts)
+	}
+	if config.StripeKey != sk {
+		t.Fatalf("Expected %s, got %s", sk, config.StripeKey)
+	}
+	if config.StripeTestMode {
+		t.Fatal("Expected live mode.")
+	}
+	if config.ServerLockID != serverDomain {
+		t.Fatalf("Expected %s, got %s", serverDomain, config.ServerLockID)
+	}
+	if config.ServerLockID != serverDomain {
+		t.Fatalf("Expected %s, got %s", serverDomain, config.ServerLockID)
+	}
+	if config.JWTTTL != ttl {
+		t.Fatalf("Expected %d, got %d", ttl, config.JWTTTL)
+	}
+	if config.MaxAPIKeys != database.MaxNumAPIKeysPerUser {
+		t.Fatalf("Expected %d, got %d", database.MaxNumAPIKeysPerUser, config.MaxAPIKeys)
+	}
+
+	// Set alternative config values and test their outcomes.
+
+	// Set a test stripe key. Expect the key to change and tp enter test mode.
+	sk = "sk_test_THIS_IS_A_TEST_KEY"
+	err = os.Setenv(envStripeAPIKey, sk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	maxKeys := 321
+	err = os.Setenv(envMaxNumAPIKeysPerUser, strconv.Itoa(maxKeys))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config, err = parseConfiguration(logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.StripeKey != sk {
+		t.Fatalf("Expected %s, got %s", sk, config.StripeKey)
+	}
+	if !config.StripeTestMode {
+		t.Fatal("Expected test mode.")
+	}
+	if config.MaxAPIKeys != maxKeys {
+		t.Fatalf("Expected %d, got %d", maxKeys, config.MaxAPIKeys)
 	}
 }
 
@@ -170,5 +274,17 @@ func TestLoadDBCredentials(t *testing.T) {
 	err = os.Setenv(envDBPort, originals.Port)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Ensure the returned values are what we expect.
+	creds, err := loadDBCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds.User != os.Getenv(envDBUser) || creds.Password != os.Getenv(envDBPass) ||
+		creds.Host != os.Getenv(envDBHost) || creds.Port != os.Getenv(envDBPort) {
+		t.Fatalf("Expected %s, %s, %s, %s, got %s, %s, %s, %s.",
+			os.Getenv(envDBUser), os.Getenv(envDBPass), os.Getenv(envDBHost), os.Getenv(envDBPort),
+			creds.User, creds.Password, creds.Host, creds.Port,
+		)
 	}
 }

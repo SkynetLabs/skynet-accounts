@@ -166,13 +166,13 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 	}
 
 	// Fetch configuration data for sending emails.
-	emailURI := os.Getenv(envEmailURI)
+	config.EmailURI = os.Getenv(envEmailURI)
 	{
-		if emailURI == "" {
+		if config.EmailURI == "" {
 			return ServiceConfig{}, errors.New(envEmailURI + " is empty")
 		}
 		// Validate the given URI.
-		uri, err := url.Parse(emailURI)
+		uri, err := url.Parse(config.EmailURI)
 		if err != nil || uri.Host == "" || uri.User == nil {
 			return ServiceConfig{}, errors.New("invalid email URI given in " + envEmailURI)
 		}
