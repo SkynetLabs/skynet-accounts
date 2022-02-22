@@ -11,10 +11,9 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/joho/godotenv v1.4.0
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/klauspost/compress v1.14.2 // indirect
-	github.com/klauspost/cpuid/v2 v2.0.11 // indirect
-	github.com/klauspost/reedsolomon v1.9.16 // indirect
-	github.com/lestrrat-go/jwx v1.2.18
+	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
+	github.com/klauspost/reedsolomon v1.9.15 // indirect
+	github.com/lestrrat-go/jwx v1.2.13
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stripe/stripe-go/v71 v71.48.0
 	github.com/tidwall/pretty v1.2.0 // indirect
