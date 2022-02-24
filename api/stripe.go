@@ -231,7 +231,7 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 			continue
 		}
 		if subsc.ID == "" {
-			api.staticLogger.Debugf("Empty subscription ID! User ID '%s', Stripe ID '%s', subscription object '%+v'", u.ID.Hex(), u.StripeID, subs)
+			api.staticLogger.Warnf("Empty subscription ID! User ID '%s', Stripe ID '%s', subscription object '%+v'", u.ID.Hex(), u.StripeID, subs)
 			continue
 		}
 		subsc, err = sub.Cancel(subsc.ID, &p)
