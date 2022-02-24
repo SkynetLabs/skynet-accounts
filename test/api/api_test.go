@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -97,7 +98,7 @@ func TestWithDBSession(t *testing.T) {
 		if u.Email != emailSuccessJSON {
 			t.Fatalf("Expected email %s, got %s.", emailSuccessJSON, u.Email)
 		}
-		testAPI.WriteJSON(w, u)
+		testAPI.WriteJSON(w, api.UserGETFromUser(u))
 	}
 
 	// This handler successfully creates a user in the DB but exits with
@@ -168,7 +169,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	defer func() {
 		if errClose := at.Close(); errClose != nil {
-			t.Error(errClose)
+			t.Error(errors.AddContext(errClose, "failed to close account tester"))
 		}
 	}()
 
@@ -180,7 +181,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	defer func() {
 		if err = u.Delete(at.Ctx); err != nil {
-			t.Error(err)
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
 
@@ -190,11 +191,10 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := map[string]string{
-		"email":    email,
-		"password": password,
-	}
-	r, _, err := at.Post("/login", nil, body)
+	bodyParams := url.Values{}
+	bodyParams.Add("email", email)
+	bodyParams.Add("password", password)
+	r, _, err := at.Post("/login", nil, bodyParams)
 	if err != nil {
 		t.Fatal(err)
 	}

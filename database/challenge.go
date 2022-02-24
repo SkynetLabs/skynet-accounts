@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"strings"
 	"time"
 
@@ -43,10 +44,12 @@ var (
 	// response object is not valid, i.e. it's either missing one of its
 	// required fields or those do not follow the expected format.
 	ErrInvalidChallengeResponse = errors.New("invalid response")
+	// ErrInvalidPublicKey is returned when the provided public key is invalid.
+	ErrInvalidPublicKey = errors.New("invalid pubKey provided")
 	// PortalName is the name this portal uses to announce itself to the world.
 	// Its value is controlled by the PORTAL_DOMAIN environment variable.
 	// This name does not have a protocol prefix.
-	PortalName = "siasky.net"
+	PortalName = "https://siasky.net"
 )
 
 type (
@@ -80,9 +83,9 @@ type (
 		ExpiresAt   time.Time          `bson:"expires_at"`
 	}
 
-	// challengeResponseDTO defines the format in which the caller will deliver
+	// challengeResponseRequest defines the format in which the caller will deliver
 	// its response to a challenge.
-	challengeResponseDTO struct {
+	challengeResponseRequest struct {
 		Response  string `json:"response"`
 		Signature string `json:"signature"`
 	}
@@ -131,10 +134,20 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 	}
 	// Now that we know the challenge type, we can get the recipient as well.
 	recipientOffset := ChallengeSize + len([]byte(cType))
+	// Extract recipient from response.
 	recipient := string(resp[recipientOffset:])
 	// Check if the recipient is the current portal or any of its subdomains.
-	if !strings.HasSuffix(recipient, PortalName) {
-		return nil, primitive.ObjectID{}, errors.New("invalid recipient " + recipient)
+	recipientURL, err := url.Parse(recipient)
+	if err != nil {
+		return nil, primitive.ObjectID{}, errors.AddContext(err, "failed to parse recipient")
+	}
+	// The recipient should match the portal name.
+	if fmt.Sprintf("%s://%s", recipientURL.Scheme, recipientURL.Host) != PortalName {
+		return nil, primitive.ObjectID{}, fmt.Errorf("invalid recipient host %v != %v", recipientURL.Host, PortalName)
+	}
+	// Require HTTPS
+	if recipientURL.Scheme != "https" {
+		return nil, primitive.ObjectID{}, fmt.Errorf("invalid scheme %v, should be https", recipientURL.Scheme)
 	}
 	// Fetch the challenge from the DB.
 	filter := bson.M{
@@ -143,7 +156,7 @@ func (db *DB) ValidateChallengeResponse(ctx context.Context, chr ChallengeRespon
 	}
 	sr := db.staticChallenges.FindOne(ctx, filter)
 	var ch Challenge
-	err := sr.Decode(&ch)
+	err = sr.Decode(&ch)
 	if err != nil {
 		return nil, primitive.ObjectID{}, errors.AddContext(err, "challenge not found")
 	}
@@ -196,16 +209,13 @@ func (db *DB) DeleteUnconfirmedUserUpdate(ctx context.Context, chID primitive.Ob
 	return err
 }
 
-// LoadFromRequest loads a ChallengeResponse by extracting its string form from
-// http.Request.
-func (cr *ChallengeResponse) LoadFromRequest(body io.Reader) error {
-	// Parse the request's body.
-	var payload challengeResponseDTO
-	b, err := ioutil.ReadAll(body)
-	if err != nil {
-		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
+// LoadFromBytes loads a ChallengeResponse from a []byte.
+func (cr *ChallengeResponse) LoadFromBytes(b []byte) error {
+	if b == nil {
+		return errors.New("invalid input")
 	}
-	err = json.Unmarshal(b, &payload)
+	var payload challengeResponseRequest
+	err := json.Unmarshal(b, &payload)
 	if err != nil {
 		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
 	}
@@ -228,14 +238,26 @@ func (cr *ChallengeResponse) LoadFromRequest(body io.Reader) error {
 	return nil
 }
 
+// LoadFromReader loads a ChallengeResponse from the given io.Reader.
+//
+// Typically, this reader will be a request.Body.
+func (cr *ChallengeResponse) LoadFromReader(r io.Reader) error {
+	// Parse the request's body.
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
+	}
+	return cr.LoadFromBytes(b)
+}
+
 // LoadString loads a PubKey from its hex-encoded string form.
 func (pk *PubKey) LoadString(s string) error {
 	bytes, err := hex.DecodeString(s)
 	if err != nil {
-		return errors.AddContext(err, "invalid pubKey provided")
+		return errors.AddContext(err, ErrInvalidPublicKey.Error())
 	}
 	if len(bytes) != PubKeySize {
-		return errors.New("invalid pubKey provided")
+		return ErrInvalidPublicKey
 	}
 	*pk = bytes[:]
 	return nil

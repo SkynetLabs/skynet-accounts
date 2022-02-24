@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
@@ -14,18 +15,20 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
+	"github.com/joho/godotenv"
+	"github.com/stripe/stripe-go/v71"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
-	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
-	"github.com/stripe/stripe-go/v71"
 	"gitlab.com/NebulousLabs/errors"
 )
 
-var (
+const (
 	// envAccountsJWKSFile holds the name of the environment variable which
 	// holds the path to the JWKS file we need to use. Optional.
 	envAccountsJWKSFile = "ACCOUNTS_JWKS_FILE"
+	// envJWTTTL holds the name of the environment variable for JWT TTL.
+	envJWTTTL = "ACCOUNTS_JWT_TTL"
 	// envDBHost holds the name of the environment variable for DB host.
 	envDBHost = "SKYNET_DB_HOST"
 	// envDBPort holds the name of the environment variable for DB port.
@@ -51,6 +54,29 @@ var (
 	// envStripeAPIKey hold the name of the environment variable for Stripe's
 	// API key. It's only required when integrating with Stripe.
 	envStripeAPIKey = "STRIPE_API_KEY"
+	// envMaxNumAPIKeysPerUser hold the name of the environment variable which
+	// sets the limit for number of API keys a single user can create. If a user
+	// reaches that limit they can always delete some API keys in order to make
+	// space for new ones.
+	envMaxNumAPIKeysPerUser = "ACCOUNTS_MAX_NUM_API_KEYS_PER_USER"
+)
+
+type (
+	// ServiceConfig represents all configuration values we expect to receive
+	// via environment variables or config files.
+	ServiceConfig struct {
+		DBCreds               database.DBCredentials
+		PortalName            string
+		PortalAddressAccounts string
+		ServerLockID          string
+		StripeKey             string
+		StripeTestMode        bool
+		JWKSFile              string
+		JWTTTL                int
+		EmailURI              string
+		EmailFrom             string
+		MaxAPIKeys            int
+	}
 )
 
 // loadDBCredentials creates a new DB connection based on credentials found in
@@ -88,11 +114,100 @@ func logLevel() logrus.Level {
 	return logrus.InfoLevel
 }
 
-func main() {
-	// Load the environment variables from the .env file.
-	// Existing variables take precedence and won't be overwritten.
-	_ = godotenv.Load()
+// parseConfiguration is responsible for reading and validating all environment
+// variables we support - both required and optional ones. It also defers to the
+// default values when certain config values are not provided. If in the future
+// we add a config file for this service, it should be handled here as well.
+func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
+	config := ServiceConfig{}
+	var err error
 
+	config.DBCreds, err = loadDBCredentials()
+	if err != nil {
+		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
+	}
+
+	// portal tells us which Skynet portal to use for downloading skylinks.
+	portal := os.Getenv(envPortal)
+	if portal == "" {
+		return ServiceConfig{}, errors.New("missing env var " + envPortal)
+	}
+	config.PortalName = "https://" + portal
+	config.PortalAddressAccounts = "https://account." + portal
+
+	config.ServerLockID = os.Getenv(envServerDomain)
+	if config.ServerLockID == "" {
+		config.ServerLockID = config.PortalName
+		logger.Warningf(`Environment variable %s is missing! This server's identity`+
+			` is set to the default '%s' value. That is OK only if this server is running on its own`+
+			` and it's not sharing its DB with other nodes.\n`, envServerDomain, config.ServerLockID)
+	}
+
+	if sk := os.Getenv(envStripeAPIKey); sk != "" {
+		config.StripeKey = sk
+		config.StripeTestMode = !strings.HasPrefix(sk, "sk_live_")
+	}
+	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
+		config.JWKSFile = jwks
+	}
+	// Parse the optional env var that controls the TTL of the JWTs we generate.
+	if jwtTTLStr := os.Getenv(envJWTTTL); jwtTTLStr != "" {
+		jwtTTL, err := strconv.Atoi(jwtTTLStr)
+		if err != nil {
+			return ServiceConfig{}, fmt.Errorf("failed to parse env var %s: %s", envJWTTTL, err)
+		}
+		if jwtTTL == 0 {
+			return ServiceConfig{}, fmt.Errorf("the %s env var is set to zero, which is an invalid value (must be positive or unset)", envJWTTTL)
+		}
+		config.JWTTTL = jwtTTL
+	} else {
+		// The environment doesn't specify a value, use the default.
+		config.JWTTTL = jwt.TTL
+	}
+
+	// Fetch configuration data for sending emails.
+	config.EmailURI = os.Getenv(envEmailURI)
+	{
+		if config.EmailURI == "" {
+			return ServiceConfig{}, errors.New(envEmailURI + " is empty")
+		}
+		// Validate the given URI.
+		uri, err := url.Parse(config.EmailURI)
+		if err != nil || uri.Host == "" || uri.User == nil {
+			return ServiceConfig{}, errors.New("invalid email URI given in " + envEmailURI)
+		}
+		// Set the FROM address to outgoing emails. This can be overridden by
+		// the ACCOUNTS_EMAIL_FROM optional environment variable.
+		if uri.User != nil {
+			config.EmailFrom = uri.User.Username()
+		}
+		if emailFrom := os.Getenv(envEmailFrom); emailFrom != "" {
+			config.EmailFrom = emailFrom
+		}
+		// No custom value set, use the default.
+		if config.EmailFrom == "" {
+			config.EmailFrom = email.From
+		}
+	}
+	// Fetch the configuration for maximum number of API keys allowed per user.
+	maxAPIKeysStr := os.Getenv(envMaxNumAPIKeysPerUser)
+	if maxAPIKeysStr != "" {
+		maxAPIKeys, err := strconv.Atoi(maxAPIKeysStr)
+		if err != nil {
+			log.Printf("Warning: Failed to parse %s env var. Error: %s", envMaxNumAPIKeysPerUser, err.Error())
+		}
+		if maxAPIKeys > 0 {
+			config.MaxAPIKeys = maxAPIKeys
+		}
+	} else {
+		// The environment doesn't specify a value, use the default.
+		config.MaxAPIKeys = database.MaxNumAPIKeysPerUser
+	}
+
+	return config, nil
+}
+
+func main() {
 	// Initialise the global context and logger. These will be used throughout
 	// the service. Once the context is closed, all background threads will
 	// wind themselves down.
@@ -100,54 +215,22 @@ func main() {
 	logger := logrus.New()
 	logger.SetLevel(logLevel())
 
-	// portal tells us which Skynet portal to use for downloading skylinks.
-	portal := os.Getenv(envPortal)
-	if portal == "" {
-		log.Fatal("missing env var " + envPortal)
-	}
-	database.PortalName = portal
-	portalAddr := "https://" + portal
-	jwt.JWTPortalName = portalAddr
-	email.PortalAddress = portalAddr
-	email.PortalAddressAccounts = "https://account." + portal
-	email.ServerLockID = os.Getenv(envServerDomain)
-	if email.ServerLockID == "" {
-		email.ServerLockID = portalAddr
-		logger.Warningf(`Environment variable %s is missing! This server's identity 
-			is set to the default '%s' value. That is OK only if this server is running on its own 
-			and it's not sharing its DB with other nodes.\n`, envServerDomain, email.ServerLockID)
-	}
-	dbCreds, err := loadDBCredentials()
+	// Load the environment variables from the .env file.
+	_ = godotenv.Load()
+	config, err := parseConfiguration(logger)
 	if err != nil {
-		log.Fatal(errors.AddContext(err, "failed to fetch DB credentials"))
+		log.Fatal(err)
 	}
-	if sk := os.Getenv(envStripeAPIKey); sk != "" {
-		stripe.Key = sk
-		api.StripeTestMode = !strings.HasPrefix(stripe.Key, "sk_live_")
-	}
-	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
-		jwt.AccountsJWKSFile = jwks
-	}
-	// Fetch configuration data for sending emails.
-	emailURI := os.Getenv(envEmailURI)
-	{
-		if emailURI == "" {
-			log.Fatal(envEmailURI + " is empty")
-		}
-		// Validate the given URI.
-		uri, err := url.Parse(emailURI)
-		if err != nil {
-			log.Fatal(errors.AddContext(err, "invalid email URI given in "+envEmailURI))
-		}
-		// Set the FROM address to outgoing emails. This can be overridden by
-		// the ACCOUNTS_EMAIL_FROM optional environment variable.
-		if uri.User != nil {
-			email.From = uri.User.String()
-		}
-		if emailFrom := os.Getenv(envEmailFrom); emailFrom != "" {
-			email.From = emailFrom
-		}
-	}
+	database.PortalName = config.PortalName
+	jwt.PortalName = config.PortalName
+	email.PortalAddressAccounts = config.PortalAddressAccounts
+	email.ServerLockID = config.ServerLockID
+	stripe.Key = config.StripeKey
+	api.StripeTestMode = config.StripeTestMode
+	jwt.AccountsJWKSFile = config.JWKSFile
+	jwt.TTL = config.JWTTTL
+	email.From = config.EmailFrom
+	database.MaxNumAPIKeysPerUser = config.MaxAPIKeys
 
 	// Set up key components:
 
@@ -157,13 +240,13 @@ func main() {
 		log.Fatal(errors.AddContext(err, fmt.Sprintf("failed to load JWKS file from %s", jwt.AccountsJWKSFile)))
 	}
 	// Connect to the database.
-	db, err := database.New(ctx, dbCreds, logger)
+	db, err := database.New(ctx, config.DBCreds, logger)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to connect to the DB"))
 	}
 	mailer := email.NewMailer(db)
 	// Start the mail sender background thread.
-	sender, err := email.NewSender(ctx, db, logger, &skymodules.SkynetDependencies{}, emailURI)
+	sender, err := email.NewSender(ctx, db, logger, &skymodules.SkynetDependencies{}, config.EmailURI)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to create an email sender"))
 	}

@@ -29,3 +29,6 @@ debug.test
 # OSX auto-generated file
 **/.DS_Store
 *.env
+
+# Output folder for env var generation
+output

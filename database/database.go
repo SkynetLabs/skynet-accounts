@@ -17,34 +17,39 @@ import (
 var (
 	// dbName defines the name of Skynet's database.
 	dbName = "skynet"
-	// dbUsersCollection defines the name of the "users" collection within
+	// collUsers defines the name of the "users" collection within
 	// skynet's database.
-	dbUsersCollection = "users"
-	// dbSkylinksCollection defines the name of the "skylinks" collection within
+	collUsers = "users"
+	// collSkylinks defines the name of the "skylinks" collection within
 	// skynet's database.
-	dbSkylinksCollection = "skylinks"
-	// dbUploadsCollection defines the name of the "uploads" collection within
+	collSkylinks = "skylinks"
+	// collUploads defines the name of the "uploads" collection within
 	// skynet's database.
-	dbUploadsCollection = "uploads"
-	// dbDownloadsCollection defines the name of the "downloads" collection within
+	collUploads = "uploads"
+	// collDownloads defines the name of the "downloads" collection within
 	// skynet's database.
-	dbDownloadsCollection = "downloads"
-	// dbRegistryReadsCollection defines the name of the "registry_reads"
+	collDownloads = "downloads"
+	// collRegistryReads defines the name of the "registry_reads"
 	// collection within skynet's database.
-	dbRegistryReadsCollection = "registry_reads"
-	// dbRegistryWritesCollection defines the name of the "registry_writes"
+	collRegistryReads = "registry_reads"
+	// collRegistryWrites defines the name of the "registry_writes"
 	// collection within skynet's database.
-	dbRegistryWritesCollection = "registry_writes"
-	// dbEmails defines the name of the "emails" collection within skynet's
+	collRegistryWrites = "registry_writes"
+	// collEmails defines the name of the "emails" collection within skynet's
 	// database.
-	dbEmails = "emails"
-	// dbChallenges defines the name of the "challenges" collection within
+	collEmails = "emails"
+	// collChallenges defines the name of the "challenges" collection within
 	// skynet's database.
-	dbChallenges = "challenges"
-	// dbUnconfirmedUserUpdates defines the name of the collection which holds
+	collChallenges = "challenges"
+	// collUnconfirmedUserUpdates defines the name of the collection which holds
 	// all user pubKey updates until their respective challenge has been
 	// responded to and they are applied.
-	dbUnconfirmedUserUpdates = "unconfirmed_user_updates"
+	collUnconfirmedUserUpdates = "unconfirmed_user_updates"
+	// collConfiguration defines the name of the db table with configuration
+	// settings.
+	collConfiguration = "configuration"
+	// collAPIKeys defines the name of the db table with API keys for users.
+	collAPIKeys = "api_keys"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -61,7 +66,7 @@ var (
 	mongoWriteConcern = "majority"
 	// mongoWriteConcernTimeout specifies a time limit, in milliseconds, for
 	// the write concern to be satisfied.
-	mongoWriteConcernTimeout = "5000"
+	mongoWriteConcernTimeout = "30000"
 
 	// ErrGeneralInternalFailure is returned when we do not want to disclose
 	// what kind of error occurred. This should always be coupled with another
@@ -90,6 +95,8 @@ type (
 		staticEmails                 *mongo.Collection
 		staticChallenges             *mongo.Collection
 		staticUnconfirmedUserUpdates *mongo.Collection
+		staticConfiguration          *mongo.Collection
+		staticAPIKeys                *mongo.Collection
 		staticDeps                   lib.Dependencies
 		staticLogger                 *logrus.Logger
 	}
@@ -130,15 +137,17 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 	}
 	db := &DB{
 		staticDB:                     database,
-		staticUsers:                  database.Collection(dbUsersCollection),
-		staticSkylinks:               database.Collection(dbSkylinksCollection),
-		staticUploads:                database.Collection(dbUploadsCollection),
-		staticDownloads:              database.Collection(dbDownloadsCollection),
-		staticRegistryReads:          database.Collection(dbRegistryReadsCollection),
-		staticRegistryWrites:         database.Collection(dbRegistryWritesCollection),
-		staticEmails:                 database.Collection(dbEmails),
-		staticChallenges:             database.Collection(dbChallenges),
-		staticUnconfirmedUserUpdates: database.Collection(dbUnconfirmedUserUpdates),
+		staticUsers:                  database.Collection(collUsers),
+		staticSkylinks:               database.Collection(collSkylinks),
+		staticUploads:                database.Collection(collUploads),
+		staticDownloads:              database.Collection(collDownloads),
+		staticRegistryReads:          database.Collection(collRegistryReads),
+		staticRegistryWrites:         database.Collection(collRegistryWrites),
+		staticEmails:                 database.Collection(collEmails),
+		staticChallenges:             database.Collection(collChallenges),
+		staticUnconfirmedUserUpdates: database.Collection(collUnconfirmedUserUpdates),
+		staticConfiguration:          database.Collection(collConfiguration),
+		staticAPIKeys:                database.Collection(collAPIKeys),
 		staticLogger:                 logger,
 	}
 	return db, nil
@@ -183,19 +192,19 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 	// schema defines a mapping between a collection name and the indexes that
 	// must exist for that collection.
 	schema := map[string][]mongo.IndexModel{
-		dbUsersCollection: {
+		collUsers: {
 			{
 				Keys:    bson.D{{"sub", 1}},
 				Options: options.Index().SetName("sub_unique").SetUnique(true),
 			},
 		},
-		dbSkylinksCollection: {
+		collSkylinks: {
 			{
 				Keys:    bson.D{{"skylink", 1}},
 				Options: options.Index().SetName("skylink_unique").SetUnique(true),
 			},
 		},
-		dbUploadsCollection: {
+		collUploads: {
 			{
 				Keys:    bson.D{{"user_id", 1}},
 				Options: options.Index().SetName("user_id"),
@@ -205,7 +214,7 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("skylink_id"),
 			},
 		},
-		dbDownloadsCollection: {
+		collDownloads: {
 			{
 				Keys:    bson.D{{"user_id", 1}},
 				Options: options.Index().SetName("user_id"),
@@ -215,19 +224,19 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("skylink_id"),
 			},
 		},
-		dbRegistryReadsCollection: {
+		collRegistryReads: {
 			{
 				Keys:    bson.D{{"user_id", 1}},
 				Options: options.Index().SetName("user_id"),
 			},
 		},
-		dbRegistryWritesCollection: {
+		collRegistryWrites: {
 			{
 				Keys:    bson.D{{"user_id", 1}},
 				Options: options.Index().SetName("user_id"),
 			},
 		},
-		dbEmails: {
+		collEmails: {
 			{
 				Keys:    bson.D{{"failed_attempts", 1}},
 				Options: options.Index().SetName("failed_attempts"),
@@ -245,7 +254,7 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("sent_by"),
 			},
 		},
-		dbChallenges: {
+		collChallenges: {
 			{
 				Keys:    bson.D{{"challenge", 1}},
 				Options: options.Index().SetName("challenge"),
@@ -259,7 +268,7 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 				Options: options.Index().SetName("expires_at"),
 			},
 		},
-		dbUnconfirmedUserUpdates: {
+		collUnconfirmedUserUpdates: {
 			{
 				Keys:    bson.D{{"challenge_id", 1}},
 				Options: options.Index().SetName("challenge_id"),
@@ -267,6 +276,22 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger)
 			{
 				Keys:    bson.D{{"expires_at", 1}},
 				Options: options.Index().SetName("expires_at"),
+			},
+		},
+		collConfiguration: {
+			{
+				Keys:    bson.D{{"key", 1}},
+				Options: options.Index().SetName("key_unique").SetUnique(true),
+			},
+		},
+		collAPIKeys: {
+			{
+				Keys:    bson.D{{"key", 1}},
+				Options: options.Index().SetName("key_unique").SetUnique(true),
+			},
+			{
+				Keys:    bson.D{{"user_id", 1}},
+				Options: options.Index().SetName("user_id"),
 			},
 		},
 	}
@@ -306,7 +331,7 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 
 // generateUploadsPipeline generates a mongo pipeline for transforming
 // an `Upload` or `Download` struct into the respective
-// `<Up/Down>loadResponseDTO` struct.
+// `<Up/Down>loadResponse` struct.
 //
 // The Mongo query we want to ultimately execute is:
 //	db.downloads.aggregate([

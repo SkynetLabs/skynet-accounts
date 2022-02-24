@@ -11,6 +11,20 @@ racevars= history_size=3 halt_on_error=1 atexit_sleep_ms=2000
 # all will build and install release binaries
 all: release
 
+# clean removes all directories that get automatically created during
+# development.
+# Also ensures that any docker containers are gone in the event of an error on a
+# previous run
+clean:
+	@docker stop genenv || true && docker rm --force genenv
+ifneq ("$(OS)","Windows_NT")
+# Linux
+	rm -rf cover output
+else
+# Windows
+	- DEL /F /Q cover output
+endif
+
 # count says how many times to run the tests.
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
@@ -39,7 +53,7 @@ markdown-spellcheck:
 
 # lint runs golangci-lint (which includes golint, a spellcheck of the codebase,
 # and other linters), the custom analyzers, and also a markdown spellchecker.
-lint: clean fmt markdown-spellcheck vet
+lint: fmt markdown-spellcheck vet
 	golint ./...
 	golangci-lint run -c .golangci.yml
 	go mod tidy
@@ -122,7 +136,7 @@ release-util:
 check:
 	go test --exec=true ./...
 
-bench: clean fmt
+bench: fmt
 	go test -tags='debug testing netgo' -timeout=500s -run=XXX -bench=. $(pkgs) -count=$(count)
 
 test:
@@ -130,11 +144,11 @@ test:
 
 test-long: lint lint-ci
 	@mkdir -p cover
-	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=30s $(pkgs) -run=. -count=$(count)
+	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=60s $(pkgs) -run=$(run) -count=$(count)
 
 # These env var values are for testing only. They can be freely changed.
 test-int: test-long start-mongo
-	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=. -count=$(count)
+	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=600s $(integration-pkgs) -run=$(run) -count=$(count)
 	-make stop-mongo
 
 # test-single allows us to run a single integration test.
@@ -143,6 +157,18 @@ test-int: test-long start-mongo
 test-single: export COOKIE_HASH_KEY="7eb32cfab5014d14394648dae1cf4e606727eee2267f6a50213cd842e61c5bce"
 test-single: export COOKIE_ENC_KEY="65d31d12b80fc57df16d84c02a9bb62e2bc3b633388b05e49ef8abfdf0d35cf3"
 test-single:
-	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=$(RUN) -count=$(count)
+	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(integration-pkgs) -run=$(run) -count=$(count)
 
-.PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo
+# docker-generate is a docker command for env var generation
+#
+# The sleep is to allow time for the docker container to start up after `docker
+# run` before stopping the container with `docker stop`. Without it the
+# generated files can be blank.
+docker-generate: clean
+	@mkdir output
+	@docker build -f ./env/Dockerfile -t accounts-genenv .
+	@docker run -v ${PWD}/output:/app --name genenv -d accounts-genenv
+	sleep 3
+	@docker stop genenv || true && docker rm --force genenv
+
+.PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo docker-generate

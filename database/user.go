@@ -2,18 +2,16 @@ package database
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net/mail"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/hash"
-	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
-
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -54,9 +52,11 @@ var (
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
 		TierAnonymous: {
-			TierName:          "anonymous",
-			UploadBandwidth:   5 * mbpsToBytesPerSecond,
-			DownloadBandwidth: 20 * mbpsToBytesPerSecond,
+			TierName:        "anonymous",
+			UploadBandwidth: 5 * mbpsToBytesPerSecond,
+			// TODO: temporarily lowered the download bandwidth on the anon tier
+			// from 20mbps to 5mpbs
+			DownloadBandwidth: 5 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  0,
 			RegistryDelay:     250,
@@ -112,13 +112,14 @@ type (
 		// its ID.Hex() form.
 		ID                               primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 		Email                            string             `bson:"email" json:"email"`
-		EmailConfirmed                   bool               `bson:"email_confirmed" json:"emailConfirmed"`
 		EmailConfirmationToken           string             `bson:"email_confirmation_token,omitempty" json:"-"`
 		EmailConfirmationTokenExpiration time.Time          `bson:"email_confirmation_token_expiration,omitempty" json:"-"`
 		PasswordHash                     string             `bson:"password_hash" json:"-"`
 		RecoveryToken                    string             `bson:"recovery_token,omitempty" json:"-"`
 		Sub                              string             `bson:"sub" json:"sub"`
 		Tier                             int                `bson:"tier" json:"tier"`
+		CreatedAt                        time.Time          `bson:"created_at" json:"createdAt"`
+		MigratedAt                       time.Time          `bson:"migrated_at" json:"migratedAt"`
 		SubscribedUntil                  time.Time          `bson:"subscribed_until" json:"subscribedUntil"`
 		SubscriptionStatus               string             `bson:"subscription_status" json:"subscriptionStatus"`
 		SubscriptionCancelAt             time.Time          `bson:"subscription_cancel_at" json:"subscriptionCancelAt"`
@@ -156,6 +157,20 @@ type (
 		Storage           int64  `json:"-"`
 	}
 )
+
+// UserByAPIKey returns the user who owns the given API key.
+func (db *DB) UserByAPIKey(ctx context.Context, ak APIKey) (*User, error) {
+	sr := db.staticAPIKeys.FindOne(ctx, bson.M{"key": ak})
+	if sr.Err() != nil {
+		return nil, sr.Err()
+	}
+	var apiKey APIKeyRecord
+	err := sr.Decode(&apiKey)
+	if err != nil {
+		return nil, err
+	}
+	return db.UserByID(ctx, apiKey.UserID)
+}
 
 // UserByEmail returns the user with the given username.
 func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
@@ -242,31 +257,9 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
-// UserBySub returns the user with the given sub. If `create` is `true` it will
-// create the user if it doesn't exist.
-func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
-	users, err := db.managedUsersBySub(ctx, sub)
-	if create && errors.Contains(err, ErrUserNotFound) {
-		_, email, err := jwt.UserDetailsFromJWT(ctx)
-		if err != nil {
-			// Log the error but don't do anything differently.
-			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
-		}
-		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
-		// If we're successful or hit any error, other than a duplicate key we
-		// want to just return. Hitting a duplicate key error means we ran into
-		// a race condition and we can easily recover from that.
-		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-			return u, err
-		}
-		// Recover from the race condition by fetching the existing user from
-		// the DB.
-		users, err = db.managedUsersBySub(ctx, sub)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return users[0], nil
+// UserBySub returns the user with the given sub.
+func (db *DB) UserBySub(ctx context.Context, sub string) (*User, error) {
+	return db.managedUserBySub(ctx, sub)
 }
 
 // UserConfirmEmail confirms that the email to which the passed confirmation
@@ -291,7 +284,6 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 	if u.EmailConfirmationTokenExpiration.Before(time.Now().UTC()) {
 		return nil, errors.AddContext(ErrInvalidToken, "token expired")
 	}
-	u.EmailConfirmed = true
 	u.EmailConfirmationToken = ""
 	err = db.UserSave(ctx, u)
 	if err != nil {
@@ -307,36 +299,36 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier int) (*User, error) {
-	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
-	// e, err := mail.ParseAddress(emailAddr)
-	// if err != nil {
-	// 	return nil, errors.AddContext(err, "invalid email address")
-	// }
-	// emailAddr = e.Address
-	// Check for an existing user with this email.
-	users, err := db.managedUsersByField(ctx, "email", emailAddr)
-	if err != nil && !errors.Contains(err, ErrUserNotFound) {
-		return nil, errors.AddContext(err, "failed to query DB")
-	}
-	if len(users) > 0 {
-		return nil, ErrUserAlreadyExists
+	// Ensure the email is valid if it's passed. We allow empty emails.
+	if emailAddr != "" {
+		addr, err := mail.ParseAddress(emailAddr)
+		if err != nil {
+			return nil, errors.AddContext(err, "invalid email address")
+		}
+		emailAddr = addr.Address
 	}
 	if sub == "" {
 		return nil, errors.New("empty sub is not allowed")
 	}
-	// Check for an existing user with this sub.
-	users, err = db.managedUsersBySub(ctx, sub)
+
+	// Check for an existing user with this email.
+	_, err := db.UserByEmail(ctx, emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
-	if len(users) > 0 {
+	if !errors.Contains(err, ErrUserNotFound) {
 		return nil, ErrUserAlreadyExists
 	}
-	// TODO Review this when we fully migrate away from Kratos.
+	// Check for an existing user with this sub.
+	_, err = db.managedUserBySub(ctx, sub)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if !errors.Contains(err, ErrUserNotFound) {
+		return nil, ErrUserAlreadyExists
+	}
 	// Generate a password hash, if a password is provided. A password might not
-	// be provided if the user is generated externally, e.g. in Kratos. We can
-	// remove that option in the future when `accounts` is the only system
-	// managing users but for the moment we still need it.
+	// be provided if the user is registered from MySky with a pubkey.
 	var passHash []byte
 	if pass != "" {
 		passHash, err = hash.Generate(pass)
@@ -351,13 +343,13 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	u := &User{
 		ID:                               primitive.ObjectID{},
 		Email:                            emailAddr,
-		EmailConfirmed:                   false,
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
 		Sub:                              sub,
 		Tier:                             tier,
 	}
+	// TODO This part can race and create multiple accounts with the same email, unless we add DB-level uniqueness restriction.
 	// Insert the user.
 	fields, err := bson.Marshal(u)
 	if err != nil {
@@ -378,11 +370,11 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk PubKey, tier int) (*User, error) {
-	e, err := mail.ParseAddress(emailAddr)
-	if err != nil {
+	// Validate the email.
+	parsed, err := mail.ParseAddress(emailAddr)
+	if err != nil || parsed.Address != emailAddr {
 		return nil, errors.AddContext(err, "invalid email address")
 	}
-	emailAddr = e.Address
 	// Check for an existing user with this email.
 	users, err := db.managedUsersByField(ctx, "email", emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
@@ -398,11 +390,11 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		}
 	}
 	// Check for an existing user with this sub.
-	users, err = db.managedUsersBySub(ctx, sub)
+	_, err = db.managedUserBySub(ctx, sub)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
-	if len(users) > 0 {
+	if !errors.Contains(err, ErrUserNotFound) {
 		return nil, ErrUserAlreadyExists
 	}
 	// Generate a password hash, if a password is provided. A password might not
@@ -421,7 +413,6 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 	u := &User{
 		ID:                               primitive.ObjectID{},
 		Email:                            emailAddr,
-		EmailConfirmed:                   false,
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
@@ -464,6 +455,14 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	_, err = db.staticRegistryWrites.DeleteMany(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user registry writes")
+	}
+	_, err = db.staticAPIKeys.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user API keys")
+	}
+	_, err = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.D{{"sub", u.Sub}})
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user unconfirmed updates")
 	}
 	// Delete the actual user.
 	filter = bson.D{{"_id", u.ID}}
@@ -559,10 +558,22 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	return users, nil
 }
 
-// managedUsersBySub fetches all users that have the given sub. This should
+// managedUserBySub fetches all users that have the given sub. This should
 // normally be up to one user.
-func (db *DB) managedUsersBySub(ctx context.Context, sub string) ([]*User, error) {
-	return db.managedUsersByField(ctx, "sub", sub)
+func (db *DB) managedUserBySub(ctx context.Context, sub string) (*User, error) {
+	sr := db.staticUsers.FindOne(ctx, bson.M{"sub": sub})
+	if sr.Err() == mongo.ErrNoDocuments {
+		return nil, ErrUserNotFound
+	}
+	if sr.Err() != nil {
+		return nil, sr.Err()
+	}
+	var u User
+	err := sr.Decode(&u)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 // userStats reports statistical information about the user.
@@ -811,6 +822,17 @@ func (db *DB) userRegistryReadStats(ctx context.Context, userID primitive.Object
 		return 0, 0, errors.AddContext(err, "failed to fetch registry read bandwidth")
 	}
 	return reads, reads * skynet.CostBandwidthRegistryRead, nil
+}
+
+// HasKey checks if the given pubkey is among the pubkeys registered for the
+// user.
+func (u User) HasKey(pk PubKey) bool {
+	for _, upk := range u.PubKeys {
+		if subtle.ConstantTimeCompare(upk, pk) == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // monthStart returns the start of the user's subscription month.

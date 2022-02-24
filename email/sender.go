@@ -28,13 +28,15 @@ var (
 	// environment variable.
 	From = "noreply@siasky.net"
 
-	// PortalAddress defines the URI where we can access our portal. Its value
-	// comes from the PORTAL_DOMAIN environment variable, preceded by the
-	// appropriate schema.
-	PortalAddress = "https://siasky.net"
 	// PortalAddressAccounts defines the URI where we can access the accounts
-	// sub-site.
-	PortalAddressAccounts = "https://account.siasky.net"
+	// sub-site. The domain comes from the PORTAL_DOMAIN environment variable.
+	PortalAddressAccounts = build.Select(
+		build.Var{
+			Dev:      "",
+			Testing:  "https://account.siasky.net",
+			Standard: "",
+		},
+	).(string)
 
 	// ServerLockID holds the name of the name of this particular server. Its
 	// value is controlled by the SERVER_DOMAIN entry in the .env file. If the

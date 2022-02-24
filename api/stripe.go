@@ -25,7 +25,8 @@ const (
 
 var (
 	// StripeTestMode tells us whether to use Stripe's test mode or prod mode
-	// plan and price ids.
+	// plan and price ids. This depends on what kind of key is stored in the
+	// STRIPE_API_KEY environment variable.
 	StripeTestMode = false
 
 	// True is a helper for when we need to pass a *bool to Stripe.
@@ -68,7 +69,7 @@ type (
 
 // stripeWebhookPOST handles various events issued by Stripe.
 // See https://stripe.com/docs/api/events/types
-func (api *API) stripeWebhookPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *API) stripeWebhookPOST(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	api.staticLogger.Tracef("Webhook request: %+v", req)
 	event, code, err := readStripeEvent(w, req)
 	if err != nil {
@@ -134,7 +135,7 @@ func (api *API) stripeWebhookPOST(w http.ResponseWriter, req *http.Request, _ ht
 }
 
 // stripePricesGET returns a list of plans and prices.
-func (api *API) stripePricesGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	var sPrices []stripePrice
 	params := &stripe.PriceListParams{Active: &True}
 	params.AddExpand("data.product")

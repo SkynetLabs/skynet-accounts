@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
@@ -57,14 +58,14 @@ func DBTestCredentials() database.DBCredentials {
 }
 
 // CreateUser is a helper method which simplifies the creation of test users
-func CreateUser(at *AccountsTester, email, password string) (*User, error) {
+func CreateUser(at *AccountsTester, emailAddr, password string) (*User, error) {
 	// Create a user.
-	_, _, err := at.CreateUserPost(email, password)
+	_, _, err := at.CreateUserPost(emailAddr, password)
 	if err != nil {
 		return nil, errors.AddContext(err, "user creation failed")
 	}
 	// Fetch the user from the DB, so we can delete it later.
-	u, err := at.DB.UserByEmail(at.Ctx, email)
+	u, err := at.DB.UserByEmail(at.Ctx, emailAddr)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to fetch user from the DB")
 	}
@@ -84,11 +85,10 @@ func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, e
 		return nil, nil, err
 	}
 	// Log in with that user in order to make sure it exists.
-	body := map[string]string{
-		"email":    email,
-		"password": password,
-	}
-	r, _, err := at.Post("/login", nil, body)
+	bodyParams := url.Values{}
+	bodyParams.Add("email", email)
+	bodyParams.Add("password", password)
+	r, _, err := at.Post("/login", nil, bodyParams)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -12,7 +12,7 @@ All local secrets are loaded from a `.env` file in the root directory of the pro
 Those are (example values):
 
 ```.env
-ACCOUNTS_EMAIL_URI="smtps://test:test@mailslurper:1025/?skip_ssl_verify=true"
+ACCOUNTS_EMAIL_URI="smtps://<email address>:<email password>@<smtp server for email>/?skip_ssl_verify=true"
 ACCOUNTS_JWKS_FILE="/accounts/conf/jwks.json"
 COOKIE_DOMAIN="siasky.net"
 COOKIE_HASH_KEY="any thirty-two byte string is ok"
@@ -32,11 +32,13 @@ There are some optional ones, as well:
 ```.env
 ACCOUNTS_EMAIL_FROM="norepl@siasky.net"
 SKYNET_ACCOUNTS_LOG_LEVEL=trace
+ACCOUNTS_MAX_NUM_API_KEYS_PER_USER=1000
 ```
 
 Meaning of environment variables:
 
 * ACCOUNTS_EMAIL_URI is the full email URI (including credentials) for sending emails.
+  example `ACCOUNTS_EMAIL_URI=smtps://hello@gmail.com:MYSUP3R$TRONGPW@smtp.gmail.com:465/?skip_ssl_verify=false`
 * ACCOUNTS_EMAIL_FROM allows us to set the FROM email on our outgoing emails. If it's not set we will use the user from
   ACCOUNTS_EMAIL_URI.
 * ACCOUNTS_JWKS_FILE is the file which contains the JWKS `accounts` uses to sign the JWTs it issues for its users. It
@@ -51,40 +53,26 @@ Meaning of environment variables:
 * SKYNET_DB_HOST, SKYNET_DB_PORT, SKYNET_DB_USER, and SKYNET_DB_PASS tell `accounts` how to connect to the MongoDB
   instance it's supposed to use.
 * STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET allow us to process user payments made via Stripe.
+* ACCOUNTS_MAX_NUM_API_KEYS_PER_USER defines the maximum number of API keys a user can create. If a user needs to add a
+  new key after reaching that number, they would need to first delete another.
 
-### Generating a JWKS
+### Generating a JWKS and Cookie Keys
 
 The JSON Web Key Set is a set of cryptographic keys used to sign the JSON Web Tokens `accounts` issues for its users.
-These tokens are used to authorise users in front of the service and are required for its operation.
+These tokens are used to authorize users in front of the service and are required for its operation.
 
-If you don't know how to generate your own JWKS you can use this code snippet:
+You can generate the necessary `jwks.json` file and proper keys for the two `COOKIE` variables by cloning this repo and
+running:
 
-```go
-package main
-
-import (
-	"encoding/json"
-	"log"
-	"os"
-
-	"github.com/ory/hydra/jwk"
-)
-
-func main() {
-	gen := jwk.RS256Generator{
-		KeyLength: 2048,
-	}
-	jwks, err := gen.Generate("", "sig")
-	if err != nil {
-		log.Fatal(err)
-	}
-	jsonbuf, err := json.MarshalIndent(jwks, "", "  ")
-	if err != nil {
-		log.Fatal("failed to generate JSON: %s", err)
-	}
-	os.Stdout.Write(jsonbuf)
-}
 ```
+git clone https://github.com/SkynetLabs/skynet-accounts.git
+cd skynet-accounts
+make docker-generate
+```
+
+This will generate the needed information in an `output/` directory. The `COOKIE`
+variables are in the `output/env` file and the JWKS is in the `output/jwks.json`
+file.
 
 ## License
 

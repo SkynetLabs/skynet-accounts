@@ -16,15 +16,15 @@ import (
 	"golang.org/x/crypto/ed25519"
 )
 
-// TestChallengeResponse_LoadFromRequest tests the LoadFromRequest method of
+// TestChallengeResponse_LoadFromReader tests the LoadFromReader method of
 // ChallengeResponse.
-func TestChallengeResponse_LoadFromRequest(t *testing.T) {
+func TestChallengeResponse_LoadFromReader(t *testing.T) {
 	var chr ChallengeResponse
 	// Generate some valid data.
 	sk, _ := crypto.GenerateKeyPair()
-	response := append(fastrand.Bytes(ChallengeSize), append([]byte(ChallengeTypeLogin), []byte(jwt.JWTPortalName)...)...)
+	response := append(fastrand.Bytes(ChallengeSize), append([]byte(ChallengeTypeLogin), []byte(jwt.PortalName)...)...)
 	signature := ed25519.Sign(sk[:], response)
-	payload := challengeResponseDTO{
+	payload := challengeResponseRequest{
 		Signature: hex.EncodeToString(fastrand.Bytes(16)),
 	}
 	payloadBytes, err := json.Marshal(payload)
@@ -35,12 +35,12 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		Body: ioutil.NopCloser(bytes.NewReader(payloadBytes)),
 	}
 	// No "response" field.
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid response") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid response", err)
 	}
 	// Invalid response.
-	payload = challengeResponseDTO{
+	payload = challengeResponseRequest{
 		Response: hex.EncodeToString(fastrand.Bytes(16)),
 	}
 	payloadBytes, err = json.Marshal(payload)
@@ -48,12 +48,12 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid response") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid response", err)
 	}
 	// Missing signature.
-	payload = challengeResponseDTO{
+	payload = challengeResponseRequest{
 		Response: hex.EncodeToString(response),
 	}
 	payloadBytes, err = json.Marshal(payload)
@@ -61,12 +61,12 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid signature") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid signature", err)
 	}
 	// Invalid signature.
-	payload = challengeResponseDTO{
+	payload = challengeResponseRequest{
 		Response:  hex.EncodeToString(response),
 		Signature: hex.EncodeToString(fastrand.Bytes(16)),
 	}
@@ -75,12 +75,12 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err == nil || !strings.Contains(err.Error(), "invalid signature") {
 		t.Fatalf("Expected error '%s', got '%s'", "invalid signature", err)
 	}
 	// Valid response and valid signature.
-	payload = challengeResponseDTO{
+	payload = challengeResponseRequest{
 		Response:  hex.EncodeToString(response),
 		Signature: hex.EncodeToString(signature),
 	}
@@ -89,7 +89,7 @@ func TestChallengeResponse_LoadFromRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Body = ioutil.NopCloser(bytes.NewReader(payloadBytes))
-	err = chr.LoadFromRequest(r.Body)
+	err = chr.LoadFromReader(r.Body)
 	if err != nil {
 		t.Fatal(err)
 	}

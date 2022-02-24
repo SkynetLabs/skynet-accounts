@@ -35,6 +35,7 @@ type (
 		Logger *logrus.Logger
 		// If set, this cookie will be attached to all requests.
 		Cookie *http.Cookie
+		Token  string
 
 		cancel context.CancelFunc
 	}
@@ -58,8 +59,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	logger := logrus.New()
 
 	// Initialise the environment.
-	email.PortalAddress = testPortalAddr
-	jwt.JWTPortalName = testPortalAddr
+	jwt.PortalName = testPortalAddr
 	jwt.AccountsJWKSFile = pathToJWKSFile
 	err := jwt.LoadAccountsKeySet(logger)
 	if err != nil {
@@ -125,43 +125,51 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 }
 
 // Get executes a GET request against the test service.
+//
+// NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Get(endpoint string, params url.Values) (r *http.Response, body []byte, err error) {
 	return at.request(http.MethodGet, endpoint, params, nil)
 }
 
 // Delete executes a DELETE request against the test service.
+//
+// NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Delete(endpoint string, params url.Values) (r *http.Response, body []byte, err error) {
 	return at.request(http.MethodDelete, endpoint, params, nil)
 }
 
 // Post executes a POST request against the test service.
-func (at *AccountsTester) Post(endpoint string, queryParams url.Values, bodyParams map[string]string) (r *http.Response, body []byte, err error) {
-	if queryParams == nil {
-		queryParams = url.Values{}
+//
+// NOTE: The Body of the returned response is already read and closed.
+// TODO Remove the url.Values in favour of a simple map.
+func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams url.Values) (r *http.Response, body []byte, err error) {
+	if params == nil {
+		params = url.Values{}
 	}
-	bodyBytes, err := json.Marshal(bodyParams)
+	bodyMap := make(map[string]string)
+	for k, v := range bodyParams {
+		if len(v) == 0 {
+			continue
+		}
+		bodyMap[k] = v[0]
+	}
+	bodyBytes, err := json.Marshal(bodyMap)
 	if err != nil {
 		return
 	}
-	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + queryParams.Encode()
+	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + params.Encode()
 	req, err := http.NewRequest(http.MethodPost, serviceURL, bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if at.Cookie != nil {
-		req.Header.Set("Cookie", at.Cookie.String())
-	}
-	c := http.Client{}
-	r, err = c.Do(req)
-	if err != nil {
-		return
-	}
-	return processResponse(r)
+	return at.executeRequest(req)
 }
 
 // Put executes a PUT request against the test service.
-func (at *AccountsTester) Put(endpoint string, params url.Values, putParams map[string]string) (r *http.Response, body []byte, err error) {
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) Put(endpoint string, params url.Values, putParams url.Values) (r *http.Response, body []byte, err error) {
 	return at.request(http.MethodPut, endpoint, params, putParams)
 }
 
@@ -171,20 +179,24 @@ func (at *AccountsTester) Close() error {
 	return nil
 }
 
-// CreateUserPost is a helper method.
-func (at *AccountsTester) CreateUserPost(email, password string) (r *http.Response, body []byte, err error) {
-	bodyParams := map[string]string{
-		"email":    email,
-		"password": password,
-	}
-	return at.Post("/user", nil, bodyParams)
+// CreateUserPost is a helper method that creates a new user.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) CreateUserPost(emailAddr, password string) (r *http.Response, body []byte, err error) {
+	params := url.Values{}
+	params.Add("email", emailAddr)
+	params.Add("password", password)
+	return at.Post("/user", nil, params)
 }
 
 // UserPUT is a helper.
-func (at *AccountsTester) UserPUT(email, stipeID string) (*http.Response, []byte, error) {
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Response, []byte, error) {
 	serviceURL := testPortalAddr + ":" + testPortalPort + "/user"
 	b, err := json.Marshal(map[string]string{
 		"email":            email,
+		"password":         password,
 		"stripeCustomerId": stipeID,
 	})
 	if err != nil {
@@ -194,20 +206,14 @@ func (at *AccountsTester) UserPUT(email, stipeID string) (*http.Response, []byte
 	if err != nil {
 		return nil, nil, err
 	}
-	if at.Cookie != nil {
-		req.Header.Set("Cookie", at.Cookie.String())
-	}
-	client := http.Client{}
-	r, err := client.Do(req)
-	if err != nil {
-		return nil, nil, err
-	}
-	return processResponse(r)
+	return at.executeRequest(req)
 }
 
 // request is a helper method that puts together and executes an HTTP
 // request. It attaches the current cookie, if one exists.
-func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, bodyParams map[string]string) (*http.Response, []byte, error) {
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
 	if queryParams == nil {
 		queryParams = url.Values{}
 	}
@@ -220,20 +226,28 @@ func (at *AccountsTester) request(method string, endpoint string, queryParams ur
 	if err != nil {
 		return nil, nil, err
 	}
+	return at.executeRequest(req)
+}
+
+// executeRequest is a helper method which executes a test request and processes
+// the response by extracting the body from it and handling non-OK status codes.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []byte, error) {
+	if req == nil {
+		return nil, nil, errors.New("invalid request")
+	}
 	if at.Cookie != nil {
 		req.Header.Set("Cookie", at.Cookie.String())
+	}
+	if at.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+at.Token)
 	}
 	client := http.Client{}
 	r, err := client.Do(req)
 	if err != nil {
 		return nil, nil, err
 	}
-	return processResponse(r)
-}
-
-// processResponse is a helper method which extracts the body from the response
-// and handles non-OK status codes.
-func processResponse(r *http.Response) (*http.Response, []byte, error) {
 	body, err := ioutil.ReadAll(r.Body)
 	_ = r.Body.Close()
 	// For convenience, whenever we have a non-OK status we'll wrap it in an
