@@ -707,11 +707,6 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// // TEST EXECUTING RECOVERY // //
 
 	newPassword := hex.EncodeToString(fastrand.Bytes(16))
-	// body := map[string]string{
-	// 	"token":           token,
-	// 	"password":        newPassword,
-	// 	"confirmPassword": newPassword,
-	// }
 	// Try without a token:
 	params = url.Values{}
 	params.Add("password", newPassword)
