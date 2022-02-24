@@ -198,9 +198,9 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 		if maxAPIKeys > 0 {
 			config.MaxAPIKeys = maxAPIKeys
 		} else {
-			log.Printf("Warning: Invalid value of %s. The invalid value is ignored and the default value of %d is used.", envMaxNumAPIKeysPerUser, config.MaxAPIKeys)
+			log.Printf("Warning: Invalid value of %s. The invalid value is ignored and the default value of %d is used.", envMaxNumAPIKeysPerUser, database.MaxNumAPIKeysPerUser)
+			config.MaxAPIKeys = database.MaxNumAPIKeysPerUser
 		}
-		config.MaxAPIKeys = maxAPIKeys
 	} else {
 		// The environment doesn't specify a value, use the default.
 		config.MaxAPIKeys = database.MaxNumAPIKeysPerUser
