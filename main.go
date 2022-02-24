@@ -160,13 +160,15 @@ func main() {
 		}
 	}
 	// Fetch the configuration for maximum number of API keys allowed per user.
-	if maxAPIKeysStr, ok := os.LookupEnv(envMaxNumAPIKeysPerUser); !ok {
+	if maxAPIKeysStr, exists := os.LookupEnv(envMaxNumAPIKeysPerUser); exists {
 		maxAPIKeys, err := strconv.Atoi(maxAPIKeysStr)
 		if err != nil {
 			log.Printf("Warning: Failed to parse %s env var. Error: %s", envMaxNumAPIKeysPerUser, err.Error())
 		}
 		if maxAPIKeys > 0 {
 			database.MaxNumAPIKeysPerUser = maxAPIKeys
+		} else {
+			log.Printf("Warning: Invalid value of %s. The invalid value is ignored and the default value of %d is used.", envMaxNumAPIKeysPerUser, database.MaxNumAPIKeysPerUser)
 		}
 	}
 
