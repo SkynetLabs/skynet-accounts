@@ -25,18 +25,18 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 
 	// Request a challenge without a pubkey.
 	r, b, _ := at.Get("/register", nil)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublikKey.Error()) {
+	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublikKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
 	}
 
 	// Request a challenge with an invalid pubkey.
 	params := url.Values{}
 	params.Add("pubKey", hex.EncodeToString(fastrand.Bytes(10)))
 	r, b, _ = at.Get("/register", nil)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublikKey.Error()) {
+	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublikKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
 	}
 
 	params = url.Values{}
@@ -128,18 +128,18 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 
 	// Request a challenge without a pubkey.
 	r, b, _ = at.Get("/login", nil)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublikKey.Error()) {
+	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublikKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
 	}
 
 	// Request a challenge with an invalid pubkey.
 	params = url.Values{}
 	params.Add("pubKey", hex.EncodeToString(fastrand.Bytes(10)))
 	r, b, _ = at.Get("/login", params)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublikKey.Error()) {
+	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublikKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
 	}
 
 	// Request a challenge with a valid pubkey.
@@ -198,18 +198,18 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 
 	// Request a challenge without a pubkey.
 	r, b, _ := at.Get("/user/pubkey/register", nil)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublikKey.Error()) {
+	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublikKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
 	}
 
 	// Request a challenge with an invalid pubkey.
 	params := url.Values{}
 	params.Add("pubKey", hex.EncodeToString(fastrand.Bytes(10)))
 	r, b, _ = at.Get("/user/pubkey/register", params)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublikKey.Error()) {
+	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublikKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
 	}
 
 	// Request a challenge with a pubKey that belongs to another user.

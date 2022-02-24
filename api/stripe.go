@@ -25,7 +25,8 @@ const (
 
 var (
 	// StripeTestMode tells us whether to use Stripe's test mode or prod mode
-	// plan and price ids.
+	// plan and price ids. This depends on what kind of key is stored in the
+	// STRIPE_API_KEY environment variable.
 	StripeTestMode = false
 
 	// True is a helper for when we need to pass a *bool to Stripe.

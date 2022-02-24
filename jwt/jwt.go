@@ -23,6 +23,7 @@ var (
 	AccountsPublicJWKS jwk.Set = nil
 
 	// AccountsJWKSFile defines where to look for the JWKS file.
+	// Can be overridden by the ACCOUNTS_JWKS_FILE environment variable.
 	AccountsJWKSFile = build.Select(
 		build.Var{
 			Dev:      "jwks.json",
@@ -35,11 +36,12 @@ var (
 	// expired token.
 	ErrTokenExpired = errors.New("token expired")
 
-	// PortalName is the issuing service we are using for our JWTs. This
-	// value can be overwritten by main.go is PORTAL_DOMAIN is set.
+	// PortalName is the issuing service we are using for our JWTs.
+	// Can be overridden by main.go is PORTAL_DOMAIN is set.
 	PortalName = "https://siasky.net"
 
-	// TTL defines the lifetime of the JWT token in seconds.
+	// TTL defines the lifetime of the JWT token in seconds.'
+	// Can be overridden by the ACCOUNTS_JWT_TTL environment variable.
 	TTL = 720 * 3600
 )
 
