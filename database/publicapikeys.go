@@ -33,6 +33,15 @@ type (
 	}
 )
 
+// IsValid checks whether the underlying string satisfies the type's requirement
+// to represent a []byte with length PubKeySize which is encoded as base64URL.
+// This method does NOT check whether the public API key exists in the database.
+func (pak PubAPIKey) IsValid() bool {
+	b := make([]byte, PubKeySize)
+	n, err := base64.URLEncoding.Decode(b, []byte(pak))
+	return err == nil && n == PubKeySize
+}
+
 // PubAPIKeyCreate creates a new public API key.
 func (db *DB) PubAPIKeyCreate(ctx context.Context, user User, skylinks []string) (*PubAPIKeyRecord, error) {
 	if user.ID.IsZero() {
@@ -110,6 +119,20 @@ func (db *DB) PubAPIKeyDelete(ctx context.Context, user User, akID string) error
 		return mongo.ErrNoDocuments
 	}
 	return nil
+}
+
+// PubAPIKeyGetRecord returns a specific public API key.
+func (db *DB) PubAPIKeyGetRecord(ctx context.Context, pak PubAPIKey) (PubAPIKeyRecord, error) {
+	sr := db.staticPubAPIKeys.FindOne(ctx, bson.M{"key": pak})
+	if sr.Err() != nil {
+		return PubAPIKeyRecord{}, sr.Err()
+	}
+	var pakRec PubAPIKeyRecord
+	err := sr.Decode(&pakRec)
+	if err != nil {
+		return PubAPIKeyRecord{}, err
+	}
+	return pakRec, nil
 }
 
 // PubAPIKeyList lists all public API keys that belong to the user.

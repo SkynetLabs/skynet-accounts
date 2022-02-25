@@ -370,17 +370,40 @@ func (api *API) userGET(u *database.User, w http.ResponseWriter, _ *http.Request
 // optimise its calls to the DB and the use of caching.
 func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// First check for an API key.
-	ak, err := apiKeyFromRequest(req)
+	akStr, err := apiKeyFromRequest(req)
 	if err == nil {
-		u, err := api.staticDB.UserByAPIKey(req.Context(), ak)
+		// Check the cache before going any further.
+		tier, ok := api.staticUserTierCache.Get(akStr)
+		if ok {
+			api.staticLogger.Traceln("Fetching user limits from cache by API key.")
+			api.WriteJSON(w, database.UserLimits[tier])
+			return
+		}
+		// Cache is missed, fetch the data from the DB.
+		ak := database.APIKey(akStr)
+		if !ak.IsValid() {
+			api.staticLogger.Traceln("Invalid API key.")
+			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+			return
+		}
+		uID, err := api.userIDForAPIKey(req.Context(), ak)
 		if err != nil {
 			api.staticLogger.Traceln("Error while fetching user by API key:", err)
 			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 			return
 		}
+		u, err := api.staticDB.UserByID(req.Context(), uID)
+		if err != nil {
+			api.staticLogger.Traceln("Error while fetching user by API key:", err)
+			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
+			return
+		}
+		// Cache the user under the API key they used.
+		api.staticUserTierCache.Set(u, akStr)
 		api.WriteJSON(w, database.UserLimits[u.Tier])
 		return
 	}
+	// Next check for a token.
 	token, err := tokenFromRequest(req)
 	if err != nil {
 		api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
@@ -403,7 +426,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			api.WriteJSON(w, database.UserLimits[database.TierAnonymous])
 			return
 		}
-		api.staticUserTierCache.Set(u)
+		api.staticUserTierCache.Set(u, "")
 	}
 	tier, ok = api.staticUserTierCache.Get(sub)
 	if !ok {
@@ -1090,7 +1113,7 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 		if err != nil {
 			api.staticLogger.Warnf("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
-		api.staticUserTierCache.Set(u)
+		api.staticUserTierCache.Set(u, "")
 	}
 }
 

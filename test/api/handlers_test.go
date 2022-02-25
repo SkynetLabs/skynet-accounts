@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
@@ -432,8 +433,19 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	at.Cookie = c
 	defer func() { at.Cookie = nil }()
 
-	// Call /user/limits with a cookie. Expect FreeTier response.
-	_, b, err := at.Get("/user/limits", nil)
+	// Create an API key for this user.
+	_, b, err := at.Post("/user/apikeys", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var akRec database.APIKeyRecord
+	err = json.Unmarshal(b, &akRec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Call /user/limits with a cookie. Expect TierFree response.
+	_, b, err = at.Get("/user/limits", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +458,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierFree].TierName, tl.TierName)
 	}
 
-	// Call /user/limits without a cookie. Expect FreeAnonymous response.
+	// Call /user/limits without a cookie. Expect TierAnonymous response.
 	at.Cookie = nil
 	_, b, err = at.Get("/user/limits", nil)
 	if err != nil {
@@ -458,6 +470,15 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 	if tl.TierName != database.UserLimits[database.TierAnonymous].TierName {
 		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierAnonymous].TierName, tl.TierName)
+	}
+
+	// Call /user/limits with an API key. Expect TierFree response.
+	tl, _, err = at.UserLimitsGET(nil, map[string]string{api.APIKeyHeader: string(akRec.Key)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tl.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierFree].TierName, tl.TierName)
 	}
 }
 

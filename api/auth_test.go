@@ -34,7 +34,7 @@ func TestAPIKeyFromRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(tk) != token {
+	if tk != token {
 		t.Fatalf("Expected '%s', got '%s'.", token, tk)
 	}
 
@@ -45,10 +45,10 @@ func TestAPIKeyFromRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(tk) == token {
+	if tk == token {
 		t.Fatal("Form token took precedence over headers token.")
 	}
-	if string(tk) != token2 {
+	if tk != token2 {
 		t.Fatalf("Expected '%s', got '%s'.", token2, tk)
 	}
 }

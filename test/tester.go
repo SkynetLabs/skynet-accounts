@@ -127,14 +127,14 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Get(endpoint string, params url.Values) (r *http.Response, body []byte, err error) {
-	return at.request(http.MethodGet, endpoint, params, nil)
+	return at.request(http.MethodGet, endpoint, params, nil, nil)
 }
 
 // Delete executes a DELETE request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Delete(endpoint string, params url.Values) (r *http.Response, body []byte, err error) {
-	return at.request(http.MethodDelete, endpoint, params, nil)
+	return at.request(http.MethodDelete, endpoint, params, nil, nil)
 }
 
 // Post executes a POST request against the test service.
@@ -177,7 +177,7 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Put(endpoint string, params url.Values, putParams url.Values) (r *http.Response, body []byte, err error) {
-	return at.request(http.MethodPut, endpoint, params, putParams)
+	return at.request(http.MethodPut, endpoint, params, putParams, nil)
 }
 
 // Close performs a graceful shutdown of the AccountsTester service.
@@ -228,7 +228,7 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Respon
 // request. It attaches the current cookie, if one exists.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
+func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, bodyParams url.Values, headers map[string]string) (*http.Response, []byte, error) {
 	if queryParams == nil {
 		queryParams = url.Values{}
 	}
@@ -241,6 +241,9 @@ func (at *AccountsTester) request(method string, endpoint string, queryParams ur
 	if err != nil {
 		return nil, nil, err
 	}
+	for name, val := range headers {
+		req.Header.Set(name, val)
+	}
 	if at.Cookie != nil {
 		req.Header.Set("Cookie", at.Cookie.String())
 	}
@@ -250,6 +253,23 @@ func (at *AccountsTester) request(method string, endpoint string, queryParams ur
 		return nil, nil, err
 	}
 	return processResponse(r)
+}
+
+// UserLimitsGET performs a `GET /user/limits` request.
+func (at *AccountsTester) UserLimitsGET(params url.Values, headers map[string]string) (database.TierLimits, int, error) {
+	r, b, err := at.request(http.MethodGet, "/user/limits", params, nil, headers)
+	if err != nil {
+		return database.TierLimits{}, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return database.TierLimits{}, r.StatusCode, errors.New(string(b))
+	}
+	var result database.TierLimits
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		return database.TierLimits{}, 0, errors.AddContext(err, "failed to parse response")
+	}
+	return result, r.StatusCode, nil
 }
 
 // processResponse is a helper method which extracts the body from the response

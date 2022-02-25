@@ -45,7 +45,7 @@ type (
 
 // IsValid checks whether the underlying string satisfies the type's requirement
 // to represent a []byte with length PubKeySize which is encoded as base64URL.
-// This method does NOT check whether the API exists in the database.
+// This method does NOT check whether the API key exists in the database.
 func (ak APIKey) IsValid() bool {
 	b := make([]byte, PubKeySize)
 	n, err := base64.URLEncoding.Decode(b, []byte(ak))
@@ -98,6 +98,20 @@ func (db *DB) APIKeyDelete(ctx context.Context, user User, akID string) error {
 		return mongo.ErrNoDocuments
 	}
 	return nil
+}
+
+// APIKeyGetRecord returns a specific API key.
+func (db *DB) APIKeyGetRecord(ctx context.Context, ak APIKey) (APIKeyRecord, error) {
+	sr := db.staticAPIKeys.FindOne(ctx, bson.M{"key": ak})
+	if sr.Err() != nil {
+		return APIKeyRecord{}, sr.Err()
+	}
+	var akRecord APIKeyRecord
+	err := sr.Decode(&akRecord)
+	if err != nil {
+		return APIKeyRecord{}, err
+	}
+	return akRecord, nil
 }
 
 // APIKeyList lists all API keys that belong to the user.

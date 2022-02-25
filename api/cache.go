@@ -46,8 +46,10 @@ func (utc *userTierCache) Get(sub string) (int, bool) {
 	return ce.Tier, true
 }
 
-// Set stores the user's tier in the cache.
-func (utc *userTierCache) Set(u *database.User) {
+// Set stores the user's tier in the cache. If the customCacheKey is not empty,
+// it will be used to store the user in the cache, otherwise the user's sub will
+// be used.
+func (utc *userTierCache) Set(u *database.User, customCacheKey string) {
 	var ce userTierCacheEntry
 	now := time.Now().UTC()
 	if u.SubscribedUntil.Before(now) {
@@ -67,6 +69,10 @@ func (utc *userTierCache) Set(u *database.User) {
 		}
 	}
 	utc.mu.Lock()
-	utc.cache[u.Sub] = ce
+	if customCacheKey == "" {
+		utc.cache[u.Sub] = ce
+	} else {
+		utc.cache[customCacheKey] = ce
+	}
 	utc.mu.Unlock()
 }
