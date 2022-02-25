@@ -444,7 +444,9 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var akRec database.APIKeyRecord
+	var akRec struct {
+		Key database.APIKey `json:"key"`
+	}
 	err = json.Unmarshal(b, &akRec)
 	if err != nil {
 		t.Fatal(err)
