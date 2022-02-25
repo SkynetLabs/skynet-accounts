@@ -5,16 +5,7 @@ WORKDIR /root
 
 ENV CGO_ENABLED=0
 
-COPY api api
-COPY build build
-COPY database database
-COPY email email
-COPY hash hash
-COPY jwt jwt
-COPY lib lib
-COPY metafetcher metafetcher
-COPY skynet skynet
-COPY go.mod go.sum main.go Makefile ./
+COPY . .
 
 RUN go mod download && make release
 
