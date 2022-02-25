@@ -101,7 +101,7 @@ func (api *API) loginGET(_ *database.User, w http.ResponseWriter, req *http.Requ
 	var pk database.PubKey
 	err := pk.LoadString(req.FormValue("pubKey"))
 	if err != nil {
-		api.WriteError(w, database.ErrInvalidPublikKey, http.StatusBadRequest)
+		api.WriteError(w, database.ErrInvalidPublicKey, http.StatusBadRequest)
 		return
 	}
 	_, err = api.staticDB.UserByPubKey(req.Context(), pk)
@@ -281,7 +281,7 @@ func (api *API) registerGET(_ *database.User, w http.ResponseWriter, req *http.R
 	var pk database.PubKey
 	err = pk.LoadString(req.FormValue("pubKey"))
 	if err != nil {
-		api.WriteError(w, database.ErrInvalidPublikKey, http.StatusBadRequest)
+		api.WriteError(w, database.ErrInvalidPublicKey, http.StatusBadRequest)
 		return
 	}
 	// Check if this pubkey is already associated with a user.

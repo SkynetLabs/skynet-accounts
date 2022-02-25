@@ -337,6 +337,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		Sub:                              sub,
 		Tier:                             tier,
 	}
+	// TODO This part can race and create multiple accounts with the same email, unless we add DB-level uniqueness restriction.
 	// Insert the user.
 	fields, err := bson.Marshal(u)
 	if err != nil {
@@ -442,6 +443,14 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	_, err = db.staticRegistryWrites.DeleteMany(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user registry writes")
+	}
+	_, err = db.staticAPIKeys.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user API keys")
+	}
+	_, err = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.D{{"sub", u.Sub}})
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user unconfirmed updates")
 	}
 	// Delete the actual user.
 	filter = bson.D{{"_id", u.ID}}

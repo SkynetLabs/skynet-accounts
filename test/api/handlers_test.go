@@ -14,6 +14,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
+	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"gitlab.com/NebulousLabs/errors"
@@ -194,6 +195,11 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	// Make sure the returned cookie is usable for making requests.
 	at.Cookie = c
 	defer func() { at.Cookie = nil }()
+	// Make sure the response contains a valid JWT.
+	_, err = jwt.ValidateToken(r.Header.Get("Skynet-Token"))
+	if err != nil {
+		t.Fatal("Missing or invalid token. Error:", err)
+	}
 	_, b, err := at.Get("/user", nil)
 	if err != nil || !strings.Contains(string(b), emailAddr) {
 		t.Fatal("Expected to be able to fetch the user with this cookie.")
@@ -971,6 +977,21 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	if at.Cookie == nil {
 		t.Fatalf("Failed to extract cookie from request. Cookies found: %+v", r.Cookies())
 	}
+	// Make sure the response contains a valid JWT.
+	tk := r.Header.Get("Skynet-Token")
+	if _, err = jwt.ValidateToken(tk); err != nil {
+		t.Fatal("Missing or invalid token. Error:", err)
+	}
+	// Make sure we can make calls with this token.
+	at.Token = tk
+	c := at.Cookie
+	at.Cookie = nil
+	_, _, err = at.Get("/user", nil)
+	if err != nil {
+		t.Fatal("Failed to fetch user data with token:", err.Error())
+	}
+	at.Token = ""
+	at.Cookie = c
 	// Change the user's email.
 	newEmail := name + "_new@siasky.net"
 	r, b, err := at.UserPUT(newEmail, "", "")

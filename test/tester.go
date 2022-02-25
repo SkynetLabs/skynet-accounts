@@ -35,6 +35,7 @@ type (
 		Logger *logrus.Logger
 		// If set, this cookie will be attached to all requests.
 		Cookie *http.Cookie
+		Token  string
 
 		cancel context.CancelFunc
 	}
@@ -162,15 +163,7 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 		return nil, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if at.Cookie != nil {
-		req.Header.Set("Cookie", at.Cookie.String())
-	}
-	c := http.Client{}
-	r, err = c.Do(req)
-	if err != nil {
-		return
-	}
-	return processResponse(r)
+	return at.executeRequest(req)
 }
 
 // Put executes a PUT request against the test service.
@@ -213,15 +206,7 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Respon
 	if err != nil {
 		return nil, nil, err
 	}
-	if at.Cookie != nil {
-		req.Header.Set("Cookie", at.Cookie.String())
-	}
-	client := http.Client{}
-	r, err := client.Do(req)
-	if err != nil {
-		return nil, nil, err
-	}
-	return processResponse(r)
+	return at.executeRequest(req)
 }
 
 // request is a helper method that puts together and executes an HTTP
@@ -244,8 +229,22 @@ func (at *AccountsTester) request(method string, endpoint string, queryParams ur
 	for name, val := range headers {
 		req.Header.Set(name, val)
 	}
+	return at.executeRequest(req)
+}
+
+// executeRequest is a helper method which executes a test request and processes
+// the response by extracting the body from it and handling non-OK status codes.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []byte, error) {
+	if req == nil {
+		return nil, nil, errors.New("invalid request")
+	}
 	if at.Cookie != nil {
 		req.Header.Set("Cookie", at.Cookie.String())
+	}
+	if at.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+at.Token)
 	}
 	client := http.Client{}
 	r, err := client.Do(req)
