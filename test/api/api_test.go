@@ -192,8 +192,8 @@ func TestUserTierCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	bodyParams := url.Values{}
-	bodyParams.Add("email", email)
-	bodyParams.Add("password", password)
+	bodyParams.Set("email", email)
+	bodyParams.Set("password", password)
 	r, _, err := at.Post("/login", nil, bodyParams)
 	if err != nil {
 		t.Fatal(err)

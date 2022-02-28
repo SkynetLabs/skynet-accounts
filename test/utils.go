@@ -86,8 +86,8 @@ func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, e
 	}
 	// Log in with that user in order to make sure it exists.
 	bodyParams := url.Values{}
-	bodyParams.Add("email", email)
-	bodyParams.Add("password", password)
+	bodyParams.Set("email", email)
+	bodyParams.Set("password", password)
 	r, _, err := at.Post("/login", nil, bodyParams)
 	if err != nil {
 		return nil, nil, err
