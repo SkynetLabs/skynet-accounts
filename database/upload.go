@@ -31,14 +31,6 @@ type UploadResponse struct {
 	Timestamp  time.Time `bson:"timestamp" json:"uploadedOn"`
 }
 
-// UploadsResponse defines the final format of our response to the caller.
-type UploadsResponse struct {
-	Items    []UploadResponse `json:"items"`
-	Offset   int              `json:"offset"`
-	PageSize int              `json:"pageSize"`
-	Count    int              `json:"count"`
-}
-
 // UploadByID fetches a single upload from the DB.
 func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, error) {
 	var d Upload

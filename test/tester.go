@@ -255,18 +255,18 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 }
 
 // UserLimitsGET performs a `GET /user/limits` request.
-func (at *AccountsTester) UserLimitsGET(params url.Values, headers map[string]string) (database.TierLimits, int, error) {
+func (at *AccountsTester) UserLimitsGET(params url.Values, headers map[string]string) (api.UserLimitsGET, int, error) {
 	r, b, err := at.request(http.MethodGet, "/user/limits", params, nil, headers)
 	if err != nil {
-		return database.TierLimits{}, r.StatusCode, err
+		return api.UserLimitsGET{}, r.StatusCode, err
 	}
 	if r.StatusCode != http.StatusOK {
-		return database.TierLimits{}, r.StatusCode, errors.New(string(b))
+		return api.UserLimitsGET{}, r.StatusCode, errors.New(string(b))
 	}
-	var result database.TierLimits
+	var result api.UserLimitsGET
 	err = json.Unmarshal(b, &result)
 	if err != nil {
-		return database.TierLimits{}, 0, errors.AddContext(err, "failed to parse response")
+		return api.UserLimitsGET{}, 0, errors.AddContext(err, "failed to parse response")
 	}
 	return result, r.StatusCode, nil
 }

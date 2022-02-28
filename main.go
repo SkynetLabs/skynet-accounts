@@ -190,14 +190,16 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 		}
 	}
 	// Fetch the configuration for maximum number of API keys allowed per user.
-	maxAPIKeysStr := os.Getenv(envMaxNumAPIKeysPerUser)
-	if maxAPIKeysStr != "" {
+	if maxAPIKeysStr, exists := os.LookupEnv(envMaxNumAPIKeysPerUser); exists {
 		maxAPIKeys, err := strconv.Atoi(maxAPIKeysStr)
 		if err != nil {
 			log.Printf("Warning: Failed to parse %s env var. Error: %s", envMaxNumAPIKeysPerUser, err.Error())
 		}
 		if maxAPIKeys > 0 {
 			config.MaxAPIKeys = maxAPIKeys
+		} else {
+			log.Printf("Warning: Invalid value of %s. The invalid value is ignored and the default value of %d is used.", envMaxNumAPIKeysPerUser, database.MaxNumAPIKeysPerUser)
+			config.MaxAPIKeys = database.MaxNumAPIKeysPerUser
 		}
 	} else {
 		// The environment doesn't specify a value, use the default.

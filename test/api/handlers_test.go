@@ -457,13 +457,16 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var tl database.TierLimits
+	var tl api.UserLimitsGET
 	err = json.Unmarshal(b, &tl)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if tl.TierID != database.TierFree {
+		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
+	}
 	if tl.TierName != database.UserLimits[database.TierFree].TierName {
-		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierFree].TierName, tl.TierName)
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
 	}
 
 	// Call /user/limits without a cookie. Expect TierAnonymous response.
@@ -476,8 +479,11 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if tl.TierID != database.TierAnonymous {
+		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierAnonymous, tl.TierID)
+	}
 	if tl.TierName != database.UserLimits[database.TierAnonymous].TierName {
-		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierAnonymous].TierName, tl.TierName)
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, tl.TierName)
 	}
 
 	// Call /user/limits with an API key. Expect TierFree response.
@@ -512,7 +518,7 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ups database.UploadsResponse
+	var ups api.UploadsGET
 	err = json.Unmarshal(b, &ups)
 	if err != nil {
 		t.Fatal(err)

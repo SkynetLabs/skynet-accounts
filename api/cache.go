@@ -52,12 +52,7 @@ func (utc *userTierCache) Get(sub string) (int, bool) {
 func (utc *userTierCache) Set(u *database.User, customCacheKey string) {
 	var ce userTierCacheEntry
 	now := time.Now().UTC()
-	if u.SubscribedUntil.Before(now) {
-		ce = userTierCacheEntry{
-			Tier:      database.TierFree,
-			ExpiresAt: now.Add(userTierCacheTTL),
-		}
-	} else if u.QuotaExceeded {
+	if u.QuotaExceeded {
 		ce = userTierCacheEntry{
 			Tier:      database.TierAnonymous,
 			ExpiresAt: now.Add(userTierCacheTTL),
