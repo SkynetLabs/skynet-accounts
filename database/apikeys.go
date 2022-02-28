@@ -100,7 +100,7 @@ func (db *DB) APIKeyDelete(ctx context.Context, user User, akID string) error {
 }
 
 // APIKeyList lists all API keys that belong to the user.
-func (db *DB) APIKeyList(ctx context.Context, user User) ([]*APIKeyRecord, error) {
+func (db *DB) APIKeyList(ctx context.Context, user User) ([]APIKeyRecord, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
@@ -108,7 +108,9 @@ func (db *DB) APIKeyList(ctx context.Context, user User) ([]*APIKeyRecord, error
 	if err != nil {
 		return nil, err
 	}
-	var aks []*APIKeyRecord
+	// We want this to be a make in order to make sure its JSON representation
+	// is a valid JSONArray and not a null.
+	aks := make([]APIKeyRecord, 0)
 	err = c.All(ctx, &aks)
 	if err != nil {
 		return nil, err
