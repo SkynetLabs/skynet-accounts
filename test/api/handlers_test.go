@@ -105,9 +105,9 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	emailAddr := name + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	// Try to create a user with a missing email.
-	params := url.Values{}
-	params.Add("password", password)
-	_, _, err := at.Post("/user", nil, nil)
+	bodyParams := url.Values{}
+	bodyParams.Set("password", password)
+	_, _, err := at.Post("/user", nil, bodyParams)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
@@ -122,9 +122,9 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try to create a user with an empty password.
-	params = url.Values{}
-	params.Add("email", emailAddr)
-	_, b, err = at.Post("/user", nil, params)
+	bodyParams = url.Values{}
+	bodyParams.Set("email", emailAddr)
+	_, b, err = at.Post("/user", nil, bodyParams)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s", badRequest, err, string(b))
 	}
@@ -147,10 +147,10 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		}
 	}(u)
 	// Log in with that user in order to make sure it exists.
-	params = url.Values{}
-	params.Add("email", emailAddr)
-	params.Add("password", password)
-	_, b, err = at.Post("/login", nil, params)
+	bodyParams = url.Values{}
+	bodyParams.Set("email", emailAddr)
+	bodyParams.Set("password", password)
+	_, b, err = at.Post("/login", nil, bodyParams)
 	if err != nil {
 		t.Fatalf("Login failed. Error: '%s'. Body: '%s'", err.Error(), string(b))
 	}
@@ -165,11 +165,11 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	emailAddr := test.DBNameForTest(t.Name()) + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
-	params := url.Values{}
-	params.Add("email", emailAddr)
-	params.Add("password", password)
+	bodyParams := url.Values{}
+	bodyParams.Set("email", emailAddr)
+	bodyParams.Set("password", password)
 	// Try logging in with a non-existent user.
-	_, _, err := at.Post("/login", nil, params)
+	_, _, err := at.Post("/login", nil, bodyParams)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
@@ -183,7 +183,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 	// Login with an existing user.
-	r, _, err := at.Post("/login", nil, params)
+	r, _, err := at.Post("/login", nil, bodyParams)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,10 +228,10 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected %s, got %s", unauthorized, err)
 	}
 	// Try logging in with a bad password.
-	badPassParams := url.Values{}
-	badPassParams.Add("email", emailAddr)
-	badPassParams.Add("password", "bad password")
-	_, _, err = at.Post("/login", nil, badPassParams)
+	bodyParams = url.Values{}
+	bodyParams.Set("email", emailAddr)
+	bodyParams.Set("password", "bad password")
+	_, _, err = at.Post("/login", nil, bodyParams)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
@@ -312,8 +312,8 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	}
 	// Check if we can login with the new password.
 	params := url.Values{}
-	params.Add("email", u.Email)
-	params.Add("password", pw)
+	params.Set("email", u.Email)
+	params.Set("password", pw)
 	// Try logging in with a non-existent user.
 	_, _, err = at.Post("/login", nil, params)
 	if err != nil {
@@ -550,7 +550,7 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 
 	// Confirm the user
 	params := url.Values{}
-	params.Add("token", u.EmailConfirmationToken)
+	params.Set("token", u.EmailConfirmationToken)
 	_, b, err := at.Get("/user/confirm", params)
 	if err != nil {
 		t.Fatal(err, string(b))
@@ -593,7 +593,7 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 	}
 	// Call the endpoint with a bad token.
 	params = url.Values{}
-	params.Add("token", "this is not a valid token")
+	params.Set("token", "this is not a valid token")
 	_, b, err = at.Get("/user/confirm", params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
@@ -605,7 +605,7 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	params = url.Values{}
-	params.Add("token", u.EmailConfirmationToken)
+	params.Set("token", u.EmailConfirmationToken)
 	_, b, err = at.Get("/user/confirm", params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
@@ -643,7 +643,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// process works as expected and they should try their other emails.
 	attemptedEmail := hex.EncodeToString(fastrand.Bytes(16)) + "@siasky.net"
 	params := url.Values{}
-	params.Add("email", attemptedEmail)
+	params.Set("email", attemptedEmail)
 	_, b, err = at.Post("/user/recover/request", nil, params)
 	if err != nil {
 		t.Fatal(err, string(b))
@@ -659,23 +659,23 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	}
 	// Request recovery with a valid but unconfirmed email.
 	params = url.Values{}
-	params.Add("email", u.Email)
+	params.Set("email", u.Email)
 	_, b, err = at.Post("/user/recover/request", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Confirm the email.
-	params = url.Values{}
-	params.Add("token", u.EmailConfirmationToken)
-	_, b, err = at.Get("/user/confirm", params)
+	queryParams := url.Values{}
+	queryParams.Set("token", u.EmailConfirmationToken)
+	_, b, err = at.Get("/user/confirm", queryParams)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
 	// Request recovery with a valid email. We expect there to be a single email
 	// with the recovery token.
-	params = url.Values{}
-	params.Add("email", u.Email)
-	_, b, err = at.Post("/user/recover/request", nil, params)
+	bodyParams := url.Values{}
+	bodyParams.Set("email", u.Email)
+	_, b, err = at.Post("/user/recover/request", nil, bodyParams)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
@@ -714,58 +714,53 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// // TEST EXECUTING RECOVERY // //
 
 	newPassword := hex.EncodeToString(fastrand.Bytes(16))
-	// params := map[string]string{
-	// 	"token":           token,
-	// 	"password":        newPassword,
-	// 	"confirmPassword": newPassword,
-	// }
 	// Try without a token:
 	params = url.Values{}
-	params.Add("password", newPassword)
-	params.Add("confirmPassword", newPassword)
+	params.Set("password", newPassword)
+	params.Set("confirmPassword", newPassword)
 	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try without a password.
 	params = url.Values{}
-	params.Add("token", token)
-	params.Add("confirmPassword", newPassword)
+	params.Set("token", token)
+	params.Set("confirmPassword", newPassword)
 	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try without a confirmation.
 	params = url.Values{}
-	params.Add("token", token)
-	params.Add("password", newPassword)
+	params.Set("token", token)
+	params.Set("password", newPassword)
 	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try with mismatched password and confirmation.
 	params = url.Values{}
-	params.Add("token", token)
-	params.Add("password", newPassword)
-	params.Add("confirmPassword", "not the same as the password")
+	params.Set("token", token)
+	params.Set("password", newPassword)
+	params.Set("confirmPassword", "not the same as the password")
 	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try with an invalid token.
 	params = url.Values{}
-	params.Add("token", hex.EncodeToString(fastrand.Bytes(32)))
-	params.Add("password", newPassword)
-	params.Add("confirmPassword", newPassword)
+	params.Set("token", hex.EncodeToString(fastrand.Bytes(32)))
+	params.Set("password", newPassword)
+	params.Set("confirmPassword", newPassword)
 	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try to use the token we got to recover the account.
 	params = url.Values{}
-	params.Add("token", token)
-	params.Add("password", newPassword)
-	params.Add("confirmPassword", newPassword)
+	params.Set("token", token)
+	params.Set("password", newPassword)
+	params.Set("confirmPassword", newPassword)
 	_, b, err = at.Post("/user/recover", nil, params)
 	if err != nil {
 		t.Log(token)
@@ -773,8 +768,8 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	}
 	// Make sure the user's password is now successfully changed.
 	params = url.Values{}
-	params.Add("email", u.Email)
-	params.Add("password", newPassword)
+	params.Set("email", u.Email)
+	params.Set("password", newPassword)
 	_, b, err = at.Post("/login", nil, params)
 	if err != nil {
 		t.Fatal(err, string(b))
@@ -790,9 +785,9 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// Make extra sure we cannot sue the token again. This is only to make sure
 	// we didn't cache it anywhere or allow it to somehow linger somewhere.
 	params = url.Values{}
-	params.Add("token", token)
-	params.Add("password", newPassword)
-	params.Add("confirmPassword", newPassword)
+	params.Set("token", token)
+	params.Set("password", newPassword)
+	params.Set("confirmPassword", newPassword)
 	_, b, err = at.Post("/user/recover", nil, params)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
@@ -848,7 +843,7 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	// Call trackDownload without a cookie.
 	at.Cookie = nil
 	params := url.Values{}
-	params.Add("bytes", "100")
+	params.Set("bytes", "100")
 	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected error '%s', got '%s'. Body: '%s", unauthorized, err, string(b))
@@ -861,14 +856,14 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	}
 	// Call trackDownload with a valid skylink and a negative size download
 	params = url.Values{}
-	params.Add("bytes", "-100")
+	params.Set("bytes", "-100")
 	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Call trackDownload with a valid skylink.
 	params = url.Values{}
-	params.Add("bytes", "100")
+	params.Set("bytes", "100")
 	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
 	if err != nil {
 		t.Fatal(err, string(b))
@@ -938,11 +933,13 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	// Use the test's name as an email-compatible identifier.
 	name := test.DBNameForTest(t.Name())
-	params := url.Values{}
-	params.Add("email", name+"@siasky.net")
-	params.Add("password", hex.EncodeToString(fastrand.Bytes(16)))
+	emailAddr := name + "@siasky.net"
+	password := hex.EncodeToString(fastrand.Bytes(16))
+	queryParams := url.Values{}
+	queryParams.Set("email", emailAddr)
+	queryParams.Set("password", password)
 	// Create a user.
-	u, err := test.CreateUser(at, params.Get("email"), params.Get("password"))
+	u, err := test.CreateUser(at, queryParams.Get("email"), queryParams.Get("password"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -953,7 +950,10 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}()
 
 	// Log in with that user in order to make sure it exists.
-	r, _, err := at.Post("/login", nil, params)
+	bodyParams := url.Values{}
+	bodyParams.Set("email", emailAddr)
+	bodyParams.Set("password", password)
+	r, _, err := at.Post("/login", nil, bodyParams)
 	if err != nil {
 		t.Fatal("Login failed. Error ", err.Error())
 	}

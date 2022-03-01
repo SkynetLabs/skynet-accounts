@@ -80,7 +80,6 @@ func TestParseConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-
 	// Missing PORTAL_DOMAIN
 	err = os.Setenv(envPortal, "")
 	if err != nil {
