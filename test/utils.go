@@ -77,16 +77,18 @@ func CreateUser(at *AccountsTester, emailAddr, password string) (*User, error) {
 // function that deletes the user.
 func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, error) {
 	// Use the test's name as an email-compatible identifier.
-	params := url.Values{}
-	params.Add("email", DBNameForTest(name)+"@siasky.net")
-	params.Add("password", hex.EncodeToString(fastrand.Bytes(16)))
+	email := DBNameForTest(name) + "@siasky.net"
+	password := hex.EncodeToString(fastrand.Bytes(16))
 	// Create a user.
-	u, err := CreateUser(at, params.Get("email"), params.Get("password"))
+	u, err := CreateUser(at, email, password)
 	if err != nil {
 		return nil, nil, err
 	}
 	// Log in with that user in order to make sure it exists.
-	r, _, err := at.Post("/login", nil, params)
+	bodyParams := url.Values{}
+	bodyParams.Set("email", email)
+	bodyParams.Set("password", password)
+	r, _, err := at.Post("/login", nil, bodyParams)
 	if err != nil {
 		return nil, nil, err
 	}

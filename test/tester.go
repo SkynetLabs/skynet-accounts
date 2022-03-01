@@ -184,8 +184,8 @@ func (at *AccountsTester) Close() error {
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) CreateUserPost(emailAddr, password string) (r *http.Response, body []byte, err error) {
 	params := url.Values{}
-	params.Add("email", emailAddr)
-	params.Add("password", password)
+	params.Set("email", emailAddr)
+	params.Set("password", password)
 	return at.Post("/user", nil, params)
 }
 

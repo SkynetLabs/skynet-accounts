@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -183,17 +184,17 @@ func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, i
 // adjusts the user's record accordingly.
 func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) error {
 	api.staticLogger.Traceln("Processing subscription:", s.ID)
+	u, err := api.staticDB.UserByStripeID(ctx, s.Customer.ID)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to fetch user from DB for customer id %s", s.Customer.ID)
+		return errors.AddContext(err, errMsg)
+	}
 	// Get all active subscriptions for this customer. There should be only one
 	// (or none) but we'd better check.
 	it := sub.List(&stripe.SubscriptionListParams{
 		Customer: s.Customer.ID,
 		Status:   string(stripe.SubscriptionStatusActive),
 	})
-	// TODO Allow multiple stripe ids per user?
-	u, err := api.staticDB.UserByStripeID(ctx, s.Customer.ID)
-	if err != nil {
-		return errors.AddContext(err, "failed to fetch user from DB based on subscription info")
-	}
 	// Pick the latest active plan and set the user's tier based on that.
 	subs := it.SubscriptionList().Data
 	var mostRecentSub *stripe.Subscription
@@ -230,16 +231,20 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		if subsc == nil || (mostRecentSub != nil && subsc.ID == mostRecentSub.ID) {
 			continue
 		}
+		if subsc.ID == "" {
+			api.staticLogger.Warnf("Empty subscription ID! User ID '%s', Stripe ID '%s', subscription object '%+v'", u.ID.Hex(), u.StripeID, subs)
+			continue
+		}
 		subsc, err = sub.Cancel(subsc.ID, &p)
 		if err != nil {
-			api.staticLogger.Warnf("Failed to cancel sub with id %s for user %s with Stripe customer id %s. Error: %s", subsc.ID, u.ID.Hex(), s.Customer.ID, err.Error())
+			api.staticLogger.Warnf("Failed to cancel sub with id '%s' for user '%s' with Stripe customer id '%s'. Error: '%s'", subsc.ID, u.ID.Hex(), s.Customer.ID, err.Error())
 		} else {
-			api.staticLogger.Tracef("Successfully cancelled sub with id %s for user %s with Stripe customer id %s.", subsc.ID, u.ID.Hex(), s.Customer.ID)
+			api.staticLogger.Tracef("Successfully cancelled sub with id '%s' for user '%s' with Stripe customer id '%s'.", subsc.ID, u.ID.Hex(), s.Customer.ID)
 		}
 	}
 	err = api.staticDB.UserSave(ctx, u)
 	if err == nil {
-		api.staticLogger.Tracef("Subscribed user id %s, tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
+		api.staticLogger.Tracef("Subscribed user id '%s', tier %d, until %s.", u.ID, u.Tier, u.SubscribedUntil.String())
 	}
 	// Re-set the tier cache for this user, in case their tier changed.
 	api.staticUserTierCache.Set(u, "")

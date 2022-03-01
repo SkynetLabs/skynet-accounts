@@ -147,7 +147,7 @@ func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	// variable. The main thing we want to see here is whether we get
 	// an `Unauthorized` error or not but we'll validate the stats as well.
 	params := url.Values{}
-	params.Add("apiKey", string(ak.Key))
+	params.Set("apiKey", string(ak.Key))
 	_, body, err = at.Get("/user/stats", params)
 	if err != nil {
 		t.Fatal(err, string(body))
