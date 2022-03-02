@@ -14,9 +14,6 @@ import (
 )
 
 type (
-	// TODO: I am still not sure whether we should use separate collections or
-	// 	keep all API keys in the same one.
-
 	// PubAPIKey is a base64URL-encoded representation of []byte with length
 	// PubKeySize
 	PubAPIKey string

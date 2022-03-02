@@ -417,7 +417,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			api.WriteJSON(w, resp)
 			return
 		}
-		// Cache is missed, fetch the data from the DB.
+		// Cache is missed, fetch the owner of this APIKey from the DB.
 		ak := database.APIKey(akStr)
 		if !ak.IsValid() {
 			api.staticLogger.Traceln("Invalid API key.")
@@ -477,6 +477,71 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	resp := UserLimitsGET{
 		TierID:     tier,
 		TierLimits: database.UserLimits[tier],
+	}
+	api.WriteJSON(w, resp)
+}
+
+// userLimitsSkylinkGET returns the speed limits which apply to a GET call to
+// the given skylink. This method exists to accommodate public API keys.
+//
+// NOTE: This handler needs to use the noAuth middleware in order to be able to
+// optimise its calls to the DB and the use of caching.
+func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	respAnon := UserLimitsGET{
+		TierID:     database.TierAnonymous,
+		TierLimits: database.UserLimits[database.TierAnonymous],
+	}
+	// Validate the skylink.
+	skylink := ps.ByName("skylink")
+	if !database.ValidSkylinkHash(skylink) {
+		api.staticLogger.Tracef("Invalid skylink: %s", skylink)
+		api.WriteJSON(w, respAnon)
+		return
+	}
+	// Try to fetch an API attached to the request.
+	pakStr, err := apiKeyFromRequest(req)
+	if err != nil {
+		// We failed to fetch an API key from this request but the request might
+		// be authenticated in another way, so we'll defer to userLimitsGET.
+		api.userLimitsGET(u, w, req, ps)
+		return
+	}
+	// Check if that is a valid PubAPIKey.
+	pak := database.PubAPIKey(pakStr)
+	if !pak.IsValid() {
+		// This is not a valid PubAPIKey. Defer to userLimitsGET.
+		api.userLimitsGET(u, w, req, ps)
+		return
+	}
+	// Check the cache before hitting the database.
+	tier, ok := api.staticUserTierCache.Get(pakStr + skylink)
+	if ok {
+		api.staticLogger.Traceln("Fetching user limits from cache by API key.")
+		resp := UserLimitsGET{
+			TierID:     tier,
+			TierLimits: database.UserLimits[tier],
+		}
+		api.WriteJSON(w, resp)
+		return
+	}
+	// Get the owner of this PubAPIKey from the database.
+	uID, err := api.userIDForPubAPIKey(req.Context(), pak, skylink)
+	if err != nil {
+		api.staticLogger.Tracef("Failed to get user ID for this PubAPIKey: %v", err)
+		api.WriteJSON(w, respAnon)
+		return
+	}
+	user, err := api.staticDB.UserByID(req.Context(), uID)
+	if err != nil {
+		api.staticLogger.Tracef("Failed to get user for user ID: %v", err)
+		api.WriteJSON(w, respAnon)
+		return
+	}
+	// Store the user in the cache with a custom key.
+	api.staticUserTierCache.Set(user, pakStr+skylink)
+	resp := UserLimitsGET{
+		TierID:     user.Tier,
+		TierLimits: database.UserLimits[user.Tier],
 	}
 	api.WriteJSON(w, resp)
 }

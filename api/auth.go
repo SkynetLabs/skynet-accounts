@@ -107,6 +107,7 @@ func (api *API) userIDForPubAPIKey(ctx context.Context, pak database.PubAPIKey, 
 }
 
 // apiKeyFromRequest extracts the API key from the request and returns it.
+// This function does not differentiate between APIKey and PubAPIKey.
 // It first checks the headers and then the query.
 func apiKeyFromRequest(r *http.Request) (string, error) {
 	// Check the headers for an API key.

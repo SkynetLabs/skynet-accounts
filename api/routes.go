@@ -53,6 +53,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.PUT("/user", api.WithDBSession(api.withAuth(api.userPUT)))
 	api.staticRouter.DELETE("/user", api.withAuth(api.userDELETE))
 	api.staticRouter.GET("/user/limits", api.noAuth(api.userLimitsGET))
+	api.staticRouter.GET("/user/limits/:skylink", api.noAuth(api.userLimitsSkylinkGET))
 	api.staticRouter.GET("/user/stats", api.withAuth(api.userStatsGET))
 	api.staticRouter.GET("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterGET)))
 	api.staticRouter.POST("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterPOST)))
@@ -125,7 +126,9 @@ func (api *API) withAuth(h HandlerWithUser) httprouter.Handle {
 // logRequest logs information about the current request.
 func (api *API) logRequest(r *http.Request) {
 	hasAuth := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer")
+	hasAPIKey := r.Header.Get(APIKeyHeader) != "" || r.FormValue("apiKey") != ""
 	c, err := r.Cookie(CookieName)
 	hasCookie := err == nil && c != nil
-	api.staticLogger.Tracef("Processing request: %v %v, Auth: %v, Skynet Cookie: %v, Referer: %v, Host: %v, RemoreAddr: %v", r.Method, r.URL, hasAuth, hasCookie, r.Referer(), r.Host, r.RemoteAddr)
+	api.staticLogger.Tracef("Processing request: %v %v, Auth: %v, API Key: %v, Cookie: %v, Referer: %v, Host: %v, RemoreAddr: %v",
+		r.Method, r.URL, hasAuth, hasAPIKey, hasCookie, r.Referer(), r.Host, r.RemoteAddr)
 }
