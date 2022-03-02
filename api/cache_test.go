@@ -24,7 +24,7 @@ func TestUserTierCache(t *testing.T) {
 		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", database.TierAnonymous, false, tier, ok)
 	}
 	// Set the use in the cache.
-	cache.Set(u, "")
+	cache.Set(u.Sub, u)
 	// Check again.
 	tier, ok = cache.Get(u.Sub)
 	if !ok || tier != u.Tier {
@@ -43,7 +43,7 @@ func TestUserTierCache(t *testing.T) {
 	timeToMonthRollover := 30 * time.Minute
 	u.SubscribedUntil = time.Now().UTC().Add(timeToMonthRollover)
 	// Update the cache.
-	cache.Set(u, "")
+	cache.Set(u.Sub, u)
 	// Expect the cache entry's ExpiresAt to be after 30 minutes.
 	timeIn30 := time.Now().UTC().Add(time.Hour - timeToMonthRollover)
 	if ce.ExpiresAt.After(timeIn30) && ce.ExpiresAt.Before(timeIn30.Add(time.Second)) {
@@ -61,7 +61,7 @@ func TestUserTierCache(t *testing.T) {
 		t.Fatal("Did not expect to get a cache entry!")
 	}
 	// Update the cache with a custom key.
-	cache.Set(u, string(ak))
+	cache.Set(string(ak), u)
 	// Fetch the data for the custom key.
 	tier, ok = cache.Get(string(ak))
 	if !ok {

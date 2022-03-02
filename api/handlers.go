@@ -437,7 +437,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			return
 		}
 		// Cache the user under the API key they used.
-		api.staticUserTierCache.Set(u, akStr)
+		api.staticUserTierCache.Set(akStr, u)
 		resp := UserLimitsGET{
 			TierID:     u.Tier,
 			TierLimits: database.UserLimits[u.Tier],
@@ -468,7 +468,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			api.WriteJSON(w, respAnon)
 			return
 		}
-		api.staticUserTierCache.Set(u, "")
+		api.staticUserTierCache.Set(u.Sub, u)
 	}
 	tier, ok = api.staticUserTierCache.Get(sub)
 	if !ok {
@@ -538,7 +538,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 		return
 	}
 	// Store the user in the cache with a custom key.
-	api.staticUserTierCache.Set(user, pakStr+skylink)
+	api.staticUserTierCache.Set(pakStr+skylink, user)
 	resp := UserLimitsGET{
 		TierID:     user.Tier,
 		TierLimits: database.UserLimits[user.Tier],
@@ -1224,7 +1224,7 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 		if err != nil {
 			api.staticLogger.Warnf("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
-		api.staticUserTierCache.Set(u, "")
+		api.staticUserTierCache.Set(u.Sub, u)
 	}
 }
 
