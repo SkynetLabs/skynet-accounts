@@ -12,6 +12,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// TODO Test the methods here which are still untested.
+// 	- add integration tests
+
 // userAndTokenByRequestToken scans the request for an authentication token,
 // fetches the corresponding user from the database and returns both user and
 // token.
@@ -66,7 +69,7 @@ func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.To
 }
 
 // userAndTokenByUserID is a helper method that fetches a given user from the
-// database based on their ID, issues a JWT token for them, and returns both
+// database based on their Key, issues a JWT token for them, and returns both
 // of those.
 func (api *API) userAndTokenByUserID(ctx context.Context, uid primitive.ObjectID) (*database.User, jwt2.Token, error) {
 	u, err := api.staticDB.UserByID(ctx, uid)
@@ -77,7 +80,7 @@ func (api *API) userAndTokenByUserID(ctx context.Context, uid primitive.ObjectID
 	return u, t, err
 }
 
-// userIDForAPIKey looks up the given APIKey and returns the ID of the user that
+// userIDForAPIKey looks up the given APIKey and returns the Key of the user that
 // issued it.
 func (api *API) userIDForAPIKey(ctx context.Context, ak database.APIKey) (primitive.ObjectID, error) {
 	akRec, err := api.staticDB.APIKeyGetRecord(ctx, ak)
@@ -88,7 +91,7 @@ func (api *API) userIDForAPIKey(ctx context.Context, ak database.APIKey) (primit
 }
 
 // userIDForPubAPIKey looks up the given PubAPIKey, validates that the target
-// skylink is covered by it, and returns the ID of the user that issued the
+// skylink is covered by it, and returns the Key of the user that issued the
 // PubAPIKey.
 func (api *API) userIDForPubAPIKey(ctx context.Context, pak database.PubAPIKey, sl string) (primitive.ObjectID, error) {
 	pakRec, err := api.staticDB.PubAPIKeyGetRecord(ctx, pak)

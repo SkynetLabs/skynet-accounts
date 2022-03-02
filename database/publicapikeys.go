@@ -60,23 +60,23 @@ func (db *DB) PubAPIKeyCreate(ctx context.Context, user User, skylinks []string)
 			return nil, ErrInvalidSkylink
 		}
 	}
-	ak := PubAPIKeyRecord{
+	pakRec := PubAPIKeyRecord{
 		UserID:    user.ID,
 		Key:       PubAPIKey(base64.URLEncoding.EncodeToString(fastrand.Bytes(PubKeySize))),
 		Skylinks:  skylinks,
 		CreatedAt: time.Now().UTC(),
 	}
-	ior, err := db.staticAPIKeys.InsertOne(ctx, ak)
+	ior, err := db.staticAPIKeys.InsertOne(ctx, pakRec)
 	if err != nil {
 		return nil, err
 	}
-	ak.ID = ior.InsertedID.(primitive.ObjectID)
-	return &ak, nil
+	pakRec.ID = ior.InsertedID.(primitive.ObjectID)
+	return &pakRec, nil
 }
 
 // PubAPIKeyUpdate updates an existing PubAPIKey. This works by replacing the
 // list of Skylinks within the PubAPIKey record.
-func (db *DB) PubAPIKeyUpdate(ctx context.Context, user User, keyID primitive.ObjectID, skylinks []string) error {
+func (db *DB) PubAPIKeyUpdate(ctx context.Context, user User, pak PubAPIKey, skylinks []string) error {
 	if user.ID.IsZero() {
 		return errors.New("invalid user")
 	}
@@ -87,7 +87,7 @@ func (db *DB) PubAPIKeyUpdate(ctx context.Context, user User, keyID primitive.Ob
 		}
 	}
 	filter := bson.M{
-		"_id":     keyID,
+		"key":     pak,
 		"user_id": user.ID,
 	}
 	update := bson.M{"skylinks": skylinks}
@@ -98,12 +98,56 @@ func (db *DB) PubAPIKeyUpdate(ctx context.Context, user User, keyID primitive.Ob
 	return err
 }
 
-// PubAPIKeyDelete deletes a public API key.
-func (db *DB) PubAPIKeyDelete(ctx context.Context, user User, akID string) error {
+// PubAPIKeyPatch updates an existing PubAPIKey. This works by adding and
+// removing specific elements directly in Mongo.
+func (db *DB) PubAPIKeyPatch(ctx context.Context, user User, pak PubAPIKey, addSkylinks, removeSkylinks []string) error {
 	if user.ID.IsZero() {
 		return errors.New("invalid user")
 	}
-	id, err := primitive.ObjectIDFromHex(akID)
+	// Validate all given skylinks.
+	for _, s := range append(addSkylinks, removeSkylinks...) {
+		if !ValidSkylinkHash(s) {
+			return ErrInvalidSkylink
+		}
+	}
+	var filter, update bson.M
+	// First, all new skylinks to the record.
+	if len(addSkylinks) > 0 {
+		filter = bson.M{"key": pak}
+		update = bson.M{
+			"$push": bson.M{"skylinks": bson.M{"$each": addSkylinks}},
+		}
+		opts := options.UpdateOptions{
+			Upsert: &False,
+		}
+		_, err := db.staticPubAPIKeys.UpdateOne(ctx, filter, update, &opts)
+		if err != nil {
+			return err
+		}
+	}
+	// Then, remove all skylinks that need to be removed.
+	if len(removeSkylinks) > 0 {
+		filter = bson.M{"key": pak}
+		update = bson.M{
+			"pull": bson.M{"skylinks": bson.M{"$in": addSkylinks}},
+		}
+		opts := options.UpdateOptions{
+			Upsert: &False,
+		}
+		_, err := db.staticPubAPIKeys.UpdateOne(ctx, filter, update, &opts)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// PubAPIKeyDelete deletes a public API key.
+func (db *DB) PubAPIKeyDelete(ctx context.Context, user User, pakID string) error {
+	if user.ID.IsZero() {
+		return errors.New("invalid user")
+	}
+	id, err := primitive.ObjectIDFromHex(pakID)
 	if err != nil {
 		return errors.AddContext(err, "invalid API key ID")
 	}
@@ -144,10 +188,10 @@ func (db *DB) PubAPIKeyList(ctx context.Context, user User) ([]*PubAPIKeyRecord,
 	if err != nil {
 		return nil, err
 	}
-	var aks []*PubAPIKeyRecord
-	err = c.All(ctx, &aks)
+	var paks []*PubAPIKeyRecord
+	err = c.All(ctx, &paks)
 	if err != nil {
 		return nil, err
 	}
-	return aks, nil
+	return paks, nil
 }

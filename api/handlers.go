@@ -27,6 +27,9 @@ const (
 	// LimitBodySizeSmall defines a size limit for requests that we don't expect
 	// to contain a lot of data.
 	LimitBodySizeSmall = 4 * skynet.KiB
+	// LimitBodySizeLarge defines a size limit for requests that we expect to
+	// contain a lot of data.
+	LimitBodySizeLarge = 4 * skynet.MiB
 )
 
 type (
