@@ -444,10 +444,10 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var akRec struct {
+	var akr struct {
 		Key database.APIKey `json:"key"`
 	}
-	err = json.Unmarshal(b, &akRec)
+	err = json.Unmarshal(b, &akr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,7 +487,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Call /user/limits with an API key. Expect TierFree response.
-	tl, _, err = at.UserLimitsGET(nil, map[string]string{api.APIKeyHeader: string(akRec.Key)})
+	tl, _, err = at.UserLimitsGET(nil, map[string]string{api.APIKeyHeader: string(akr.Key)})
 	if err != nil {
 		t.Fatal(err)
 	}

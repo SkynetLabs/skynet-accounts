@@ -424,13 +424,20 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			api.WriteJSON(w, respAnon)
 			return
 		}
-		uID, err := api.userIDForAPIKey(req.Context(), ak)
+		// Get the API key.
+		akr, err := api.staticDB.APIKeyByKey(req.Context(), akStr)
 		if err != nil {
-			api.staticLogger.Traceln("Error while fetching user by API key:", err)
+			api.staticLogger.Trace("API key doesn't exist in the database.")
 			api.WriteJSON(w, respAnon)
 			return
 		}
-		u, err := api.staticDB.UserByID(req.Context(), uID)
+		if akr.Public {
+			api.staticLogger.Trace("API key is public, cannot be used for general requests")
+			api.WriteJSON(w, respAnon)
+			return
+		}
+		// Get the owner of this API key from the database.
+		u, err := api.staticDB.UserByID(req.Context(), akr.UserID)
 		if err != nil {
 			api.staticLogger.Traceln("Error while fetching user by API key:", err)
 			api.WriteJSON(w, respAnon)
@@ -499,22 +506,22 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 		return
 	}
 	// Try to fetch an API attached to the request.
-	pakStr, err := apiKeyFromRequest(req)
+	akStr, err := apiKeyFromRequest(req)
 	if err != nil {
 		// We failed to fetch an API key from this request but the request might
 		// be authenticated in another way, so we'll defer to userLimitsGET.
 		api.userLimitsGET(u, w, req, ps)
 		return
 	}
-	// Check if that is a valid PubAPIKey.
-	pak := database.PubAPIKey(pakStr)
-	if !pak.IsValid() {
-		// This is not a valid PubAPIKey. Defer to userLimitsGET.
+	// Check if that is a valid API key.
+	ak := database.APIKey(akStr)
+	if !ak.IsValid() {
+		// This is not a valid APIKey. Defer to userLimitsGET.
 		api.userLimitsGET(u, w, req, ps)
 		return
 	}
 	// Check the cache before hitting the database.
-	tier, ok := api.staticUserTierCache.Get(pakStr + skylink)
+	tier, ok := api.staticUserTierCache.Get(akStr + skylink)
 	if ok {
 		api.staticLogger.Traceln("Fetching user limits from cache by API key.")
 		resp := UserLimitsGET{
@@ -524,21 +531,27 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 		api.WriteJSON(w, resp)
 		return
 	}
-	// Get the owner of this PubAPIKey from the database.
-	uID, err := api.userIDForPubAPIKey(req.Context(), pak, skylink)
+	// Get the API key.
+	akr, err := api.staticDB.APIKeyByKey(req.Context(), akStr)
 	if err != nil {
-		api.staticLogger.Tracef("Failed to get user ID for this PubAPIKey: %v", err)
+		api.staticLogger.Trace("API key doesn't exist in the database.")
 		api.WriteJSON(w, respAnon)
 		return
 	}
-	user, err := api.staticDB.UserByID(req.Context(), uID)
+	if !akr.CoversSkylink(skylink) {
+		api.staticLogger.Trace("API key doesn't cover this skylink.")
+		api.WriteJSON(w, respAnon)
+		return
+	}
+	// Get the owner of this API key from the database.
+	user, err := api.staticDB.UserByID(req.Context(), akr.UserID)
 	if err != nil {
 		api.staticLogger.Tracef("Failed to get user for user ID: %v", err)
 		api.WriteJSON(w, respAnon)
 		return
 	}
 	// Store the user in the cache with a custom key.
-	api.staticUserTierCache.Set(pakStr+skylink, user)
+	api.staticUserTierCache.Set(akStr+skylink, user)
 	resp := UserLimitsGET{
 		TierID:     user.Tier,
 		TierLimits: database.UserLimits[user.Tier],
@@ -1267,8 +1280,8 @@ func fetchPageSize(form url.Values) (int, error) {
 }
 
 // parseRequestBodyJSON reads a limited portion of the body and decodes it into
-// the given obj. The purpose of this is to prevent DoS attacks that rely on
-// excessively large request bodies.
-func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, objRef interface{}) error {
-	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&objRef)
+// the given struct v. The purpose of this is to prevent DoS attacks that rely
+// on excessively large request bodies.
+func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, v interface{}) error {
+	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&v)
 }

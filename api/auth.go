@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -9,11 +8,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	jwt2 "github.com/lestrrat-go/jwx/jwt"
 	"gitlab.com/NebulousLabs/errors"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
-
-// TODO Test the methods here which are still untested.
-// 	- add integration tests
 
 // userAndTokenByRequestToken scans the request for an authentication token,
 // fetches the corresponding user from the database and returns both user and
@@ -34,8 +29,8 @@ func (api *API) userAndTokenByRequestToken(req *http.Request) (*database.User, j
 	return u, token, nil
 }
 
-// userAndTokenByAPIKey extracts the APIKey or PubAPIKey from the requests and
-// validates it. It then returns the user who owns it and a token for that user.
+// userAndTokenByAPIKey extracts the APIKey from the request and validates it.
+// It then returns the user who owns it and a token for that user.
 // It first checks the headers and then the query.
 // This method accesses the database.
 func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.Token, error) {
@@ -43,36 +38,24 @@ func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.To
 	if err != nil {
 		return nil, nil, err
 	}
-	// We should only check for a PubAPIKey if this is a GET request for a valid
-	// skylink. We ignore the errors here because the API key might not be a
-	// public one.
-	if req.Method == http.MethodGet {
-		pak := database.PubAPIKey(akStr)
-		sl, err := database.ExtractSkylinkHash(req.RequestURI)
-		if err == nil && sl != "" && pak.IsValid() {
-			uID, err := api.userIDForPubAPIKey(req.Context(), pak, sl)
-			if err == nil {
-				return api.userAndTokenByUserID(req.Context(), uID)
-			}
-		}
-	}
 	// Check if this is a valid APIKey.
 	ak := database.APIKey(akStr)
 	if !ak.IsValid() {
 		return nil, nil, ErrInvalidAPIKey
 	}
-	uID, err := api.userIDForAPIKey(req.Context(), ak)
+	akr, err := api.staticDB.APIKeyByKey(req.Context(), akStr)
 	if err != nil {
-		return nil, nil, ErrInvalidAPIKey
+		return nil, nil, err
 	}
-	return api.userAndTokenByUserID(req.Context(), uID)
-}
-
-// userAndTokenByUserID is a helper method that fetches a given user from the
-// database based on their Key, issues a JWT token for them, and returns both
-// of those.
-func (api *API) userAndTokenByUserID(ctx context.Context, uid primitive.ObjectID) (*database.User, jwt2.Token, error) {
-	u, err := api.staticDB.UserByID(ctx, uid)
+	// If we're dealing with a public API key, we need to validate that this
+	// request is a GET for a covered skylink.
+	if akr.Public {
+		sl, err := database.ExtractSkylinkHash(req.RequestURI)
+		if err != nil || !akr.CoversSkylink(sl) {
+			return nil, nil, ErrInvalidAPIKey
+		}
+	}
+	u, err := api.staticDB.UserByID(req.Context(), akr.UserID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -80,34 +63,8 @@ func (api *API) userAndTokenByUserID(ctx context.Context, uid primitive.ObjectID
 	return u, t, err
 }
 
-// userIDForAPIKey looks up the given APIKey and returns the Key of the user that
-// issued it.
-func (api *API) userIDForAPIKey(ctx context.Context, ak database.APIKey) (primitive.ObjectID, error) {
-	akRec, err := api.staticDB.APIKeyGetRecord(ctx, ak)
-	if err != nil {
-		return primitive.ObjectID{}, err
-	}
-	return akRec.UserID, nil
-}
-
-// userIDForPubAPIKey looks up the given PubAPIKey, validates that the target
-// skylink is covered by it, and returns the Key of the user that issued the
-// PubAPIKey.
-func (api *API) userIDForPubAPIKey(ctx context.Context, pak database.PubAPIKey, sl string) (primitive.ObjectID, error) {
-	pakRec, err := api.staticDB.PubAPIKeyGetRecord(ctx, pak)
-	if err != nil {
-		return primitive.ObjectID{}, err
-	}
-	for _, s := range pakRec.Skylinks {
-		if sl == s {
-			return pakRec.UserID, nil
-		}
-	}
-	return primitive.ObjectID{}, database.ErrUserNotFound
-}
-
 // apiKeyFromRequest extracts the API key from the request and returns it.
-// This function does not differentiate between APIKey and PubAPIKey.
+// This function does not differentiate between APIKey and APIKey.
 // It first checks the headers and then the query.
 func apiKeyFromRequest(r *http.Request) (string, error) {
 	// Check the headers for an API key.
