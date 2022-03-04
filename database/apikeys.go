@@ -2,7 +2,8 @@ package database
 
 import (
 	"context"
-	"encoding/base64"
+	"encoding/base32"
+	"strings"
 	"time"
 
 	"gitlab.com/NebulousLabs/errors"
@@ -31,7 +32,8 @@ var (
 )
 
 type (
-	// APIKey is a base64URL-encoded representation of []byte with length PubKeySize
+	// APIKey is a base32hex-encoded-no-padding representation of []byte with
+	// length PubKeySize
 	APIKey string
 	// APIKeyRecord is a non-expiring authentication token generated on user demand.
 	APIKeyRecord struct {
@@ -42,13 +44,27 @@ type (
 	}
 )
 
+// Bytes defines the way we decode an API key.
+func (ak APIKey) Bytes() ([]byte, error) {
+	return base32.HexEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(string(ak)))
+}
+
 // IsValid checks whether the underlying string satisfies the type's requirement
-// to represent a []byte with length PubKeySize which is encoded as base64URL.
+// to represent a []byte with length PubKeySize which is encoded as base32 with
+// no padding.
 // This method does NOT check whether the API exists in the database.
 func (ak APIKey) IsValid() bool {
-	b := make([]byte, PubKeySize)
-	n, err := base64.URLEncoding.Decode(b, []byte(ak))
-	return err == nil && n == PubKeySize
+	b, err := ak.Bytes()
+	return err == nil && len(b) == PubKeySize
+}
+
+// LoadBytes encodes a [PubKeySize]byte into an API key.
+func (ak *APIKey) LoadBytes(b []byte) error {
+	if len(b) != PubKeySize {
+		return errors.New("key too short")
+	}
+	*ak = APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
+	return nil
 }
 
 // APIKeyCreate creates a new API key.
@@ -65,7 +81,7 @@ func (db *DB) APIKeyCreate(ctx context.Context, user User) (*APIKeyRecord, error
 	}
 	ak := APIKeyRecord{
 		UserID:    user.ID,
-		Key:       APIKey(base64.URLEncoding.EncodeToString(fastrand.Bytes(PubKeySize))),
+		Key:       APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(fastrand.Bytes(PubKeySize))),
 		CreatedAt: time.Now().UTC(),
 	}
 	ior, err := db.staticAPIKeys.InsertOne(ctx, ak)
