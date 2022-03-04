@@ -44,6 +44,11 @@ type (
 	}
 )
 
+// New creates a random new API key.
+func NewAPIKey() APIKey {
+	return APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(fastrand.Bytes(PubKeySize)))
+}
+
 // Bytes defines the way we decode an API key.
 func (ak APIKey) Bytes() ([]byte, error) {
 	return base32.HexEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(string(ak)))
@@ -58,7 +63,7 @@ func (ak APIKey) IsValid() bool {
 	return err == nil && len(b) == PubKeySize
 }
 
-// LoadBytes encodes a [PubKeySize]byte into an API key.
+// LoadBytes encodes a []byte of size PubKeySize into an API key.
 func (ak *APIKey) LoadBytes(b []byte) error {
 	if len(b) != PubKeySize {
 		return errors.New("key too short")
@@ -79,17 +84,17 @@ func (db *DB) APIKeyCreate(ctx context.Context, user User) (*APIKeyRecord, error
 	if n > int64(MaxNumAPIKeysPerUser) {
 		return nil, ErrMaxNumAPIKeysExceeded
 	}
-	ak := APIKeyRecord{
+	akr := APIKeyRecord{
 		UserID:    user.ID,
-		Key:       APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(fastrand.Bytes(PubKeySize))),
+		Key:       NewAPIKey(),
 		CreatedAt: time.Now().UTC(),
 	}
-	ior, err := db.staticAPIKeys.InsertOne(ctx, ak)
+	ior, err := db.staticAPIKeys.InsertOne(ctx, akr)
 	if err != nil {
 		return nil, err
 	}
-	ak.ID = ior.InsertedID.(primitive.ObjectID)
-	return &ak, nil
+	akr.ID = ior.InsertedID.(primitive.ObjectID)
+	return &akr, nil
 }
 
 // APIKeyDelete deletes an API key.
