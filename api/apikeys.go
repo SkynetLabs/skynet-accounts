@@ -13,43 +13,43 @@ import (
 )
 
 type (
-	// apiKeyPOST describes the body of a POST request that creates an API key
-	apiKeyPOST struct {
-		Public   bool
+	// APIKeyPOST describes the body of a POST request that creates an API key
+	APIKeyPOST struct {
+		Public   bool     `json:"public,string"`
+		Skylinks []string `json:"skylinks"`
+	}
+	// APIKeyPUT describes the request body for updating an API key
+	APIKeyPUT struct {
 		Skylinks []string
 	}
-	// apiKeyPUT describes the request body for updating an API key
-	apiKeyPUT struct {
-		Skylinks []string
-	}
-	// apiKeyPATCH describes the request body for updating an API key by
+	// APIKeyPATCH describes the request body for updating an API key by
 	// providing only the requested changes
-	apiKeyPATCH struct {
+	APIKeyPATCH struct {
 		Add    []string
 		Remove []string
 	}
-	// apiKeyResponse is an API DTO which mirrors database.APIKey.
+	// APIKeyResponse is an API DTO which mirrors database.APIKey.
 	// TODO Should we reveal the Key each time for public keys?
-	apiKeyResponse struct {
+	APIKeyResponse struct {
 		ID        primitive.ObjectID `json:"id"`
 		UserID    primitive.ObjectID `json:"-"`
-		Public    bool               `json:"public"`
+		Public    bool               `json:"public,string"`
 		Key       database.APIKey    `json:"-"`
 		Skylinks  []string           `json:"skylinks"`
 		CreatedAt time.Time          `json:"createdAt"`
 	}
-	// apiKeyResponseWithKey is an API DTO which mirrors database.APIKey but
+	// APIKeyResponseWithKey is an API DTO which mirrors database.APIKey but
 	// also reveals the value of the Key field. This should only be used on key
 	// creation.
 	// TODO Should we reveal the Key each time for public keys?
-	apiKeyResponseWithKey struct {
-		apiKeyResponse
+	APIKeyResponseWithKey struct {
+		APIKeyResponse
 		Key database.APIKey `json:"key"`
 	}
 )
 
 // Valid checks if the request and its parts are valid.
-func (akp apiKeyPOST) Valid() bool {
+func (akp APIKeyPOST) Valid() bool {
 	if !akp.Public && len(akp.Skylinks) > 0 {
 		return false
 	}
@@ -63,7 +63,7 @@ func (akp apiKeyPOST) Valid() bool {
 
 // FromAPIKey populates the struct's fields from the given API key.
 // TODO This might be more convenient as a constructor.
-func (rwk *apiKeyResponse) FromAPIKey(ak database.APIKeyRecord) {
+func (rwk *APIKeyResponse) FromAPIKey(ak database.APIKeyRecord) {
 	rwk.ID = ak.ID
 	rwk.UserID = ak.UserID
 	rwk.Public = ak.Public
@@ -74,7 +74,7 @@ func (rwk *apiKeyResponse) FromAPIKey(ak database.APIKeyRecord) {
 
 // FromAPIKey populates the struct's fields from the given API key.
 // TODO This might be more convenient as a constructor.
-func (rwk *apiKeyResponseWithKey) FromAPIKey(ak database.APIKeyRecord) {
+func (rwk *APIKeyResponseWithKey) FromAPIKey(ak database.APIKeyRecord) {
 	rwk.ID = ak.ID
 	rwk.UserID = ak.UserID
 	rwk.Public = ak.Public
@@ -85,7 +85,7 @@ func (rwk *apiKeyResponseWithKey) FromAPIKey(ak database.APIKeyRecord) {
 
 // userAPIKeyPOST creates a new API key for the user.
 func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	var body apiKeyPOST
+	var body APIKeyPOST
 	err := parseRequestBodyJSON(req.Body, LimitBodySizeLarge, &body)
 	if err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -101,7 +101,7 @@ func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	var resp apiKeyResponseWithKey
+	var resp APIKeyResponseWithKey
 	resp.FromAPIKey(*ak)
 	api.WriteJSON(w, resp)
 }
@@ -123,7 +123,7 @@ func (api *API) userAPIKeyGET(u *database.User, w http.ResponseWriter, req *http
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	var resp apiKeyResponse
+	var resp APIKeyResponse
 	resp.FromAPIKey(ak)
 	api.WriteJSON(w, resp)
 }
@@ -135,9 +135,9 @@ func (api *API) userAPIKeyLIST(u *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	resp := make([]apiKeyResponse, 0, len(aks))
+	resp := make([]APIKeyResponse, 0, len(aks))
 	for _, ak := range aks {
-		var r apiKeyResponse
+		var r APIKeyResponse
 		r.FromAPIKey(ak)
 		resp = append(resp, r)
 	}
@@ -170,7 +170,7 @@ func (api *API) userAPIKeyPUT(u *database.User, w http.ResponseWriter, req *http
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	var body apiKeyPUT
+	var body APIKeyPUT
 	err = parseRequestBodyJSON(req.Body, LimitBodySizeLarge, &body)
 	if err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -193,7 +193,7 @@ func (api *API) userAPIKeyPATCH(u *database.User, w http.ResponseWriter, req *ht
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	var body apiKeyPATCH
+	var body APIKeyPATCH
 	err = parseRequestBodyJSON(req.Body, LimitBodySizeLarge, &body)
 	if err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -34,7 +35,27 @@ type (
 		*database.User
 		staticDB *database.DB
 	}
+	// ResponseWriter is a testing ResponseWriter implementation.
+	ResponseWriter struct {
+		Buffer bytes.Buffer
+		Status int
+	}
 )
+
+// Header implementation.
+func (w ResponseWriter) Header() http.Header {
+	return http.Header{}
+}
+
+// Write implementation.
+func (w ResponseWriter) Write(b []byte) (int, error) {
+	return w.Buffer.Write(b)
+}
+
+// WriteHeader implementation.
+func (w ResponseWriter) WriteHeader(statusCode int) {
+	w.Status = statusCode
+}
 
 // Delete removes the test user from the DB.
 func (tu *User) Delete(ctx context.Context) error {

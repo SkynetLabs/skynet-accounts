@@ -17,6 +17,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.sia.tech/siad/build"
 )
 
@@ -169,8 +170,23 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 // Put executes a PUT request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Put(endpoint string, params url.Values, putParams url.Values) (r *http.Response, body []byte, err error) {
-	return at.request(http.MethodPut, endpoint, params, putParams, nil)
+func (at *AccountsTester) Put(endpoint string, params url.Values, bodyParams url.Values) (r *http.Response, body []byte, err error) {
+	b, err := json.Marshal(bodyParams)
+	if err != nil {
+		return nil, nil, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return at.request(http.MethodPut, endpoint, params, b, nil)
+}
+
+// Patch executes a PATCH request against the test service.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) Patch(endpoint string, params url.Values, bodyParams url.Values) (r *http.Response, body []byte, err error) {
+	b, err := json.Marshal(bodyParams)
+	if err != nil {
+		return nil, nil, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return at.request(http.MethodPatch, endpoint, params, b, nil)
 }
 
 // Close performs a graceful shutdown of the AccountsTester service.
@@ -213,16 +229,12 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Respon
 // request. It attaches the current cookie, if one exists.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, bodyParams url.Values, headers map[string]string) (*http.Response, []byte, error) {
+func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, body []byte, headers map[string]string) (*http.Response, []byte, error) {
 	if queryParams == nil {
 		queryParams = url.Values{}
 	}
 	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + queryParams.Encode()
-	b, err := json.Marshal(bodyParams)
-	if err != nil {
-		return nil, nil, errors.AddContext(err, "failed to marshal the body JSON")
-	}
-	req, err := http.NewRequest(method, serviceURL, bytes.NewBuffer(b))
+	req, err := http.NewRequest(method, serviceURL, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -252,6 +264,59 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 		return nil, nil, err
 	}
 	return processResponse(r)
+}
+
+// UserAPIKeysPOST performs a `POST /user/apikeys` request.
+func (at *AccountsTester) UserAPIKeysPOST(body api.APIKeyPOST) (api.APIKeyResponseWithKey, int, error) {
+	bb, err := json.Marshal(body)
+	if err != nil {
+		return api.APIKeyResponseWithKey{}, http.StatusBadRequest, err
+	}
+	r, b, err := at.request(http.MethodPost, "/user/apikeys", nil, bb, nil)
+	if err != nil {
+		return api.APIKeyResponseWithKey{}, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.APIKeyResponseWithKey{}, r.StatusCode, errors.New(string(b))
+	}
+	var result api.APIKeyResponseWithKey
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		return api.APIKeyResponseWithKey{}, 0, errors.AddContext(err, "failed to parse response")
+	}
+	return result, r.StatusCode, nil
+}
+
+// UserAPIKeysPUT performs a `PUT /user/apikeys` request.
+func (at *AccountsTester) UserAPIKeysPUT(akID primitive.ObjectID, body api.APIKeyPUT) (int, error) {
+	bb, err := json.Marshal(body)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	r, b, err := at.request(http.MethodPut, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
+	if err != nil {
+		return r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusNoContent {
+		return r.StatusCode, errors.New(string(b))
+	}
+	return r.StatusCode, nil
+}
+
+// UserAPIKeysPATCH performs a `PATH /user/apikeys` request.
+func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.APIKeyPATCH) (int, error) {
+	bb, err := json.Marshal(body)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	r, b, err := at.request(http.MethodPatch, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
+	if err != nil {
+		return r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusNoContent {
+		return r.StatusCode, errors.New(string(b))
+	}
+	return r.StatusCode, nil
 }
 
 // UserLimitsGET performs a `GET /user/limits` request.

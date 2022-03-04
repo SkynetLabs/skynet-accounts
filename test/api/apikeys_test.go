@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
@@ -13,8 +14,9 @@ import (
 	"go.sia.tech/siad/modules"
 )
 
-// testAPIKeysFlow validates the creation, listing, and deletion of API keys.
-func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
+// testPrivateAPIKeysFlow validates the creation, listing, and deletion of private
+// API keys.
+func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	r, body, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
 	if err != nil {
@@ -46,6 +48,10 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	err = json.Unmarshal(body, &ak1)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Make sure the API key is private.
+	if ak1.Public {
+		t.Fatal("Expected the API key to be private.")
 	}
 
 	// Create another API key.
@@ -106,8 +112,8 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 }
 
-// testAPIKeysUsage makes sure that we can use API keys to make API calls.
-func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
+// testPrivateAPIKeysUsage makes sure that we can use API keys to make API calls.
+func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	// Create a test user.
 	email := name + "@siasky.net"
@@ -160,5 +166,117 @@ func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	if us.TotalUploadsSize != uploadSize || us.NumUploads != 1 || us.BandwidthUploads != skynet.BandwidthUploadCost(uploadSize) {
 		t.Fatalf("Unexpected user stats. Expected TotalUploadSize %d (got %d), NumUploads 1 (got %d), BandwidthUploads %d (got %d).",
 			uploadSize, us.TotalDownloadsSize, us.NumUploads, skynet.BandwidthUploadCost(uploadSize), us.BandwidthUploads)
+	}
+}
+
+// TestPublicAPIKeyFlow validates the creation, listing, and deletion of public
+// API keys.
+func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
+	name := test.DBNameForTest(t.Name())
+	r, body, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
+	if err != nil {
+		t.Fatal(err, string(body))
+	}
+	at.Cookie = test.ExtractCookie(r)
+
+	sl1 := "AQAh2vxStoSJ_M9tWcTgqebUWerCAbpMfn9xxa9E29UOuw"
+	sl2 := "AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw"
+
+	aks := make([]database.APIKeyRecord, 0)
+
+	// List all API keys this user has. Expect the list to be empty.
+	r, body, err = at.Get("/user/apikeys", nil)
+	if err != nil {
+		t.Fatal(err, string(body))
+	}
+	err = json.Unmarshal(body, &aks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aks) > 0 {
+		t.Fatalf("Expected an empty list of API keys, got %+v.", aks)
+	}
+	// Create a public API key.
+	akPost := api.APIKeyPOST{
+		Public:   true,
+		Skylinks: []string{sl1},
+	}
+	akr, s, err := at.UserAPIKeysPOST(akPost)
+	if err != nil || s != http.StatusOK {
+		t.Fatal(err)
+	}
+	// List all API keys again. Expect to find a key.
+	r, body, err = at.Get("/user/apikeys", nil)
+	if err != nil {
+		t.Fatal(err, string(body))
+	}
+	err = json.Unmarshal(body, &aks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aks) != 1 {
+		t.Fatalf("Expected one API key, got %d.", len(aks))
+	}
+	if aks[0].Skylinks[0] != sl1 {
+		t.Fatal("Unexpected skylinks list", aks[0].Skylinks)
+	}
+	// Update a public API key. Expect to go from sl1 to sl2.
+	s, err = at.UserAPIKeysPUT(akr.ID, api.APIKeyPUT{Skylinks: []string{sl2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Get the key and verify the change.
+	r, body, err = at.Get("/user/apikeys/"+akr.ID.Hex(), nil)
+	if err != nil {
+		t.Fatal(err, string(body))
+	}
+	var akr1 database.APIKeyRecord
+	err = json.Unmarshal(body, &akr1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if akr1.Skylinks[0] != sl2 {
+		t.Fatal("Unexpected skylinks list", aks[0].Skylinks)
+	}
+	// Patch a public API key. Expect to go from sl2 to sl1.
+	akPatch := api.APIKeyPATCH{
+		Add:    []string{sl1},
+		Remove: []string{sl2},
+	}
+	s, err = at.UserAPIKeysPATCH(akr.ID, akPatch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// List and verify the change.
+	r, body, err = at.Get("/user/apikeys", nil)
+	if err != nil {
+		t.Fatal(err, string(body))
+	}
+	err = json.Unmarshal(body, &aks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aks) != 1 {
+		t.Fatalf("Expected one API key, got %d.", len(aks))
+	}
+	if aks[0].Skylinks[0] != sl1 {
+		t.Fatal("Unexpected skylinks list", aks[0].Skylinks)
+	}
+	// Delete a public API key.
+	r, body, err = at.Delete("/user/apikeys/"+akr.ID.Hex(), nil)
+	if err != nil {
+		t.Fatal(err, string(body))
+	}
+	// List and verify the change.
+	r, body, err = at.Get("/user/apikeys", nil)
+	if err != nil {
+		t.Fatal(err, string(body))
+	}
+	err = json.Unmarshal(body, &aks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aks) != 0 {
+		t.Fatalf("Expected no API keys, got %d.", len(aks))
 	}
 }

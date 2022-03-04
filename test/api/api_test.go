@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -19,27 +18,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
-
-// TestResponseWriter is a testing ResponseWriter implementation.
-type TestResponseWriter struct {
-	Buffer bytes.Buffer
-	Status int
-}
-
-// Header implementation.
-func (w TestResponseWriter) Header() http.Header {
-	return http.Header{}
-}
-
-// Write implementation.
-func (w TestResponseWriter) Write(b []byte) (int, error) {
-	return w.Buffer.Write(b)
-}
-
-// WriteHeader implementation.
-func (w TestResponseWriter) WriteHeader(statusCode int) {
-	w.Status = statusCode
-}
 
 // TestWithDBSession ensures that database transactions are started, committed,
 // and aborted properly.
@@ -124,7 +102,7 @@ func TestWithDBSession(t *testing.T) {
 		testAPI.WriteError(w, errors.New("error"), http.StatusInternalServerError)
 	}
 
-	var rw TestResponseWriter
+	var rw test.ResponseWriter
 	var ps httprouter.Params
 	req := (&http.Request{}).WithContext(ctx)
 	// Call the success handler.

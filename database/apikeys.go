@@ -56,7 +56,7 @@ type (
 	APIKeyRecord struct {
 		ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 		UserID    primitive.ObjectID `bson:"user_id" json:"-"`
-		Public    bool               `bson:"public" json:"public"`
+		Public    bool               `bson:"public,string" json:"public,string"`
 		Key       APIKey             `bson:"key" json:"-"`
 		Skylinks  []string           `bson:"skylinks" json:"skylinks"`
 		CreatedAt time.Time          `bson:"created_at" json:"createdAt"`
@@ -201,7 +201,7 @@ func (db *DB) APIKeyUpdate(ctx context.Context, user User, akID primitive.Object
 		"public":  &True, // you can only update public API keys
 		"user_id": user.ID,
 	}
-	update := bson.M{"skylinks": skylinks}
+	update := bson.M{"$set": bson.M{"skylinks": skylinks}}
 	opts := options.UpdateOptions{
 		Upsert: &False,
 	}
@@ -242,7 +242,7 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 	// Then, remove all skylinks that need to be removed.
 	if len(removeSkylinks) > 0 {
 		update = bson.M{
-			"pull": bson.M{"skylinks": bson.M{"$in": addSkylinks}},
+			"$pull": bson.M{"skylinks": bson.M{"$in": removeSkylinks}},
 		}
 		opts := options.UpdateOptions{
 			Upsert: &False,
