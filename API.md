@@ -247,6 +247,13 @@ This type of API key needs to be kept secret and never be shared with anyone.
 * Body: none
 * Returns:
  - 200
+```json
+{
+    "id": "6221f3f248c7d376e12f99c4",
+    "createdAt": "2022-03-04T11:11:46.946334Z",
+    "key": "rpfccs5kLCib4PPERtcaY88_yHsJFNNpeMc62pYhBfM="
+}
+```
  - 400
  - 401
  - 500
@@ -261,6 +268,18 @@ Note: The actual API key will not be revealed, only its metadata.
 * GET params: none
 * Returns:
 - 200
+```json
+[
+    {
+        "id": "620ba9c66e18552db39cd5ce",
+        "createdAt": "2022-02-15T13:25:26.348Z"
+    },
+    {
+        "id": "6221f3f248c7d376e12f99c4",
+        "createdAt": "2022-03-04T11:11:46.946Z"
+    }
+]
+```
 - 401
 - 500
 
@@ -271,7 +290,7 @@ Deletes the API key with the given ID.
 * Requires valid JWT: `true`
 * GET params: none
 * Returns:
-- 200
+- 204
 - 400
 - 401
 - 500
