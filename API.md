@@ -234,6 +234,48 @@ Changes the user's password without them being logged in.
 - 400
 - 500
 
+## API Keys endpoints
+
+### POST `/user/apikeys`
+
+Creates a new general API key.
+This type of API key gives full access to `accounts` and is equivalent to using a JWT token.
+This type of API key needs to be kept secret and never be shared with anyone.
+
+* Requires valid JWT: `true`
+* GET params: none
+* Body: none
+* Returns:
+ - 200
+ - 400
+ - 401
+ - 500
+
+### GET `/user/apikeys/`
+
+Lists all API keys registered by the current user.
+
+Note: The actual API key will not be revealed, only its metadata.
+
+* Requires valid JWT: `true`
+* GET params: none
+* Returns:
+- 200
+- 401
+- 500
+
+### DELETE `/user/apikeys/:id`
+
+Deletes the API key with the given ID.
+
+* Requires valid JWT: `true`
+* GET params: none
+* Returns:
+- 200
+- 400
+- 401
+- 500
+
 ## Reports endpoints
 
 ### POST `/track/upload/:skylink`
