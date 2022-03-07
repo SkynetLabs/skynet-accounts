@@ -32,7 +32,7 @@ var (
 )
 
 type (
-	// APIKey is a base32hex-encoded-no-padding representation of []byte with
+	// APIKey is the hex representation of a base32-encoded random 32-byte slice
 	// length PubKeySize
 	APIKey string
 	// APIKeyRecord is a non-expiring authentication token generated on user demand.
