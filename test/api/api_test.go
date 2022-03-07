@@ -199,8 +199,7 @@ func TestUserTierCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	at.Cookie = test.ExtractCookie(r)
-	// Get the user's limit. Since they are on a Pro account but their
-	// SubscribedUntil is set in the past, we expect to get TierFree.
+	// Get the user's limit.
 	_, b, err := at.Get("/user/limits", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -210,18 +209,14 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ul.TierName != database.UserLimits[database.TierFree].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, ul.TierName)
+	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
 	}
-	if ul.TierID != database.TierFree {
-		t.Fatalf("Expected tier id '%d', got '%d'", database.TierFree, ul.TierID)
+	if ul.TierID != database.TierPremium20 {
+		t.Fatalf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
 	}
-	// Now set their SubscribedUntil in the future, so their subscription tier
-	// is active.
-	u.SubscribedUntil = time.Now().UTC().Add(365 * 24 * time.Hour)
-	err = at.DB.UserSave(at.Ctx, u.User)
-	if err != nil {
-		t.Fatal(err)
+	if ul.UploadBandwidth != database.UserLimits[database.TierPremium20].UploadBandwidth {
+		t.Fatalf("Expected upload bandwidth '%d', got '%d'", database.UserLimits[database.TierPremium20].UploadBandwidth, ul.UploadBandwidth)
 	}
 	// Register a test upload that exceeds the user's allowed storage, so their
 	// QuotaExceeded flag will get raised.
@@ -248,11 +243,14 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ul.TierID != database.TierAnonymous {
-		t.Fatalf("Expected tier id '%d', got '%d'", database.TierAnonymous, ul.TierID)
+	if ul.TierID != database.TierPremium20 {
+		t.Fatalf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
 	}
-	if ul.TierName != database.UserLimits[database.TierAnonymous].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, ul.TierName)
+	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
+	}
+	if ul.UploadBandwidth != database.UserLimits[database.TierAnonymous].UploadBandwidth {
+		t.Fatalf("Expected upload bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].UploadBandwidth, ul.UploadBandwidth)
 	}
 	// Delete the uploaded file, so the user's quota recovers.
 	// This call should invalidate the tier cache.

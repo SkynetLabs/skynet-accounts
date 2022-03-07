@@ -455,6 +455,9 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if tl.TierName != database.UserLimits[database.TierFree].TierName {
 		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
 	}
+	if tl.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
+		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierFree].DownloadBandwidth, tl.DownloadBandwidth)
+	}
 
 	// Call /user/limits without a cookie. Expect FreeAnonymous response.
 	at.Cookie = nil
@@ -471,6 +474,61 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 	if tl.TierName != database.UserLimits[database.TierAnonymous].TierName {
 		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, tl.TierName)
+	}
+	if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
+		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
+	}
+
+	// Create a new user which we'll use to test the quota limits. We can't use
+	// the existing one because their status is already cached.
+	u2, c, err := test.CreateUserAndLogin(at, t.Name()+"2")
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer func() {
+		if err = u2.Delete(at.Ctx); err != nil {
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
+		}
+	}()
+	at.Cookie = c
+	defer func() { at.Cookie = nil }()
+	// Upload a very large file, which exceeds the user's storage limit. This
+	// should cause their QuotaExceed flag to go up and their speeds to drop to
+	// anonymous levels. Their tier should remain Free.
+	dbu2 := *u2.User
+	filesize := database.UserLimits[database.TierFree].Storage + 1
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, &dbu2, filesize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make a specific call to trackUploadPOST in order to trigger the
+	// checkUserQuotas method. This wil register the upload a second time but
+	// that doesn't affect the test.
+	_, _, err = at.Post("/track/upload/"+sl.Skylink, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sleep for a short time in order to make sure that the background
+	// goroutine that updates user's quotas has had time to run.
+	time.Sleep(2 * time.Second)
+	// Check the user's limits. We expect the tier to be Free but the limits to
+	// match Anonymous.
+	_, b, err = at.Get("/user/limits", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &tl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tl.TierID != database.TierFree {
+		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
+	}
+	if tl.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
+	}
+	if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
+		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
 	}
 }
 

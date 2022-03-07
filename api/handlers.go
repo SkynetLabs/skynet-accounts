@@ -413,6 +413,13 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			TierID:     u.Tier,
 			TierLimits: database.UserLimits[u.Tier],
 		}
+		// If the quota is exceeded we should keep the user's tier but report
+		// anonymous-level speeds.
+		if u.QuotaExceeded {
+			resp.TierLimits = database.UserLimits[database.TierAnonymous]
+			// Keep the original tier name.
+			resp.TierLimits.TierName = database.UserLimits[u.Tier].TierName
+		}
 		api.WriteJSON(w, resp)
 		return
 	}
@@ -430,7 +437,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	sub := s.(string)
 	// If the user is not cached, or they were cached too long ago we'll fetch
 	// their data from the DB.
-	tier, ok := api.staticUserTierCache.Get(sub)
+	tier, qe, ok := api.staticUserTierCache.Get(sub)
 	if !ok {
 		u, err := api.staticDB.UserBySub(req.Context(), sub)
 		if err != nil {
@@ -439,14 +446,23 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			return
 		}
 		api.staticUserTierCache.Set(u)
-	}
-	tier, ok = api.staticUserTierCache.Get(sub)
-	if !ok {
-		build.Critical("Failed to fetch user from UserTierCache right after setting it.")
+		// Populate the tier and qe values, while simultaneously making sure
+		// that we can read the record from the cache.
+		tier, qe, ok = api.staticUserTierCache.Get(sub)
+		if !ok {
+			build.Critical("Failed to fetch user from UserTierCache right after setting it.")
+		}
 	}
 	resp := UserLimitsGET{
 		TierID:     tier,
 		TierLimits: database.UserLimits[tier],
+	}
+	// If the quota is exceeded we should keep the user's tier but report
+	// anonymous-level speeds.
+	if qe {
+		resp.TierLimits = database.UserLimits[database.TierAnonymous]
+		// Keep the original tier name.
+		resp.TierLimits.TierName = database.UserLimits[tier].TierName
 	}
 	api.WriteJSON(w, resp)
 }
