@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"encoding/base32"
+	"fmt"
 	"strings"
 	"time"
 
@@ -44,12 +45,12 @@ type (
 	}
 )
 
-// New creates a random new API key.
+// NewAPIKey creates a random new API key.
 func NewAPIKey() APIKey {
 	return APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(fastrand.Bytes(PubKeySize)))
 }
 
-// Bytes defines the way we decode an API key.
+// Bytes returns the raw representation of an API key.
 func (ak APIKey) Bytes() ([]byte, error) {
 	return base32.HexEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(string(ak)))
 }
@@ -66,7 +67,7 @@ func (ak APIKey) IsValid() bool {
 // LoadBytes encodes a []byte of size PubKeySize into an API key.
 func (ak *APIKey) LoadBytes(b []byte) error {
 	if len(b) != PubKeySize {
-		return errors.New("key too short")
+		return errors.New(fmt.Sprintf("unexpected API key size, %d != %d", len(b), PubKeySize))
 	}
 	*ak = APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
 	return nil
