@@ -211,6 +211,9 @@ func TestUserTierCache(t *testing.T) {
 	if ul.TierID != database.TierPremium20 {
 		t.Fatalf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
 	}
+	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
+	}
 	if ul.UploadBandwidth != database.UserLimits[database.TierPremium20].UploadBandwidth {
 		t.Fatalf("Expected upload bandwidth '%d', got '%d'", database.UserLimits[database.TierPremium20].UploadBandwidth, ul.UploadBandwidth)
 	}
