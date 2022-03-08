@@ -124,6 +124,39 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	return at, nil
 }
 
+// ClearCredentials removes any credentials stored by this tester, such as a
+// cookie, token, etc.
+func (at *AccountsTester) ClearCredentials() {
+	at.Cookie = nil
+	at.Token = ""
+}
+
+// Close performs a graceful shutdown of the AccountsTester service.
+func (at *AccountsTester) Close() error {
+	at.cancel()
+	if at.DB != nil {
+		err := at.DB.Disconnect(at.Ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetCookie ensures that all subsequent requests are going to use the given
+// cookie for authentication.
+func (at *AccountsTester) SetCookie(c *http.Cookie) {
+	at.ClearCredentials()
+	at.Cookie = c
+}
+
+// SetToken ensures that all subsequent requests are going to use the given
+// token for authentication.
+func (at *AccountsTester) SetToken(t string) {
+	at.ClearCredentials()
+	at.Token = t
+}
+
 // Get executes a GET request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
@@ -171,12 +204,6 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Put(endpoint string, params url.Values, putParams url.Values) (r *http.Response, body []byte, err error) {
 	return at.request(http.MethodPut, endpoint, params, putParams)
-}
-
-// Close performs a graceful shutdown of the AccountsTester service.
-func (at *AccountsTester) Close() error {
-	at.cancel()
-	return nil
 }
 
 // CreateUserPost is a helper method that creates a new user.

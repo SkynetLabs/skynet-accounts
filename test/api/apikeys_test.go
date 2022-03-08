@@ -20,7 +20,7 @@ func testAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 
 	aks := make([]database.APIKeyRecord, 0)
 
@@ -115,7 +115,7 @@ func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 	// Get the user and create a test upload, so the stats won't be all zeros.
 	u, err := at.DB.UserByEmail(at.Ctx, email)
 	if err != nil {
@@ -132,7 +132,7 @@ func testAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// Stop using the cookie, so we can test the API key.
-	at.Cookie = nil
+	at.ClearCredentials()
 	// We use a custom struct and not the APIKeyRecord one because that one does
 	// not render the key in JSON form and therefore it won't unmarshal it,
 	// either.

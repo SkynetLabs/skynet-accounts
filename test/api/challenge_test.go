@@ -165,7 +165,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Failed to login. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
 	}
 	// Make sure we have a valid cookie returned and that it's for the same user.
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 	_, b, err = at.Get("/user", nil)
 	if err != nil {
 		t.Fatalf("Failed to fetch user with the given cookie: '%s', error '%s'", string(b), err)
@@ -192,8 +192,8 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
 
 	// Request a challenge without a pubkey.
 	r, b, _ := at.Get("/user/pubkey/register", nil)
@@ -248,7 +248,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to solve it without being logged in.
-	at.Cookie = nil
+	at.ClearCredentials()
 	response := append(chBytes, append([]byte(database.ChallengeTypeUpdate), []byte(database.PortalName)...)...)
 	bodyParams := url.Values{}
 	bodyParams.Set("response", hex.EncodeToString(response))
@@ -266,7 +266,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	if err != nil || r.StatusCode != http.StatusOK {
 		t.Fatal(r.Status, err, string(b))
 	}
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 	r, b, _ = at.Post("/user/pubkey/register", nil, bodyParams)
 	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "user's sub doesn't match update sub") {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
@@ -274,7 +274,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Request a new challenge with the original test user.
-	at.Cookie = c
+	at.SetCookie(c)
 	queryParams = url.Values{}
 	queryParams.Set("pubKey", hex.EncodeToString(pk[:]))
 	r, b, err = at.Get("/user/pubkey/register", queryParams)

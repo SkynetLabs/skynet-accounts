@@ -199,7 +199,7 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 	// Get the user's limit.
 	ul, _, err := at.UserLimits()
 	if err != nil {
