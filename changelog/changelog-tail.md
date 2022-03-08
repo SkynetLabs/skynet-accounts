@@ -10,6 +10,10 @@
 - Allow updating user's pubKey via two new endpoints - GET /user/pubkey/register and POST /user/pubkey/register. 
 - Remove the `GET /user/recover` endpoint in favour of the new `POST /user/recover/request` endpoint.
 
+## Dec 15, 2021:
+### v1.0.0
+This version of accounts is a fully functional system on its own - no more reliance on ORY Kratos/Oathkeeper.
+
 ## Oct 18, 2021:
 ### v0.1.2
 **Other**
