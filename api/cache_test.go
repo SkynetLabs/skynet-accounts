@@ -14,7 +14,7 @@ func TestUserTierCache(t *testing.T) {
 		Sub:             t.Name(),
 		Tier:            database.TierPremium5,
 		SubscribedUntil: time.Now().UTC().Add(100 * time.Hour),
-		QuotaExceeded:   true,
+		QuotaExceeded:   false,
 	}
 	// Get the user from the empty cache.
 	tier, _, ok := cache.Get(u.Sub)
@@ -25,6 +25,15 @@ func TestUserTierCache(t *testing.T) {
 	cache.Set(u)
 	// Check again.
 	tier, qe, ok := cache.Get(u.Sub)
+	if !ok || tier != u.Tier {
+		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", u.Tier, true, tier, ok)
+	}
+	if qe != u.QuotaExceeded {
+		t.Fatal("Quota exceeded flag doesn't match.")
+	}
+	u.QuotaExceeded = true
+	cache.Set(u)
+	tier, qe, ok = cache.Get(u.Sub)
 	if !ok || tier != u.Tier {
 		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", u.Tier, true, tier, ok)
 	}
