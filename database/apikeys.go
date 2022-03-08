@@ -2,7 +2,9 @@ package database
 
 import (
 	"context"
-	"encoding/base64"
+	"encoding/base32"
+	"fmt"
+	"strings"
 	"time"
 
 	"gitlab.com/NebulousLabs/errors"
@@ -31,7 +33,8 @@ var (
 )
 
 type (
-	// APIKey is a base64URL-encoded representation of []byte with length PubKeySize
+	// APIKey is the hex representation of a base32-encoded random 32-byte slice
+	// length PubKeySize
 	APIKey string
 	// APIKeyRecord is a non-expiring authentication token generated on user demand.
 	APIKeyRecord struct {
@@ -42,13 +45,32 @@ type (
 	}
 )
 
+// NewAPIKey creates a random new API key.
+func NewAPIKey() APIKey {
+	return APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(fastrand.Bytes(PubKeySize)))
+}
+
+// Bytes returns the raw representation of an API key.
+func (ak APIKey) Bytes() ([]byte, error) {
+	return base32.HexEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(string(ak)))
+}
+
 // IsValid checks whether the underlying string satisfies the type's requirement
-// to represent a []byte with length PubKeySize which is encoded as base64URL.
+// to represent a []byte with length PubKeySize which is encoded as base32 with
+// no padding.
 // This method does NOT check whether the API exists in the database.
 func (ak APIKey) IsValid() bool {
-	b := make([]byte, PubKeySize)
-	n, err := base64.URLEncoding.Decode(b, []byte(ak))
-	return err == nil && n == PubKeySize
+	b, err := ak.Bytes()
+	return err == nil && len(b) == PubKeySize
+}
+
+// LoadBytes encodes a []byte of size PubKeySize into an API key.
+func (ak *APIKey) LoadBytes(b []byte) error {
+	if len(b) != PubKeySize {
+		return errors.New(fmt.Sprintf("unexpected API key size, %d != %d", len(b), PubKeySize))
+	}
+	*ak = APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
+	return nil
 }
 
 // APIKeyCreate creates a new API key.
@@ -63,17 +85,17 @@ func (db *DB) APIKeyCreate(ctx context.Context, user User) (*APIKeyRecord, error
 	if n > int64(MaxNumAPIKeysPerUser) {
 		return nil, ErrMaxNumAPIKeysExceeded
 	}
-	ak := APIKeyRecord{
+	akr := APIKeyRecord{
 		UserID:    user.ID,
-		Key:       APIKey(base64.URLEncoding.EncodeToString(fastrand.Bytes(PubKeySize))),
+		Key:       NewAPIKey(),
 		CreatedAt: time.Now().UTC(),
 	}
-	ior, err := db.staticAPIKeys.InsertOne(ctx, ak)
+	ior, err := db.staticAPIKeys.InsertOne(ctx, akr)
 	if err != nil {
 		return nil, err
 	}
-	ak.ID = ior.InsertedID.(primitive.ObjectID)
-	return &ak, nil
+	akr.ID = ior.InsertedID.(primitive.ObjectID)
+	return &akr, nil
 }
 
 // APIKeyDelete deletes an API key.
