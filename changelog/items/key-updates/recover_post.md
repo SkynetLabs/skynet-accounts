@@ -1,1 +1,0 @@
-- Remove the `GET /user/recover` endpoint in favour of the new `POST /user/recover/request` endpoint.

@@ -1,1 +1,0 @@
-- Allow updating user's pubKey via two new endpoints - GET /user/pubkey/register and POST /user/pubkey/register. 
