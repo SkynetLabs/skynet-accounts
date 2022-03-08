@@ -10,18 +10,17 @@ Version History
 
 Latest:
 
-## Oct 28, 2021:
-### v0.1.3
+## Mar 8, 2022:
+### v1.0.1
 **Key Updates**
-- Add caching to the `/user/limits` endpoint.
-- Add a GitHub Action that runs the tests on push. 
-- Add infrastructure to send emails, e.g. for email confirmation, recovering an account after forgetting the password,
-  etc.
-- Add an endpoint where a user can delete their own account. 
-- Add endpoints for email confirmation and account recovery.
-
-**Other**
-- Add integration tests covering the handlers.
+- Add support for base32 skylinks.
+- Add the endpoints needed for challenge-response login and registration.
+- Allow changing of user's password via the PUT /user endpoint
+- Add database-backed configuration options.
+- Add an option for disabling new account registrations.
+- BREAKING: All non-GET handlers now read their parameters from the request's body JSON instead of the form.  
+- Allow updating user's pubKey via two new endpoints - GET /user/pubkey/register and POST /user/pubkey/register. 
+- Remove the `GET /user/recover` endpoint in favour of the new `POST /user/recover/request` endpoint.
 
 ## Oct 18, 2021:
 ### v0.1.2
