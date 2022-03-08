@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -202,12 +201,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	at.Cookie = test.ExtractCookie(r)
 	// Get the user's limit.
-	_, b, err := at.Get("/user/limits", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var ul api.UserLimitsGET
-	err = json.Unmarshal(b, &ul)
+	ul, _, err := at.UserLimits()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +223,7 @@ func TestUserTierCache(t *testing.T) {
 	// Make a specific call to trackUploadPOST in order to trigger the
 	// checkUserQuotas method. This wil register the upload a second time but
 	// that doesn't affect the test.
-	_, _, err = at.Post("/track/upload/"+sl.Skylink, nil, nil)
+	_, err = at.TrackUpload(sl.Skylink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,13 +233,9 @@ func TestUserTierCache(t *testing.T) {
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// We expect to get tier with name and id matching TierPremium20 but with
 		// speeds matching TierAnonymous.
-		_, b, err = at.Get("/user/limits", nil)
+		ul, _, err = at.UserLimits()
 		if err != nil {
-			return errors.AddContext(err, "failed to call /user/limits")
-		}
-		err = json.Unmarshal(b, &ul)
-		if err != nil {
-			return errors.AddContext(err, "failed to unmarshal")
+			t.Fatal(err)
 		}
 		if ul.TierID != database.TierPremium20 {
 			return fmt.Errorf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
@@ -269,13 +259,9 @@ func TestUserTierCache(t *testing.T) {
 	}
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// We expect to get TierPremium20.
-		_, b, err = at.Get("/user/limits", nil)
+		ul, _, err = at.UserLimits()
 		if err != nil {
 			return errors.AddContext(err, "failed to call /user/limits")
-		}
-		err = json.Unmarshal(b, &ul)
-		if err != nil {
-			return errors.AddContext(err, "failed to unmarshal")
 		}
 		if ul.TierID != database.TierPremium20 {
 			return fmt.Errorf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)

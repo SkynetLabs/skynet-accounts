@@ -442,12 +442,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	defer func() { at.Cookie = nil }()
 
 	// Call /user/limits with a cookie. Expect FreeTier response.
-	_, b, err := at.Get("/user/limits", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var tl api.UserLimitsGET
-	err = json.Unmarshal(b, &tl)
+	tl, _, err := at.UserLimits()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,11 +458,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 
 	// Call /user/limits without a cookie. Expect FreeAnonymous response.
 	at.Cookie = nil
-	_, b, err = at.Get("/user/limits", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = json.Unmarshal(b, &tl)
+	tl, _, err = at.UserLimits()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +497,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	// Make a specific call to trackUploadPOST in order to trigger the
 	// checkUserQuotas method. This wil register the upload a second time but
 	// that doesn't affect the test.
-	_, _, err = at.Post("/track/upload/"+sl.Skylink, nil, nil)
+	_, err = at.TrackUpload(sl.Skylink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -516,13 +507,9 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// Check the user's limits. We expect the tier to be Free but the limits to
 		// match Anonymous.
-		_, b, err = at.Get("/user/limits", nil)
+		tl, _, err = at.UserLimits()
 		if err != nil {
 			return errors.AddContext(err, "failed to call /user/limits")
-		}
-		err = json.Unmarshal(b, &tl)
-		if err != nil {
-			return errors.AddContext(err, "failed to unmarshal")
 		}
 		if tl.TierID != database.TierFree {
 			return fmt.Errorf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
@@ -885,20 +872,20 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call trackUpload without a cookie.
 	at.Cookie = nil
-	_, b, err := at.Post("/track/upload/"+skylink.String(), nil, nil)
+	_, err = at.TrackUpload(skylink.String())
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
 	at.Cookie = c
 	// Call trackUpload with an invalid skylink.
-	_, b, err = at.Post("/track/upload/INVALID_SKYLINK", nil, nil)
+	_, err = at.TrackUpload("INVALID_SKYLINK")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
+		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackUpload with a valid skylink.
-	_, b, err = at.Post("/track/upload/"+skylink.String(), nil, nil)
+	_, err = at.TrackUpload(skylink.String())
 	if err != nil {
-		t.Fatal(err, string(b))
+		t.Fatal(err)
 	}
 	// Adjust the expectations. We won't adjust anything based on size because
 	// the metafetcher won't be running during testing.
@@ -908,31 +895,25 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call trackDownload without a cookie.
 	at.Cookie = nil
-	params := url.Values{}
-	params.Set("bytes", "100")
-	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
+	_, err = at.TrackDownload(skylink.String(), 100)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
 	at.Cookie = c
 	// Call trackDownload with an invalid skylink.
-	_, b, err = at.Post("/track/download/INVALID_SKYLINK", params, nil)
+	_, err = at.TrackDownload("INVALID_SKYLINK", 100)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
+		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackDownload with a valid skylink and a negative size download
-	params = url.Values{}
-	params.Set("bytes", "-100")
-	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
+	_, err = at.TrackDownload(skylink.String(), -100)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
+		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackDownload with a valid skylink.
-	params = url.Values{}
-	params.Set("bytes", "100")
-	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
+	_, err = at.TrackDownload(skylink.String(), 100)
 	if err != nil {
-		t.Fatal(err, string(b))
+		t.Fatal(err)
 	}
 	// Adjust the expectations.
 	expectedStats.NumDownloads++
@@ -941,15 +922,15 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call trackRegistryRead without a cookie.
 	at.Cookie = nil
-	_, b, err = at.Post("/track/registry/read", nil, nil)
+	_, err = at.TrackRegistryRead()
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
 	at.Cookie = c
 	// Call trackRegistryRead.
-	_, b, err = at.Post("/track/registry/read", nil, nil)
+	_, err = at.TrackRegistryRead()
 	if err != nil {
-		t.Fatal(err, string(b))
+		t.Fatal(err)
 	}
 	// Adjust the expectations.
 	expectedStats.NumRegReads++
@@ -957,15 +938,15 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call trackRegistryWrite without a cookie.
 	at.Cookie = nil
-	_, b, err = at.Post("/track/registry/write", nil, nil)
+	_, err = at.TrackRegistryWrite()
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
 	at.Cookie = c
 	// Call trackRegistryWrite.
-	_, b, err = at.Post("/track/registry/write", nil, nil)
+	_, err = at.TrackRegistryWrite()
 	if err != nil {
-		t.Fatal(err, string(b))
+		t.Fatal(err)
 	}
 	// Adjust the expectations.
 	expectedStats.NumRegWrites++
@@ -973,9 +954,9 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call userStats without a cookie.
 	at.Cookie = nil
-	_, b, err = at.Get("/user/stats", nil)
+	_, b, err := at.Get("/user/stats", nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
 	at.Cookie = c
 	// Call userStats.

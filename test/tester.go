@@ -257,3 +257,43 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 	}
 	return r, body, err
 }
+
+// TrackDownload performs a `POST /track/download/:skylink` request.
+func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error) {
+	form := url.Values{}
+	form.Set("bytes", fmt.Sprint(bytes))
+	r, _, err := at.request(http.MethodPost, "/track/download/"+skylink, form, nil)
+	return r.StatusCode, err
+}
+
+// TrackUpload performs a `POST /track/upload/:skylink` request.
+func (at *AccountsTester) TrackUpload(skylink string) (int, error) {
+	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, nil, nil)
+	return r.StatusCode, err
+}
+
+// TrackRegistryRead performs a `POST /track/registry/read` request.
+func (at *AccountsTester) TrackRegistryRead() (int, error) {
+	r, _, err := at.request(http.MethodPost, "/track/registry/read", nil, nil)
+	return r.StatusCode, err
+}
+
+// TrackRegistryWrite performs a `POST /track/registry/write` request.
+func (at *AccountsTester) TrackRegistryWrite() (int, error) {
+	r, _, err := at.request(http.MethodPost, "/track/registry/write", nil, nil)
+	return r.StatusCode, err
+}
+
+// UserLimits performs a `GET /user/limits` request.
+func (at *AccountsTester) UserLimits() (api.UserLimitsGET, int, error) {
+	r, b, err := at.request(http.MethodGet, "/user/limits", nil, nil)
+	if err != nil {
+		return api.UserLimitsGET{}, r.StatusCode, err
+	}
+	var resp api.UserLimitsGET
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return api.UserLimitsGET{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
+}
