@@ -13,7 +13,6 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"github.com/sirupsen/logrus"
-	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.sia.tech/siad/build"
@@ -72,11 +71,11 @@ func TestSender(t *testing.T) {
 			return err
 		}
 		if len(emails) != 1 {
-			return errors.New(fmt.Sprintf("Expected 1 email in the DB, got %d\n", len(emails)))
+			return fmt.Errorf("expected 1 email in the DB, got %d", len(emails))
 		}
 		if emails[0].SentAt.IsZero() {
 			emails[0].Body = "<<<Body removed for logging brevity.>>>"
-			return errors.New(fmt.Sprintf("Email not sent. Email: %+v\n", emails[0]))
+			return fmt.Errorf("email not sent. Email: %+v", emails[0])
 		}
 		return nil
 	})

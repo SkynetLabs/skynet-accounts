@@ -248,13 +248,13 @@ func TestUserTierCache(t *testing.T) {
 			return errors.AddContext(err, "failed to unmarshal")
 		}
 		if ul.TierID != database.TierPremium20 {
-			return errors.New(fmt.Sprintf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID))
+			return fmt.Errorf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
 		}
 		if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
-			return errors.New(fmt.Sprintf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName))
+			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
 		}
 		if ul.UploadBandwidth != database.UserLimits[database.TierAnonymous].UploadBandwidth {
-			return errors.New(fmt.Sprintf("Expected upload bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].UploadBandwidth, ul.UploadBandwidth))
+			return fmt.Errorf("Expected upload bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].UploadBandwidth, ul.UploadBandwidth)
 		}
 		return nil
 	})
@@ -278,10 +278,10 @@ func TestUserTierCache(t *testing.T) {
 			return errors.AddContext(err, "failed to unmarshal")
 		}
 		if ul.TierID != database.TierPremium20 {
-			return errors.New(fmt.Sprintf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID))
+			return fmt.Errorf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
 		}
 		if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
-			return errors.New(fmt.Sprintf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName))
+			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
 		}
 		return nil
 	})
