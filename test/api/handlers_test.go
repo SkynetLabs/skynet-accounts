@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -22,6 +23,7 @@ import (
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.sia.tech/siad/build"
 	"go.sia.tech/siad/crypto"
 )
 
@@ -508,27 +510,33 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Sleep for a short time in order to make sure that the background
-	// goroutine that updates user's quotas has had time to run.
-	time.Sleep(2 * time.Second)
-	// Check the user's limits. We expect the tier to be Free but the limits to
-	// match Anonymous.
-	_, b, err = at.Get("/user/limits", nil)
+	// We need to try this several times because we'll only get the right result
+	// after the background goroutine that updates user's quotas has had time to
+	// run.
+	err = build.Retry(10, 200*time.Millisecond, func() error {
+		// Check the user's limits. We expect the tier to be Free but the limits to
+		// match Anonymous.
+		_, b, err = at.Get("/user/limits", nil)
+		if err != nil {
+			return errors.AddContext(err, "failed to call /user/limits")
+		}
+		err = json.Unmarshal(b, &tl)
+		if err != nil {
+			return errors.AddContext(err, "failed to unmarshal")
+		}
+		if tl.TierID != database.TierFree {
+			return errors.New(fmt.Sprintf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID))
+		}
+		if tl.TierName != database.UserLimits[database.TierFree].TierName {
+			return errors.New(fmt.Sprintf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName))
+		}
+		if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
+			return errors.New(fmt.Sprintf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth))
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	err = json.Unmarshal(b, &tl)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tl.TierID != database.TierFree {
-		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
-	}
-	if tl.TierName != database.UserLimits[database.TierFree].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
-	}
-	if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
-		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"gitlab.com/NebulousLabs/fastrand"
+	"go.sia.tech/siad/build"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"
@@ -231,44 +233,59 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Sleep for a short time in order to make sure that the background
-	// goroutine that updates user's quotas has had time to run.
-	time.Sleep(2 * time.Second)
-	// We expect to get TierAnonymous.
-	_, b, err = at.Get("/user/limits", nil)
+	// We need to try this several times because we'll only get the right result
+	// after the background goroutine that updates user's quotas has had time to
+	// run.
+	err = build.Retry(10, 200*time.Millisecond, func() error {
+		// We expect to get tier with name and id matching TierPremium20 but with
+		// speeds matching TierAnonymous.
+		_, b, err = at.Get("/user/limits", nil)
+		if err != nil {
+			return errors.AddContext(err, "failed to call /user/limits")
+		}
+		err = json.Unmarshal(b, &ul)
+		if err != nil {
+			return errors.AddContext(err, "failed to unmarshal")
+		}
+		if ul.TierID != database.TierPremium20 {
+			return errors.New(fmt.Sprintf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID))
+		}
+		if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+			return errors.New(fmt.Sprintf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName))
+		}
+		if ul.UploadBandwidth != database.UserLimits[database.TierAnonymous].UploadBandwidth {
+			return errors.New(fmt.Sprintf("Expected upload bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].UploadBandwidth, ul.UploadBandwidth))
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	err = json.Unmarshal(b, &ul)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ul.TierID != database.TierPremium20 {
-		t.Fatalf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
-	}
-	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
-	}
-	if ul.UploadBandwidth != database.UserLimits[database.TierAnonymous].UploadBandwidth {
-		t.Fatalf("Expected upload bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].UploadBandwidth, ul.UploadBandwidth)
 	}
 	// Delete the uploaded file, so the user's quota recovers.
 	// This call should invalidate the tier cache.
 	_, _, err = at.Delete("/user/uploads/"+sl.Skylink, nil)
-	time.Sleep(2 * time.Second)
-	// We expect to get TierPremium20.
-	_, b, err = at.Get("/user/limits", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = json.Unmarshal(b, &ul)
+	err = build.Retry(10, 200*time.Millisecond, func() error {
+		// We expect to get TierPremium20.
+		_, b, err = at.Get("/user/limits", nil)
+		if err != nil {
+			return errors.AddContext(err, "failed to call /user/limits")
+		}
+		err = json.Unmarshal(b, &ul)
+		if err != nil {
+			return errors.AddContext(err, "failed to unmarshal")
+		}
+		if ul.TierID != database.TierPremium20 {
+			return errors.New(fmt.Sprintf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID))
+		}
+		if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+			return errors.New(fmt.Sprintf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName))
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if ul.TierID != database.TierPremium20 {
-		t.Fatalf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
-	}
-	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
 	}
 }
