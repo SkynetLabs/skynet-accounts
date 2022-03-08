@@ -1,1 +1,0 @@
-- BREAKING: All non-GET handlers now read their parameters from the request's body JSON instead of the form.  

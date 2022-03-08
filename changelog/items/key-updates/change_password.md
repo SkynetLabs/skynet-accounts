@@ -1,1 +1,0 @@
-- Allow changing of user's password via the PUT /user endpoint
