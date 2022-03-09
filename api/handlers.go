@@ -407,24 +407,17 @@ func (api *API) userGET(u *database.User, w http.ResponseWriter, _ *http.Request
 func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	respAnon := userLimitsGetFromTier(database.TierAnonymous, false)
 	// First check for an API key.
-	akStr, err := apiKeyFromRequest(req)
+	ak, err := apiKeyFromRequest(req)
 	if err == nil {
 		// Check the cache before going any further.
-		tier, qe, ok := api.staticUserTierCache.Get(akStr)
+		tier, qe, ok := api.staticUserTierCache.Get(ak.String())
 		if ok {
 			api.staticLogger.Traceln("Fetching user limits from cache by API key.")
 			api.WriteJSON(w, userLimitsGetFromTier(tier, qe))
 			return
 		}
-		// Cache is missed, fetch the owner of this APIKey from the DB.
-		ak := database.APIKey(akStr)
-		if !ak.IsValid() {
-			api.staticLogger.Traceln("Invalid API key.")
-			api.WriteJSON(w, respAnon)
-			return
-		}
 		// Get the API key.
-		akr, err := api.staticDB.APIKeyByKey(req.Context(), akStr)
+		akr, err := api.staticDB.APIKeyByKey(req.Context(), ak.String())
 		if err != nil {
 			api.staticLogger.Trace("API key doesn't exist in the database.")
 			api.WriteJSON(w, respAnon)
@@ -443,7 +436,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			return
 		}
 		// Cache the user under the API key they used.
-		api.staticUserTierCache.Set(akStr, u)
+		api.staticUserTierCache.Set(ak.String(), u)
 		api.WriteJSON(w, userLimitsGetFromTier(u.Tier, u.QuotaExceeded))
 		return
 	}
@@ -496,29 +489,27 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 		return
 	}
 	// Try to fetch an API attached to the request.
-	akStr, err := apiKeyFromRequest(req)
-	if err != nil {
+	ak, err := apiKeyFromRequest(req)
+	if errors.Contains(err, ErrNoAPIKey) {
 		// We failed to fetch an API key from this request but the request might
 		// be authenticated in another way, so we'll defer to userLimitsGET.
 		api.userLimitsGET(u, w, req, ps)
 		return
 	}
-	// Check if that is a valid API key.
-	ak := database.APIKey(akStr)
-	if !ak.IsValid() {
-		// This is not a valid APIKey. Defer to userLimitsGET.
-		api.userLimitsGET(u, w, req, ps)
+	if err != nil {
+		api.staticLogger.Debugf("Error while processing API key: %s", err)
+		api.WriteJSON(w, respAnon)
 		return
 	}
 	// Check the cache before hitting the database.
-	tier, qe, ok := api.staticUserTierCache.Get(akStr + skylink)
+	tier, qe, ok := api.staticUserTierCache.Get(ak.String() + skylink)
 	if ok {
 		api.staticLogger.Traceln("Fetching user limits from cache by API key.")
 		api.WriteJSON(w, userLimitsGetFromTier(tier, qe))
 		return
 	}
 	// Get the API key.
-	akr, err := api.staticDB.APIKeyByKey(req.Context(), akStr)
+	akr, err := api.staticDB.APIKeyByKey(req.Context(), ak.String())
 	if err != nil {
 		api.staticLogger.Trace("API key doesn't exist in the database.")
 		api.WriteJSON(w, respAnon)
@@ -537,7 +528,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 		return
 	}
 	// Store the user in the cache with a custom key.
-	api.staticUserTierCache.Set(akStr+skylink, user)
+	api.staticUserTierCache.Set(ak.String()+skylink, user)
 	api.WriteJSON(w, userLimitsGetFromTier(user.Tier, u.QuotaExceeded))
 }
 

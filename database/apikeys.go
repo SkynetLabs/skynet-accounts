@@ -105,6 +105,21 @@ func (ak *APIKey) LoadBytes(b []byte) error {
 	return nil
 }
 
+// LoadString loads a string into the API key and validates it.
+func (ak *APIKey) LoadString(s string) error {
+	k := APIKey(strings.ToUpper(s))
+	if !k.IsValid() {
+		return ErrInvalidAPIKey
+	}
+	*ak = k
+	return nil
+}
+
+// LoadBytes encodes a []byte of size PubKeySize into an API key.
+func (ak APIKey) String() string {
+	return string(ak)
+}
+
 // CoversSkylink tells us whether a given API key covers a given skylink.
 // Private API keys cover all skylinks while public ones - only a limited set.
 func (akr APIKeyRecord) CoversSkylink(sl string) bool {

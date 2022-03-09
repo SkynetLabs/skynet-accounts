@@ -34,16 +34,11 @@ func (api *API) userAndTokenByRequestToken(req *http.Request) (*database.User, j
 // It first checks the headers and then the query.
 // This method accesses the database.
 func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.Token, error) {
-	akStr, err := apiKeyFromRequest(req)
+	ak, err := apiKeyFromRequest(req)
 	if err != nil {
 		return nil, nil, err
 	}
-	// Check if this is a valid APIKey.
-	ak := database.APIKey(akStr)
-	if !ak.IsValid() {
-		return nil, nil, database.ErrInvalidAPIKey
-	}
-	akr, err := api.staticDB.APIKeyByKey(req.Context(), akStr)
+	akr, err := api.staticDB.APIKeyByKey(req.Context(), ak.String())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -66,7 +61,7 @@ func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.To
 // apiKeyFromRequest extracts the API key from the request and returns it.
 // This function does not differentiate between APIKey and APIKey.
 // It first checks the headers and then the query.
-func apiKeyFromRequest(r *http.Request) (string, error) {
+func apiKeyFromRequest(r *http.Request) (*database.APIKey, error) {
 	// Check the headers for an API key.
 	akStr := r.Header.Get(APIKeyHeader)
 	// If there is no API key in the headers, try the query.
@@ -74,9 +69,9 @@ func apiKeyFromRequest(r *http.Request) (string, error) {
 		akStr = r.FormValue("apiKey")
 	}
 	if akStr == "" {
-		return "", ErrNoAPIKey
+		return nil, ErrNoAPIKey
 	}
-	return akStr, nil
+	return database.NewAPIKeyFromString(akStr)
 }
 
 // tokenFromRequest extracts the JWT token from the request and returns it.
