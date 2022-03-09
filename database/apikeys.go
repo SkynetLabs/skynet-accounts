@@ -30,6 +30,8 @@ var (
 	// ErrMaxNumAPIKeysExceeded is returned when a user tries to create a new
 	// API key after already having the maximum allowed number.
 	ErrMaxNumAPIKeysExceeded = errors.New("maximum number of api keys exceeded")
+	// ErrInvalidAPIKey is an error returned when the given API key is invalid.
+	ErrInvalidAPIKey = errors.New("invalid api key")
 )
 
 type (
@@ -50,9 +52,18 @@ func NewAPIKey() APIKey {
 	return APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(fastrand.Bytes(PubKeySize)))
 }
 
+// NewAPIKeyFromString creates an APIKey struct from a string and validates it.
+func NewAPIKeyFromString(s string) (*APIKey, error) {
+	ak := APIKey(strings.ToUpper(s))
+	if !ak.IsValid() {
+		return nil, ErrInvalidAPIKey
+	}
+	return &ak, nil
+}
+
 // Bytes returns the raw representation of an API key.
 func (ak APIKey) Bytes() ([]byte, error) {
-	return base32.HexEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(string(ak)))
+	return base32.HexEncoding.WithPadding(base32.NoPadding).DecodeString(string(ak))
 }
 
 // IsValid checks whether the underlying string satisfies the type's requirement

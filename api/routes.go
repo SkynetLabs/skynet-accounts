@@ -20,8 +20,6 @@ var (
 	// ErrNoAPIKey is an error returned when we expect an API key but we don't
 	// find one.
 	ErrNoAPIKey = errors.New("no api key found")
-	// ErrInvalidAPIKey is an error returned when the given API key is invalid.
-	ErrInvalidAPIKey = errors.New("invalid api key")
 	// ErrNoToken is returned when we expected a JWT token to be provided but it
 	// was not.
 	ErrNoToken = errors.New("no authorisation token found")
@@ -169,9 +167,9 @@ func apiKeyFromRequest(r *http.Request) (database.APIKey, error) {
 	if akStr == "" {
 		return "", ErrNoAPIKey
 	}
-	ak := database.APIKey(akStr)
-	if !ak.IsValid() {
-		return "", ErrInvalidAPIKey
+	ak, err := database.NewAPIKeyFromString(akStr)
+	if err != nil {
+		return "", err
 	}
 	return ak, nil
 }
