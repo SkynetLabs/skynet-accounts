@@ -171,7 +171,7 @@ func apiKeyFromRequest(r *http.Request) (database.APIKey, error) {
 	if err != nil {
 		return "", err
 	}
-	return ak, nil
+	return *ak, nil
 }
 
 // tokenFromRequest extracts the JWT token from the request and returns it.
