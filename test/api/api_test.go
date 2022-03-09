@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -14,6 +14,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"gitlab.com/NebulousLabs/fastrand"
+	"go.sia.tech/siad/build"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"
@@ -198,15 +199,9 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	at.Cookie = test.ExtractCookie(r)
-	// Get the user's limit. Since they are on a Pro account but their
-	// SubscribedUntil is set in the past, we expect to get TierFree.
-	_, b, err := at.Get("/user/limits", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var ul api.UserLimitsGET
-	err = json.Unmarshal(b, &ul)
+	at.SetCookie(test.ExtractCookie(r))
+	// Get the user's limit.
+	ul, _, err := at.UserLimits()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,12 +211,11 @@ func TestUserTierCache(t *testing.T) {
 	if ul.TierID != database.TierPremium20 {
 		t.Fatalf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
 	}
-	// Now set their SubscribedUntil in the future, so their subscription tier
-	// is active.
-	u.SubscribedUntil = time.Now().UTC().Add(365 * 24 * time.Hour)
-	err = at.DB.UserSave(at.Ctx, u.User)
-	if err != nil {
-		t.Fatal(err)
+	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
+	}
+	if ul.UploadBandwidth != database.UserLimits[database.TierPremium20].UploadBandwidth {
+		t.Fatalf("Expected upload bandwidth '%d', got '%d'", database.UserLimits[database.TierPremium20].UploadBandwidth, ul.UploadBandwidth)
 	}
 	// Register a test upload that exceeds the user's allowed storage, so their
 	// QuotaExceeded flag will get raised.
@@ -232,45 +226,55 @@ func TestUserTierCache(t *testing.T) {
 	// Make a specific call to trackUploadPOST in order to trigger the
 	// checkUserQuotas method. This wil register the upload a second time but
 	// that doesn't affect the test.
-	_, _, err = at.Post("/track/upload/"+sl.Skylink, nil, nil)
+	_, err = at.TrackUpload(sl.Skylink)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Sleep for a short time in order to make sure that the background
-	// goroutine that updates user's quotas has had time to run.
-	time.Sleep(2 * time.Second)
-	// We expect to get TierAnonymous.
-	_, b, err = at.Get("/user/limits", nil)
+	// We need to try this several times because we'll only get the right result
+	// after the background goroutine that updates user's quotas has had time to
+	// run.
+	err = build.Retry(10, 200*time.Millisecond, func() error {
+		// We expect to get tier with name and id matching TierPremium20 but with
+		// speeds matching TierAnonymous.
+		ul, _, err = at.UserLimits()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ul.TierID != database.TierPremium20 {
+			return fmt.Errorf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
+		}
+		if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
+		}
+		if ul.UploadBandwidth != database.UserLimits[database.TierAnonymous].UploadBandwidth {
+			return fmt.Errorf("Expected upload bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].UploadBandwidth, ul.UploadBandwidth)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	err = json.Unmarshal(b, &ul)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ul.TierID != database.TierAnonymous {
-		t.Fatalf("Expected tier id '%d', got '%d'", database.TierAnonymous, ul.TierID)
-	}
-	if ul.TierName != database.UserLimits[database.TierAnonymous].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, ul.TierName)
 	}
 	// Delete the uploaded file, so the user's quota recovers.
 	// This call should invalidate the tier cache.
 	_, _, err = at.Delete("/user/uploads/"+sl.Skylink, nil)
-	time.Sleep(2 * time.Second)
-	// We expect to get TierPremium20.
-	_, b, err = at.Get("/user/limits", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = json.Unmarshal(b, &ul)
+	err = build.Retry(10, 200*time.Millisecond, func() error {
+		// We expect to get TierPremium20.
+		ul, _, err = at.UserLimits()
+		if err != nil {
+			return errors.AddContext(err, "failed to call /user/limits")
+		}
+		if ul.TierID != database.TierPremium20 {
+			return fmt.Errorf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
+		}
+		if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
+			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if ul.TierID != database.TierPremium20 {
-		t.Fatalf("Expected tier id '%d', got '%d'", database.TierPremium20, ul.TierID)
-	}
-	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
 	}
 }

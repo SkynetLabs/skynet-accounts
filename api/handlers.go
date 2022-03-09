@@ -80,8 +80,14 @@ type (
 	}
 	// UserLimitsGET is response of GET /user/limits
 	UserLimitsGET struct {
-		TierID int `json:"tierID"`
-		database.TierLimits
+		TierID            int    `json:"tierID"`
+		TierName          string `json:"tierName"`
+		UploadBandwidth   int    `json:"upload"`        // bytes per second
+		DownloadBandwidth int    `json:"download"`      // bytes per second
+		MaxUploadSize     int64  `json:"maxUploadSize"` // the max size of a single upload in bytes
+		MaxNumberUploads  int    `json:"-"`
+		RegistryDelay     int    `json:"registry"` // ms delay
+		Storage           int64  `json:"-"`
 	}
 
 	// accountRecoveryPOST defines the payload we expect when a user is trying
@@ -398,10 +404,7 @@ func (api *API) userGET(u *database.User, w http.ResponseWriter, _ *http.Request
 func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// First check for an API key.
 	ak, err := apiKeyFromRequest(req)
-	respAnon := UserLimitsGET{
-		TierID:     database.TierAnonymous,
-		TierLimits: database.UserLimits[database.TierAnonymous],
-	}
+	respAnon := userLimitsGetFromTier(database.TierAnonymous)
 	if err == nil {
 		u, err := api.staticDB.UserByAPIKey(req.Context(), ak)
 		if err != nil {
@@ -409,9 +412,15 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			api.WriteJSON(w, respAnon)
 			return
 		}
-		resp := UserLimitsGET{
-			TierID:     u.Tier,
-			TierLimits: database.UserLimits[u.Tier],
+		resp := userLimitsGetFromTier(u.Tier)
+		// If the quota is exceeded we should keep the user's tier but report
+		// anonymous-level speeds.
+		if u.QuotaExceeded {
+			// Report the speeds for tier anonymous.
+			resp = userLimitsGetFromTier(database.TierAnonymous)
+			// But keep reporting the user's actual tier and it's name.
+			resp.TierID = u.Tier
+			resp.TierName = database.UserLimits[u.Tier].TierName
 		}
 		api.WriteJSON(w, resp)
 		return
@@ -430,7 +439,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	sub := s.(string)
 	// If the user is not cached, or they were cached too long ago we'll fetch
 	// their data from the DB.
-	tier, ok := api.staticUserTierCache.Get(sub)
+	tier, qe, ok := api.staticUserTierCache.Get(sub)
 	if !ok {
 		u, err := api.staticDB.UserBySub(req.Context(), sub)
 		if err != nil {
@@ -439,14 +448,22 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			return
 		}
 		api.staticUserTierCache.Set(u)
+		// Populate the tier and qe values, while simultaneously making sure
+		// that we can read the record from the cache.
+		tier, qe, ok = api.staticUserTierCache.Get(sub)
+		if !ok {
+			build.Critical("Failed to fetch user from UserTierCache right after setting it.")
+		}
 	}
-	tier, ok = api.staticUserTierCache.Get(sub)
-	if !ok {
-		build.Critical("Failed to fetch user from UserTierCache right after setting it.")
-	}
-	resp := UserLimitsGET{
-		TierID:     tier,
-		TierLimits: database.UserLimits[tier],
+	resp := userLimitsGetFromTier(tier)
+	// If the quota is exceeded we should keep the user's tier but report
+	// anonymous-level speeds.
+	if qe {
+		// Report anonymous speeds.
+		resp = userLimitsGetFromTier(database.TierAnonymous)
+		// Keep reporting the user's actual tier and tier name.
+		resp.TierID = tier
+		resp.TierName = database.UserLimits[tier].TierName
 	}
 	api.WriteJSON(w, resp)
 }
@@ -1176,4 +1193,20 @@ func fetchPageSize(form url.Values) (int, error) {
 // excessively large request bodies.
 func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, objRef interface{}) error {
 	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&objRef)
+}
+
+// userLimitsGetFromTier is a helper that lets us succinctly translate
+// from the database DTO to the API DTO.
+func userLimitsGetFromTier(tier int) *UserLimitsGET {
+	t := database.UserLimits[tier]
+	return &UserLimitsGET{
+		TierID:            tier,
+		TierName:          t.TierName,
+		UploadBandwidth:   t.UploadBandwidth,
+		DownloadBandwidth: t.DownloadBandwidth,
+		MaxUploadSize:     t.MaxUploadSize,
+		MaxNumberUploads:  t.MaxNumberUploads,
+		RegistryDelay:     t.RegistryDelay,
+		Storage:           t.Storage,
+	}
 }

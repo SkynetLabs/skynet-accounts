@@ -124,6 +124,39 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	return at, nil
 }
 
+// ClearCredentials removes any credentials stored by this tester, such as a
+// cookie, token, etc.
+func (at *AccountsTester) ClearCredentials() {
+	at.Cookie = nil
+	at.Token = ""
+}
+
+// Close performs a graceful shutdown of the AccountsTester service.
+func (at *AccountsTester) Close() error {
+	at.cancel()
+	if at.DB != nil {
+		err := at.DB.Disconnect(at.Ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetCookie ensures that all subsequent requests are going to use the given
+// cookie for authentication.
+func (at *AccountsTester) SetCookie(c *http.Cookie) {
+	at.ClearCredentials()
+	at.Cookie = c
+}
+
+// SetToken ensures that all subsequent requests are going to use the given
+// token for authentication.
+func (at *AccountsTester) SetToken(t string) {
+	at.ClearCredentials()
+	at.Token = t
+}
+
 // Get executes a GET request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
@@ -171,12 +204,6 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) Put(endpoint string, params url.Values, putParams url.Values) (r *http.Response, body []byte, err error) {
 	return at.request(http.MethodPut, endpoint, params, putParams)
-}
-
-// Close performs a graceful shutdown of the AccountsTester service.
-func (at *AccountsTester) Close() error {
-	at.cancel()
-	return nil
 }
 
 // CreateUserPost is a helper method that creates a new user.
@@ -256,4 +283,44 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 		err = errors.Compose(err, errors.New(r.Status))
 	}
 	return r, body, err
+}
+
+// TrackDownload performs a `POST /track/download/:skylink` request.
+func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error) {
+	form := url.Values{}
+	form.Set("bytes", fmt.Sprint(bytes))
+	r, _, err := at.request(http.MethodPost, "/track/download/"+skylink, form, nil)
+	return r.StatusCode, err
+}
+
+// TrackUpload performs a `POST /track/upload/:skylink` request.
+func (at *AccountsTester) TrackUpload(skylink string) (int, error) {
+	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, nil, nil)
+	return r.StatusCode, err
+}
+
+// TrackRegistryRead performs a `POST /track/registry/read` request.
+func (at *AccountsTester) TrackRegistryRead() (int, error) {
+	r, _, err := at.request(http.MethodPost, "/track/registry/read", nil, nil)
+	return r.StatusCode, err
+}
+
+// TrackRegistryWrite performs a `POST /track/registry/write` request.
+func (at *AccountsTester) TrackRegistryWrite() (int, error) {
+	r, _, err := at.request(http.MethodPost, "/track/registry/write", nil, nil)
+	return r.StatusCode, err
+}
+
+// UserLimits performs a `GET /user/limits` request.
+func (at *AccountsTester) UserLimits() (api.UserLimitsGET, int, error) {
+	r, b, err := at.request(http.MethodGet, "/user/limits", nil, nil)
+	if err != nil {
+		return api.UserLimitsGET{}, r.StatusCode, err
+	}
+	var resp api.UserLimitsGET
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return api.UserLimitsGET{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
 }
