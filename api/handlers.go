@@ -405,7 +405,7 @@ func (api *API) userGET(u *database.User, w http.ResponseWriter, _ *http.Request
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
 func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	respAnon := userLimitsGetFromTier(database.TierAnonymous)
+	respAnon := userLimitsGetFromTier(database.TierAnonymous, false)
 	// First check for an API key.
 	akStr, err := apiKeyFromRequest(req)
 	if err == nil {
@@ -413,17 +413,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 		tier, qe, ok := api.staticUserTierCache.Get(akStr)
 		if ok {
 			api.staticLogger.Traceln("Fetching user limits from cache by API key.")
-			resp := userLimitsGetFromTier(tier)
-			// If the quota is exceeded we should keep the user's tier but report
-			// anonymous-level speeds.
-			if qe {
-				// Report the speeds for tier anonymous.
-				resp = userLimitsGetFromTier(database.TierAnonymous)
-				// But keep reporting the user's actual tier and it's name.
-				resp.TierID = tier
-				resp.TierName = database.UserLimits[tier].TierName
-			}
-			api.WriteJSON(w, resp)
+			api.WriteJSON(w, userLimitsGetFromTier(tier, qe))
 			return
 		}
 		// Cache is missed, fetch the owner of this APIKey from the DB.
@@ -454,17 +444,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 		}
 		// Cache the user under the API key they used.
 		api.staticUserTierCache.Set(akStr, u)
-		resp := userLimitsGetFromTier(u.Tier)
-		// If the quota is exceeded we should keep the user's tier but report
-		// anonymous-level speeds.
-		if u.QuotaExceeded {
-			// Report the speeds for tier anonymous.
-			resp = userLimitsGetFromTier(database.TierAnonymous)
-			// But keep reporting the user's actual tier and it's name.
-			resp.TierID = u.Tier
-			resp.TierName = database.UserLimits[u.Tier].TierName
-		}
-		api.WriteJSON(w, resp)
+		api.WriteJSON(w, userLimitsGetFromTier(u.Tier, u.QuotaExceeded))
 		return
 	}
 	// Next check for a token.
@@ -498,17 +478,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			build.Critical("Failed to fetch user from UserTierCache right after setting it.")
 		}
 	}
-	resp := userLimitsGetFromTier(tier)
-	// If the quota is exceeded we should keep the user's tier but report
-	// anonymous-level speeds.
-	if qe {
-		// Report anonymous speeds.
-		resp = userLimitsGetFromTier(database.TierAnonymous)
-		// Keep reporting the user's actual tier and tier name.
-		resp.TierID = tier
-		resp.TierName = database.UserLimits[tier].TierName
-	}
-	api.WriteJSON(w, resp)
+	api.WriteJSON(w, userLimitsGetFromTier(tier, qe))
 }
 
 // userLimitsSkylinkGET returns the speed limits which apply to a GET call to
@@ -517,7 +487,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
 func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	respAnon := userLimitsGetFromTier(database.TierAnonymous)
+	respAnon := userLimitsGetFromTier(database.TierAnonymous, false)
 	// Validate the skylink.
 	skylink := ps.ByName("skylink")
 	if !database.ValidSkylinkHash(skylink) {
@@ -544,17 +514,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	tier, qe, ok := api.staticUserTierCache.Get(akStr + skylink)
 	if ok {
 		api.staticLogger.Traceln("Fetching user limits from cache by API key.")
-		resp := userLimitsGetFromTier(tier)
-		// If the quota is exceeded we should keep the user's tier but report
-		// anonymous-level speeds.
-		if qe {
-			// Report the speeds for tier anonymous.
-			resp = userLimitsGetFromTier(database.TierAnonymous)
-			// But keep reporting the user's actual tier and it's name.
-			resp.TierID = u.Tier
-			resp.TierName = database.UserLimits[u.Tier].TierName
-		}
-		api.WriteJSON(w, resp)
+		api.WriteJSON(w, userLimitsGetFromTier(tier, qe))
 		return
 	}
 	// Get the API key.
@@ -578,17 +538,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	}
 	// Store the user in the cache with a custom key.
 	api.staticUserTierCache.Set(akStr+skylink, user)
-	resp := userLimitsGetFromTier(user.Tier)
-	// If the quota is exceeded we should keep the user's tier but report
-	// anonymous-level speeds.
-	if user.QuotaExceeded {
-		// Report the speeds for tier anonymous.
-		resp = userLimitsGetFromTier(database.TierAnonymous)
-		// But keep reporting the user's actual tier and it's name.
-		resp.TierID = user.Tier
-		resp.TierName = database.UserLimits[user.Tier].TierName
-	}
-	api.WriteJSON(w, resp)
+	api.WriteJSON(w, userLimitsGetFromTier(user.Tier, u.QuotaExceeded))
 }
 
 // userStatsGET returns statistics about an existing user.
@@ -1320,16 +1270,26 @@ func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, v interface{}) 
 
 // userLimitsGetFromTier is a helper that lets us succinctly translate
 // from the database DTO to the API DTO.
-func userLimitsGetFromTier(tier int) *UserLimitsGET {
-	t := database.UserLimits[tier]
+func userLimitsGetFromTier(tierID int, quotaExceeded bool) *UserLimitsGET {
+	t, ok := database.UserLimits[tierID]
+	if !ok {
+		build.Critical("userLimitsGetFromTier was called with non-existent tierID: " + strconv.Itoa(tierID))
+		t = database.UserLimits[database.TierAnonymous]
+	}
+	limitsTier := t
+	if quotaExceeded {
+		limitsTier = database.UserLimits[database.TierAnonymous]
+	}
 	return &UserLimitsGET{
-		TierID:            tier,
-		TierName:          t.TierName,
-		UploadBandwidth:   t.UploadBandwidth,
-		DownloadBandwidth: t.DownloadBandwidth,
-		MaxUploadSize:     t.MaxUploadSize,
-		MaxNumberUploads:  t.MaxNumberUploads,
-		RegistryDelay:     t.RegistryDelay,
-		Storage:           t.Storage,
+		TierID:   tierID,
+		TierName: t.TierName,
+		Storage:  t.Storage,
+		// If the user exceeds their quota, there will be brought down to
+		// anonymous levels.
+		UploadBandwidth:   limitsTier.UploadBandwidth,
+		DownloadBandwidth: limitsTier.DownloadBandwidth,
+		MaxUploadSize:     limitsTier.MaxUploadSize,
+		MaxNumberUploads:  limitsTier.MaxNumberUploads,
+		RegistryDelay:     limitsTier.RegistryDelay,
 	}
 }
