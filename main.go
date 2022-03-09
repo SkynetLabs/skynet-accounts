@@ -149,6 +149,8 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 	}
 	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
 		config.JWKSFile = jwks
+	} else {
+		config.JWKSFile = jwt.AccountsJWKSFile
 	}
 	// Parse the optional env var that controls the TTL of the JWTs we generate.
 	if jwtTTLStr := os.Getenv(envJWTTTL); jwtTTLStr != "" {

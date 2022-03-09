@@ -2,7 +2,9 @@ package database
 
 import (
 	"context"
-	"encoding/base64"
+	"encoding/base32"
+	"fmt"
+	"strings"
 	"time"
 
 	"gitlab.com/NebulousLabs/errors"
@@ -40,6 +42,8 @@ var (
 	// ErrMaxNumAPIKeysExceeded is returned when a user tries to create a new
 	// API key after already having the maximum allowed number.
 	ErrMaxNumAPIKeysExceeded = errors.New("maximum number of api keys exceeded")
+	// ErrInvalidAPIKey is an error returned when the given API key is invalid.
+	ErrInvalidAPIKey = errors.New("invalid api key")
 	// ErrInvalidAPIKeyOperation covers a range of invalid operations on API
 	// keys. Some examples include: defining a list of skylinks on a private
 	// API key, editing a private API key. This error should be used with
@@ -48,7 +52,8 @@ var (
 )
 
 type (
-	// APIKey is a base64URL-encoded representation of []byte with length PubKeySize
+	// APIKey is the hex representation of a base32-encoded random 32-byte slice
+	// length PubKeySize
 	APIKey string
 	// APIKeyRecord is a non-expiring authentication token generated on user
 	// demand. Public API keys allow downloading a given set of skylinks, while
@@ -63,13 +68,41 @@ type (
 	}
 )
 
+// NewAPIKey creates a random new API key.
+func NewAPIKey() APIKey {
+	return APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(fastrand.Bytes(PubKeySize)))
+}
+
+// NewAPIKeyFromString creates an APIKey struct from a string and validates it.
+func NewAPIKeyFromString(s string) (*APIKey, error) {
+	ak := APIKey(strings.ToUpper(s))
+	if !ak.IsValid() {
+		return nil, ErrInvalidAPIKey
+	}
+	return &ak, nil
+}
+
+// Bytes returns the raw representation of an API key.
+func (ak APIKey) Bytes() ([]byte, error) {
+	return base32.HexEncoding.WithPadding(base32.NoPadding).DecodeString(string(ak))
+}
+
 // IsValid checks whether the underlying string satisfies the type's requirement
-// to represent a []byte with length PubKeySize which is encoded as base64URL.
-// This method does NOT check whether the API key exists in the database.
+// to represent a []byte with length PubKeySize which is encoded as base32 with
+// no padding.
+// This method does NOT check whether the API exists in the database.
 func (ak APIKey) IsValid() bool {
-	b := make([]byte, PubKeySize)
-	n, err := base64.URLEncoding.Decode(b, []byte(ak))
-	return err == nil && n == PubKeySize
+	b, err := ak.Bytes()
+	return err == nil && len(b) == PubKeySize
+}
+
+// LoadBytes encodes a []byte of size PubKeySize into an API key.
+func (ak *APIKey) LoadBytes(b []byte) error {
+	if len(b) != PubKeySize {
+		return errors.New(fmt.Sprintf("unexpected API key size, %d != %d", len(b), PubKeySize))
+	}
+	*ak = APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
+	return nil
 }
 
 // CoversSkylink tells us whether a given API key covers a given skylink.
@@ -101,19 +134,19 @@ func (db *DB) APIKeyCreate(ctx context.Context, user User, public bool, skylinks
 	if !public && len(skylinks) > 0 {
 		return nil, errors.AddContext(ErrInvalidAPIKeyOperation, "cannot define skylinks for a private api key")
 	}
-	ak := APIKeyRecord{
+	akr := APIKeyRecord{
 		UserID:    user.ID,
 		Public:    public,
-		Key:       APIKey(base64.URLEncoding.EncodeToString(fastrand.Bytes(PubKeySize))),
+		Key:       NewAPIKey(),
 		Skylinks:  skylinks,
 		CreatedAt: time.Now().UTC(),
 	}
-	ior, err := db.staticAPIKeys.InsertOne(ctx, ak)
+	ior, err := db.staticAPIKeys.InsertOne(ctx, akr)
 	if err != nil {
 		return nil, err
 	}
-	ak.ID = ior.InsertedID.(primitive.ObjectID)
-	return &ak, nil
+	akr.ID = ior.InsertedID.(primitive.ObjectID)
+	return &akr, nil
 }
 
 // APIKeyDelete deletes an API key.

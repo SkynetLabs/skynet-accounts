@@ -17,8 +17,6 @@ var (
 	// ErrNoAPIKey is an error returned when we expect an API key but we don't
 	// find one.
 	ErrNoAPIKey = errors.New("no api key found")
-	// ErrInvalidAPIKey is an error returned when the given API key is invalid.
-	ErrInvalidAPIKey = errors.New("invalid api key")
 	// ErrNoToken is returned when we expected a JWT token to be provided but it
 	// was not.
 	ErrNoToken = errors.New("no authorisation token found")
@@ -97,11 +95,11 @@ func (api *API) withAuth(h HandlerWithUser) httprouter.Handle {
 		// Check for an API key.
 		u, token, err := api.userAndTokenByAPIKey(req)
 		// If there is an unexpected error, that is a 500.
-		if err != nil && !errors.Contains(err, ErrNoAPIKey) && !errors.Contains(err, ErrInvalidAPIKey) && !errors.Contains(err, database.ErrUserNotFound) {
+		if err != nil && !errors.Contains(err, ErrNoAPIKey) && !errors.Contains(err, database.ErrInvalidAPIKey) && !errors.Contains(err, database.ErrUserNotFound) {
 			api.WriteError(w, err, http.StatusInternalServerError)
 			return
 		}
-		if err != nil && (errors.Contains(err, ErrInvalidAPIKey) || errors.Contains(err, database.ErrUserNotFound)) {
+		if err != nil && (errors.Contains(err, database.ErrInvalidAPIKey) || errors.Contains(err, database.ErrUserNotFound)) {
 			api.WriteError(w, errors.AddContext(err, "failed to fetch user by API key"), http.StatusUnauthorized)
 			return
 		}

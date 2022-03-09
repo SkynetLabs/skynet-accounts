@@ -22,8 +22,9 @@ type (
 	// userTierCacheEntry allows us to cache some basic information about the
 	// user, so we don't need to hit the DB to fetch data that rarely changes.
 	userTierCacheEntry struct {
-		Tier      int
-		ExpiresAt time.Time
+		Tier          int
+		QuotaExceeded bool
+		ExpiresAt     time.Time
 	}
 )
 
@@ -34,34 +35,25 @@ func newUserTierCache() *userTierCache {
 	}
 }
 
-// Get returns the user's tier and an OK indicator which is true when the cache
-// entry exists and hasn't expired, yet.
-func (utc *userTierCache) Get(sub string) (int, bool) {
+// Get returns the user's tier, a quota exceeded flag, and an OK indicator
+// which is true when the cache entry exists and hasn't expired, yet.
+func (utc *userTierCache) Get(sub string) (int, bool, bool) {
 	utc.mu.Lock()
 	ce, exists := utc.cache[sub]
 	utc.mu.Unlock()
 	if !exists || ce.ExpiresAt.Before(time.Now().UTC()) {
-		return database.TierAnonymous, false
+		return database.TierAnonymous, false, false
 	}
-	return ce.Tier, true
+	return ce.Tier, ce.QuotaExceeded, true
 }
 
 // Set stores the user's tier in the cache under the given key.
 func (utc *userTierCache) Set(key string, u *database.User) {
-	var ce userTierCacheEntry
-	now := time.Now().UTC()
-	if u.QuotaExceeded {
-		ce = userTierCacheEntry{
-			Tier:      database.TierAnonymous,
-			ExpiresAt: now.Add(userTierCacheTTL),
-		}
-	} else {
-		ce = userTierCacheEntry{
-			Tier:      u.Tier,
-			ExpiresAt: now.Add(userTierCacheTTL),
-		}
-	}
 	utc.mu.Lock()
-	utc.cache[key] = ce
+	utc.cache[key] = userTierCacheEntry{
+		Tier:          u.Tier,
+		QuotaExceeded: u.QuotaExceeded,
+		ExpiresAt:     time.Now().UTC().Add(userTierCacheTTL),
+	}
 	utc.mu.Unlock()
 }

@@ -41,7 +41,7 @@ func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.To
 	// Check if this is a valid APIKey.
 	ak := database.APIKey(akStr)
 	if !ak.IsValid() {
-		return nil, nil, ErrInvalidAPIKey
+		return nil, nil, database.ErrInvalidAPIKey
 	}
 	akr, err := api.staticDB.APIKeyByKey(req.Context(), akStr)
 	if err != nil {
@@ -52,7 +52,7 @@ func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.To
 	if akr.Public {
 		sl, err := database.ExtractSkylinkHash(req.RequestURI)
 		if err != nil || !akr.CoversSkylink(sl) {
-			return nil, nil, ErrInvalidAPIKey
+			return nil, nil, database.ErrInvalidAPIKey
 		}
 	}
 	u, err := api.staticDB.UserByID(req.Context(), akr.UserID)

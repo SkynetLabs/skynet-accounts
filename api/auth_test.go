@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/subtle"
+	"encoding/base32"
 	"encoding/base64"
 	"net/http"
 	"testing"
@@ -147,5 +148,5 @@ func TestTokenFromRequest(t *testing.T) {
 
 // randomAPIKeyString is a helper.
 func randomAPIKeyString() string {
-	return base64.URLEncoding.EncodeToString(fastrand.Bytes(database.PubKeySize))
+	return base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(fastrand.Bytes(database.PubKeySize))
 }

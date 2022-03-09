@@ -1,12 +1,10 @@
 package api
 
 import (
-	"encoding/base64"
 	"testing"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
-	"gitlab.com/NebulousLabs/fastrand"
 )
 
 // TestUserTierCache tests that working with userTierCache works as expected.
@@ -19,16 +17,28 @@ func TestUserTierCache(t *testing.T) {
 		QuotaExceeded:   false,
 	}
 	// Get the user from the empty cache.
-	tier, ok := cache.Get(u.Sub)
+	tier, _, ok := cache.Get(u.Sub)
 	if ok || tier != database.TierAnonymous {
 		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", database.TierAnonymous, false, tier, ok)
 	}
 	// Set the use in the cache.
 	cache.Set(u.Sub, u)
 	// Check again.
-	tier, ok = cache.Get(u.Sub)
+	tier, qe, ok := cache.Get(u.Sub)
 	if !ok || tier != u.Tier {
 		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", u.Tier, true, tier, ok)
+	}
+	if qe != u.QuotaExceeded {
+		t.Fatal("Quota exceeded flag doesn't match.")
+	}
+	u.QuotaExceeded = true
+	cache.Set(u.Sub, u)
+	tier, qe, ok = cache.Get(u.Sub)
+	if !ok || tier != u.Tier {
+		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", u.Tier, true, tier, ok)
+	}
+	if qe != u.QuotaExceeded {
+		t.Fatal("Quota exceeded flag doesn't match.")
 	}
 	ce, exists := cache.cache[u.Sub]
 	if !exists {
@@ -51,19 +61,19 @@ func TestUserTierCache(t *testing.T) {
 	}
 
 	// Create a new API key.
-	ak := database.APIKey(base64.URLEncoding.EncodeToString(fastrand.Bytes(database.PubKeySize)))
+	ak := database.NewAPIKey()
 	if !ak.IsValid() {
 		t.Fatal("Invalid API key.")
 	}
 	// Try to get a value from the cache. Expect this to fail.
-	_, ok = cache.Get(string(ak))
+	_, _, ok = cache.Get(string(ak))
 	if ok {
 		t.Fatal("Did not expect to get a cache entry!")
 	}
 	// Update the cache with a custom key.
 	cache.Set(string(ak), u)
 	// Fetch the data for the custom key.
-	tier, ok = cache.Get(string(ak))
+	tier, _, ok = cache.Get(string(ak))
 	if !ok {
 		t.Fatal("Expected the entry to exist.")
 	}
