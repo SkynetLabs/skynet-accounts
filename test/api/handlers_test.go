@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -22,6 +23,7 @@ import (
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.sia.tech/siad/build"
 	"go.sia.tech/siad/crypto"
 )
 
@@ -193,8 +195,8 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Expected a cookie.")
 	}
 	// Make sure the returned cookie is usable for making requests.
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
 	// Make sure the response contains a valid JWT.
 	_, err = jwt.ValidateToken(r.Header.Get("Skynet-Token"))
 	if err != nil {
@@ -210,7 +212,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err, string(b))
 	}
 	// Expect the returned cookie to be already expired.
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 	if at.Cookie == nil {
 		t.Fatal("Expected to have a cookie.")
 	}
@@ -251,16 +253,16 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
 
 	// Call unauthorized.
-	at.Cookie = nil
+	at.ClearCredentials()
 	_, _, err = at.Put("/user", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
 	}
-	at.Cookie = c
+	at.SetCookie(c)
 	// Update the user's Stripe ID.
 	stripeID := name + "_stripe_id"
 	_, b, err := at.UserPUT("", "", stripeID)
@@ -357,8 +359,8 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Failed to create a user and log in:", err)
 	}
 	// Delete the user.
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
 	r, _, err := at.Delete("/user", nil)
 	if err != nil || r.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
@@ -391,14 +393,14 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// Try to delete the user without a cookie.
-	at.Cookie = nil
+	at.ClearCredentials()
 	r, _, _ = at.Delete("/user", nil)
 	if r.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("Expected %d, got %d", http.StatusUnauthorized, r.StatusCode)
 	}
 	// Delete the user.
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
 	r, _, err = at.Delete("/user", nil)
 	if err != nil || r.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
@@ -435,17 +437,11 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
-
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
 
 	// Call /user/limits with a cookie. Expect FreeTier response.
-	_, b, err := at.Get("/user/limits", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var tl api.UserLimitsGET
-	err = json.Unmarshal(b, &tl)
+	tl, _, err := at.UserLimits()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,14 +451,13 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if tl.TierName != database.UserLimits[database.TierFree].TierName {
 		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
 	}
+	if tl.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
+		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierFree].DownloadBandwidth, tl.DownloadBandwidth)
+	}
 
 	// Call /user/limits without a cookie. Expect FreeAnonymous response.
-	at.Cookie = nil
-	_, b, err = at.Get("/user/limits", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = json.Unmarshal(b, &tl)
+	at.ClearCredentials()
+	tl, _, err = at.UserLimits()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -471,6 +466,63 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 	if tl.TierName != database.UserLimits[database.TierAnonymous].TierName {
 		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, tl.TierName)
+	}
+	if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
+		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
+	}
+
+	// Create a new user which we'll use to test the quota limits. We can't use
+	// the existing one because their status is already cached.
+	u2, c, err := test.CreateUserAndLogin(at, t.Name()+"2")
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer func() {
+		if err = u2.Delete(at.Ctx); err != nil {
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
+		}
+	}()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
+	// Upload a very large file, which exceeds the user's storage limit. This
+	// should cause their QuotaExceed flag to go up and their speeds to drop to
+	// anonymous levels. Their tier should remain Free.
+	dbu2 := *u2.User
+	filesize := database.UserLimits[database.TierFree].Storage + 1
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, &dbu2, filesize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make a specific call to trackUploadPOST in order to trigger the
+	// checkUserQuotas method. This wil register the upload a second time but
+	// that doesn't affect the test.
+	_, err = at.TrackUpload(sl.Skylink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We need to try this several times because we'll only get the right result
+	// after the background goroutine that updates user's quotas has had time to
+	// run.
+	err = build.Retry(10, 200*time.Millisecond, func() error {
+		// Check the user's limits. We expect the tier to be Free but the limits to
+		// match Anonymous.
+		tl, _, err = at.UserLimits()
+		if err != nil {
+			return errors.AddContext(err, "failed to call /user/limits")
+		}
+		if tl.TierID != database.TierFree {
+			return fmt.Errorf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
+		}
+		if tl.TierName != database.UserLimits[database.TierFree].TierName {
+			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
+		}
+		if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
+			return fmt.Errorf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -486,8 +538,8 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
 
 	// Create an upload.
 	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128%skynet.KiB)
@@ -506,12 +558,12 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected to have a single upload of %s, got %+v", skylink.Skylink, ups)
 	}
 	// Try to delete the upload without passing a JWT cookie.
-	at.Cookie = nil
+	at.ClearCredentials()
 	_, b, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected error %s, got %s. Body: %s", unauthorized, err, string(b))
 	}
-	at.Cookie = c
+	at.SetCookie(c)
 	// Delete it.
 	_, b, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
 	if err != nil {
@@ -546,7 +598,7 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 
-	defer func() { at.Cookie = nil }()
+	defer at.ClearCredentials()
 
 	// Confirm the user
 	params := url.Values{}
@@ -565,14 +617,14 @@ func testUserConfirmReconfirmEmailGET(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Make sure `POST /user/reconfirm` requires a cookie.
-	at.Cookie = nil
+	at.ClearCredentials()
 	_, b, err = at.Post("/user/reconfirm", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
 	}
 	// Reset the confirmation field, so we can continue testing with the same
 	// user.
-	at.Cookie = c
+	at.SetCookie(c)
 	_, b, err = at.Post("/user/reconfirm", nil, nil)
 	if err != nil {
 		t.Fatal(err, string(b))
@@ -624,7 +676,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 
-	defer func() { at.Cookie = nil }()
+	defer at.ClearCredentials()
 
 	// // TEST REQUESTING RECOVERY // //
 
@@ -807,8 +859,8 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
 
 	// Generate a random skylink.
 	skylink, err := skymodules.NewSkylinkV1(crypto.HashBytes(fastrand.Bytes(32)), 0, 32)
@@ -818,21 +870,21 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats := database.UserStats{}
 
 	// Call trackUpload without a cookie.
-	at.Cookie = nil
-	_, b, err := at.Post("/track/upload/"+skylink.String(), nil, nil)
+	at.ClearCredentials()
+	_, err = at.TrackUpload(skylink.String())
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
-	at.Cookie = c
+	at.SetCookie(c)
 	// Call trackUpload with an invalid skylink.
-	_, b, err = at.Post("/track/upload/INVALID_SKYLINK", nil, nil)
+	_, err = at.TrackUpload("INVALID_SKYLINK")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
+		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackUpload with a valid skylink.
-	_, b, err = at.Post("/track/upload/"+skylink.String(), nil, nil)
+	_, err = at.TrackUpload(skylink.String())
 	if err != nil {
-		t.Fatal(err, string(b))
+		t.Fatal(err)
 	}
 	// Adjust the expectations. We won't adjust anything based on size because
 	// the metafetcher won't be running during testing.
@@ -841,32 +893,26 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats.RawStorageUsed += skynet.RawStorageUsed(0)
 
 	// Call trackDownload without a cookie.
-	at.Cookie = nil
-	params := url.Values{}
-	params.Set("bytes", "100")
-	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
+	at.ClearCredentials()
+	_, err = at.TrackDownload(skylink.String(), 100)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
-	at.Cookie = c
+	at.SetCookie(c)
 	// Call trackDownload with an invalid skylink.
-	_, b, err = at.Post("/track/download/INVALID_SKYLINK", params, nil)
+	_, err = at.TrackDownload("INVALID_SKYLINK", 100)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
+		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackDownload with a valid skylink and a negative size download
-	params = url.Values{}
-	params.Set("bytes", "-100")
-	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
+	_, err = at.TrackDownload(skylink.String(), -100)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
+		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackDownload with a valid skylink.
-	params = url.Values{}
-	params.Set("bytes", "100")
-	_, b, err = at.Post("/track/download/"+skylink.String(), params, nil)
+	_, err = at.TrackDownload(skylink.String(), 100)
 	if err != nil {
-		t.Fatal(err, string(b))
+		t.Fatal(err)
 	}
 	// Adjust the expectations.
 	expectedStats.NumDownloads++
@@ -874,44 +920,44 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats.TotalDownloadsSize += 100
 
 	// Call trackRegistryRead without a cookie.
-	at.Cookie = nil
-	_, b, err = at.Post("/track/registry/read", nil, nil)
+	at.ClearCredentials()
+	_, err = at.TrackRegistryRead()
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
-	at.Cookie = c
+	at.SetCookie(c)
 	// Call trackRegistryRead.
-	_, b, err = at.Post("/track/registry/read", nil, nil)
+	_, err = at.TrackRegistryRead()
 	if err != nil {
-		t.Fatal(err, string(b))
+		t.Fatal(err)
 	}
 	// Adjust the expectations.
 	expectedStats.NumRegReads++
 	expectedStats.BandwidthRegReads += skynet.CostBandwidthRegistryRead
 
 	// Call trackRegistryWrite without a cookie.
-	at.Cookie = nil
-	_, b, err = at.Post("/track/registry/write", nil, nil)
+	at.ClearCredentials()
+	_, err = at.TrackRegistryWrite()
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
-	at.Cookie = c
+	at.SetCookie(c)
 	// Call trackRegistryWrite.
-	_, b, err = at.Post("/track/registry/write", nil, nil)
+	_, err = at.TrackRegistryWrite()
 	if err != nil {
-		t.Fatal(err, string(b))
+		t.Fatal(err)
 	}
 	// Adjust the expectations.
 	expectedStats.NumRegWrites++
 	expectedStats.BandwidthRegWrites += skynet.CostBandwidthRegistryWrite
 
 	// Call userStats without a cookie.
-	at.Cookie = nil
-	_, b, err = at.Get("/user/stats", nil)
+	at.ClearCredentials()
+	_, b, err := at.Get("/user/stats", nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%s'. Body: '%s'", unauthorized, err, string(b))
+		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
-	at.Cookie = c
+	at.SetCookie(c)
 	// Call userStats.
 	_, b, err = at.Get("/user/stats", nil)
 	if err != nil {
@@ -958,8 +1004,8 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Login failed. Error ", err.Error())
 	}
 	// Grab the Skynet cookie, so we can make authenticated calls.
-	at.Cookie = test.ExtractCookie(r)
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(test.ExtractCookie(r))
+	defer at.ClearCredentials()
 	if at.Cookie == nil {
 		t.Fatalf("Failed to extract cookie from request. Cookies found: %+v", r.Cookies())
 	}
@@ -969,15 +1015,13 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Missing or invalid token. Error:", err)
 	}
 	// Make sure we can make calls with this token.
-	at.Token = tk
 	c := at.Cookie
-	at.Cookie = nil
+	at.SetToken(tk)
 	_, _, err = at.Get("/user", nil)
 	if err != nil {
 		t.Fatal("Failed to fetch user data with token:", err.Error())
 	}
-	at.Token = ""
-	at.Cookie = c
+	at.SetCookie(c)
 	// Change the user's email.
 	newEmail := name + "_new@siasky.net"
 	r, b, err := at.UserPUT(newEmail, "", "")
@@ -985,7 +1029,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Failed to update user. Error: %s. Body: %s", err.Error(), string(b))
 	}
 	// Grab the new cookie. It has changed because of the user edit.
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 	if at.Cookie == nil {
 		t.Fatalf("Failed to extract cookie from request. Cookies found: %+v", r.Cookies())
 	}
@@ -1007,7 +1051,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Failed to logout:", err.Error())
 	}
 	// Grab the new cookie.
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 	// Try to get the user, expect a 401.
 	_, b, err = at.Get("/user", nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {

@@ -94,7 +94,7 @@ type (
 // NewChallenge creates a new challenge with the given type and pubKey.
 func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, cType string) (*Challenge, error) {
 	if cType != ChallengeTypeLogin && cType != ChallengeTypeRegister && cType != ChallengeTypeUpdate {
-		return nil, errors.New(fmt.Sprintf("invalid challenge type '%s'", cType))
+		return nil, fmt.Errorf("invalid challenge type '%s'", cType)
 	}
 	ch := &Challenge{
 		Challenge: hex.EncodeToString(fastrand.Bytes(ChallengeSize)),

@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.sia.tech/siad/build"
 )
 
 // TestSender goes through the standard Sender workflow and ensures that it
@@ -62,18 +64,23 @@ func TestSender(t *testing.T) {
 	}
 	// Start the sender and wait for a second.
 	sender.Start()
-	time.Sleep(2 * time.Second)
-	// Check that the email has been sent.
-	_, emails, err = db.FindEmails(ctx, filterTo, &options.FindOptions{})
+	err = build.Retry(10, 200*time.Millisecond, func() error {
+		// Check that the email has been sent.
+		_, emails, err = db.FindEmails(ctx, filterTo, &options.FindOptions{})
+		if err != nil {
+			return err
+		}
+		if len(emails) != 1 {
+			return fmt.Errorf("expected 1 email in the DB, got %d", len(emails))
+		}
+		if emails[0].SentAt.IsZero() {
+			emails[0].Body = "<<<Body removed for logging brevity.>>>"
+			return fmt.Errorf("email not sent. Email: %+v", emails[0])
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(emails) != 1 {
-		t.Fatalf("Expected 1 email in the DB, got %d\n", len(emails))
-	}
-	if emails[0].SentAt.IsZero() {
-		emails[0].Body = "<<<Body removed for logging brevity.>>>"
-		t.Fatalf("Email not sent. Email: %+v\n", emails[0])
 	}
 }
 
