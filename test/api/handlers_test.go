@@ -436,14 +436,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	defer at.ClearCredentials()
 
 	// Create an API key for this user.
-	_, b, err := at.Post("/user/apikeys", nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var akr struct {
-		Key database.APIKey `json:"key"`
-	}
-	err = json.Unmarshal(b, &akr)
+	akr, _, err := at.UserAPIKeysPOST(api.APIKeyPOST{})
 	if err != nil {
 		t.Fatal(err)
 	}

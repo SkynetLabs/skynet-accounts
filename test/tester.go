@@ -318,6 +318,46 @@ func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
 	return resp, r.StatusCode, nil
 }
 
+// UserAPIKeysDELETE performs a `DELETE /user/apikeys/:id` request.
+func (at *AccountsTester) UserAPIKeysDELETE(id primitive.ObjectID) (int, error) {
+	r, _, err := at.request(http.MethodDelete, "/user/apikeys/"+id.Hex(), nil, nil, nil)
+	return r.StatusCode, err
+}
+
+// UserAPIKeysGET performs a `GET /user/apikeys/:id` request.
+func (at *AccountsTester) UserAPIKeysGET(id primitive.ObjectID) (api.APIKeyResponse, int, error) {
+	r, b, err := at.request(http.MethodGet, "/user/apikeys/"+id.Hex(), nil, nil, nil)
+	if err != nil {
+		return api.APIKeyResponse{}, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.APIKeyResponse{}, r.StatusCode, errors.New(string(b))
+	}
+	var result api.APIKeyResponse
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		return api.APIKeyResponse{}, 0, errors.AddContext(err, "failed to parse response")
+	}
+	return result, r.StatusCode, nil
+}
+
+// UserAPIKeysLIST performs a `GET /user/apikeys` request.
+func (at *AccountsTester) UserAPIKeysLIST() ([]api.APIKeyResponse, int, error) {
+	r, b, err := at.request(http.MethodGet, "/user/apikeys", nil, nil, nil)
+	if err != nil {
+		return nil, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return nil, r.StatusCode, errors.New(string(b))
+	}
+	result := make([]api.APIKeyResponse, 0)
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		return nil, 0, errors.AddContext(err, "failed to parse response")
+	}
+	return result, r.StatusCode, nil
+}
+
 // UserAPIKeysPOST performs a `POST /user/apikeys` request.
 func (at *AccountsTester) UserAPIKeysPOST(body api.APIKeyPOST) (api.APIKeyResponseWithKey, int, error) {
 	bb, err := json.Marshal(body)

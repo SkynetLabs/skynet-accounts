@@ -24,30 +24,19 @@ func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	at.SetCookie(test.ExtractCookie(r))
 
-	aks := make([]database.APIKeyRecord, 0)
-
 	// List all API keys this user has. Expect the list to be empty.
-	r, body, err = at.Get("/user/apikeys", nil)
+	aks, _, err := at.UserAPIKeysLIST()
 	if err != nil {
 		t.Fatal(err, string(body))
-	}
-	err = json.Unmarshal(body, &aks)
-	if err != nil {
-		t.Fatal(err)
 	}
 	if len(aks) > 0 {
 		t.Fatalf("Expected an empty list of API keys, got %+v.", aks)
 	}
 
 	// Create a new API key.
-	r, body, err = at.Post("/user/apikeys", nil, nil)
+	ak1, _, err := at.UserAPIKeysPOST(api.APIKeyPOST{})
 	if err != nil {
 		t.Fatal(err, string(body))
-	}
-	var ak1 database.APIKeyRecord
-	err = json.Unmarshal(body, &ak1)
-	if err != nil {
-		t.Fatal(err)
 	}
 	// Make sure the API key is private.
 	if ak1.Public {
@@ -55,60 +44,47 @@ func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Create another API key.
-	r, body, err = at.Post("/user/apikeys", nil, nil)
+	ak2, _, err := at.UserAPIKeysPOST(api.APIKeyPOST{})
 	if err != nil {
 		t.Fatal(err, string(body))
-	}
-	var ak2 database.APIKeyRecord
-	err = json.Unmarshal(body, &ak2)
-	if err != nil {
-		t.Fatal(err)
 	}
 
 	// List all API keys this user has. Expect to find both keys we created.
-	r, body, err = at.Get("/user/apikeys", nil)
+	aks, _, err = at.UserAPIKeysLIST()
 	if err != nil {
 		t.Fatal(err, string(body))
-	}
-	err = json.Unmarshal(body, &aks)
-	if err != nil {
-		t.Fatal(err)
 	}
 	if len(aks) != 2 {
 		t.Fatalf("Expected two API keys, got %+v.", aks)
 	}
-	if ak1.Key != aks[0].Key && ak1.Key != aks[1].Key {
-		t.Fatalf("Missing key '%s'! Set: %+v", ak1.Key, aks)
+	if ak1.ID.Hex() != aks[0].ID.Hex() && ak1.ID.Hex() != aks[1].ID.Hex() {
+		t.Fatalf("Missing key '%s'! Set: %+v", ak1.ID.Hex(), aks)
 	}
-	if ak2.Key != aks[0].Key && ak2.Key != aks[1].Key {
-		t.Fatalf("Missing key '%s'! Set: %+v", ak2.Key, aks)
+	if ak2.ID.Hex() != aks[0].ID.Hex() && ak2.ID.Hex() != aks[1].ID.Hex() {
+		t.Fatalf("Missing key '%s'! Set: %+v", ak2.ID.Hex(), aks)
 	}
 
 	// Delete an API key.
-	r, body, err = at.Delete("/user/apikeys/"+ak1.ID.Hex(), nil)
-	if err != nil {
-		t.Fatal(err, string(body))
+	status, err := at.UserAPIKeysDELETE(ak1.ID)
+	if err != nil || status != http.StatusNoContent {
+		t.Fatal(err, status)
 	}
 	// List all API keys this user has. Expect to find only the second one.
-	r, body, err = at.Get("/user/apikeys", nil)
+	aks, _, err = at.UserAPIKeysLIST()
 	if err != nil {
 		t.Fatal(err, string(body))
-	}
-	err = json.Unmarshal(body, &aks)
-	if err != nil {
-		t.Fatal(err)
 	}
 	if len(aks) != 1 {
 		t.Fatalf("Expected one API key, got %+v.", aks)
 	}
-	if ak2.Key != aks[0].Key {
-		t.Fatalf("Missing key '%s'! Set: %+v", ak2.Key, aks)
+	if ak2.ID.Hex() != aks[0].ID.Hex() {
+		t.Fatalf("Missing key '%s'! Set: %+v", ak2.ID.Hex(), aks)
 	}
 
 	// Try to delete the same key again. Expect a Bad Request.
-	r, body, err = at.Delete("/user/apikeys/"+ak1.ID.Hex(), nil)
-	if r.StatusCode != http.StatusBadRequest {
-		t.Fatalf("Expected status 400, got %d.", r.StatusCode)
+	status, _ = at.UserAPIKeysDELETE(ak1.ID)
+	if status != http.StatusBadRequest {
+		t.Fatalf("Expected status 400, got %d.", status)
 	}
 }
 
@@ -172,14 +148,8 @@ func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	sl1 := "AQAh2vxStoSJ_M9tWcTgqebUWerCAbpMfn9xxa9E29UOuw"
 	sl2 := "AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw"
 
-	aks := make([]database.APIKeyRecord, 0)
-
 	// List all API keys this user has. Expect the list to be empty.
-	r, body, err = at.Get("/user/apikeys", nil)
-	if err != nil {
-		t.Fatal(err, string(body))
-	}
-	err = json.Unmarshal(body, &aks)
+	aks, _, err := at.UserAPIKeysLIST()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,11 +166,7 @@ func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// List all API keys again. Expect to find a key.
-	r, body, err = at.Get("/user/apikeys", nil)
-	if err != nil {
-		t.Fatal(err, string(body))
-	}
-	err = json.Unmarshal(body, &aks)
+	aks, _, err = at.UserAPIKeysLIST()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,14 +182,9 @@ func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// Get the key and verify the change.
-	r, body, err = at.Get("/user/apikeys/"+akr.ID.Hex(), nil)
+	akr1, _, err := at.UserAPIKeysGET(akr.ID)
 	if err != nil {
 		t.Fatal(err, string(body))
-	}
-	var akr1 database.APIKeyRecord
-	err = json.Unmarshal(body, &akr1)
-	if err != nil {
-		t.Fatal(err)
 	}
 	if akr1.Skylinks[0] != sl2 {
 		t.Fatal("Unexpected skylinks list", aks[0].Skylinks)
@@ -238,13 +199,9 @@ func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// List and verify the change.
-	r, body, err = at.Get("/user/apikeys", nil)
+	aks, _, err = at.UserAPIKeysLIST()
 	if err != nil {
 		t.Fatal(err, string(body))
-	}
-	err = json.Unmarshal(body, &aks)
-	if err != nil {
-		t.Fatal(err)
 	}
 	if len(aks) != 1 {
 		t.Fatalf("Expected one API key, got %d.", len(aks))
@@ -253,18 +210,14 @@ func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Unexpected skylinks list", aks[0].Skylinks)
 	}
 	// Delete a public API key.
-	r, body, err = at.Delete("/user/apikeys/"+akr.ID.Hex(), nil)
-	if err != nil {
-		t.Fatal(err, string(body))
+	status, err := at.UserAPIKeysDELETE(akr.ID)
+	if err != nil || status != http.StatusNoContent {
+		t.Fatal(err, status)
 	}
 	// List and verify the change.
-	r, body, err = at.Get("/user/apikeys", nil)
+	aks, _, err = at.UserAPIKeysLIST()
 	if err != nil {
 		t.Fatal(err, string(body))
-	}
-	err = json.Unmarshal(body, &aks)
-	if err != nil {
-		t.Fatal(err)
 	}
 	if len(aks) != 0 {
 		t.Fatalf("Expected no API keys, got %d.", len(aks))
