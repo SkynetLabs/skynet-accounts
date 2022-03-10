@@ -83,16 +83,9 @@ func TestHandlers(t *testing.T) {
 
 // testHandlerHealthGET tests the /health handler.
 func testHandlerHealthGET(t *testing.T, at *test.AccountsTester) {
-	_, b, err := at.Get("/health", nil)
+	status, _, err := at.HealthGet()
 	if err != nil {
 		t.Fatal(err)
-	}
-	status := struct {
-		DBAlive bool `json:"dbAlive"`
-	}{}
-	err = json.Unmarshal(b, &status)
-	if err != nil {
-		t.Fatal("Failed to unmarshal service's response: ", err)
 	}
 	// DBAlive should never be false because if we couldn't reach the DB, we
 	// wouldn't have made it this far in the test.

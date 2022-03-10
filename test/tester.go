@@ -116,7 +116,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	}
 	// Wait for the accounts tester to be fully ready.
 	err = build.Retry(50, time.Millisecond, func() error {
-		_, _, err = at.Get("/health", nil)
+		_, _, err = at.HealthGet()
 		return err
 	})
 	if err != nil {
@@ -291,6 +291,20 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 		return nil, nil, err
 	}
 	return processResponse(r)
+}
+
+// HealthGet executes a GET /health.
+func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
+	r, b, err := at.request(http.MethodGet, "/health", nil, nil, nil)
+	if err != nil {
+		return api.HealthGET{}, r.StatusCode, err
+	}
+	var resp api.HealthGET
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return api.HealthGET{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
 }
 
 // UserAPIKeysPOST performs a `POST /user/apikeys` request.
