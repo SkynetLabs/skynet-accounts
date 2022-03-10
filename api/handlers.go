@@ -529,7 +529,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	}
 	// Store the user in the cache with a custom key.
 	api.staticUserTierCache.Set(ak.String()+skylink, user)
-	api.WriteJSON(w, userLimitsGetFromTier(user.Tier, u.QuotaExceeded))
+	api.WriteJSON(w, userLimitsGetFromTier(user.Tier, user.QuotaExceeded))
 }
 
 // userStatsGET returns statistics about an existing user.

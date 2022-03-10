@@ -71,6 +71,7 @@ func TestHandlers(t *testing.T) {
 		{name: "PrivateAPIKeysFlow", test: testPrivateAPIKeysFlow},
 		{name: "PrivateAPIKeysUsage", test: testPrivateAPIKeysUsage},
 		{name: "PublicAPIKeysFlow", test: testPublicAPIKeysFlow},
+		{name: "PublicAPIKeysUsage", test: testPublicAPIKeysUsage},
 	}
 
 	// Run subtests
@@ -448,7 +449,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Call /user/limits with a cookie. Expect TierFree response.
-	tl, _, err := at.UserLimits()
+	tl, _, err := at.UserLimits(nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +465,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 
 	// Call /user/limits without a cookie. Expect FreeAnonymous response.
 	at.ClearCredentials()
-	tl, _, err = at.UserLimits()
+	tl, _, err = at.UserLimits(nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +480,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Call /user/limits with an API key. Expect TierFree response.
-	tl, _, err = at.UserLimitsGET(nil, map[string]string{api.APIKeyHeader: string(akr.Key)})
+	tl, _, err = at.UserLimits(nil, map[string]string{api.APIKeyHeader: string(akr.Key)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,7 +529,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// Check the user's limits. We expect the tier to be Free but the limits to
 		// match Anonymous.
-		tl, _, err = at.UserLimits()
+		tl, _, err = at.UserLimits(nil, nil)
 		if err != nil {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}

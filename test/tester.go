@@ -34,7 +34,7 @@ type (
 		Ctx    context.Context
 		DB     *database.DB
 		Logger *logrus.Logger
-		// If set, this cookie will be attached to all requests.
+		APIKey string
 		Cookie *http.Cookie
 		Token  string
 
@@ -128,6 +128,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 // ClearCredentials removes any credentials stored by this tester, such as a
 // cookie, token, etc.
 func (at *AccountsTester) ClearCredentials() {
+	at.APIKey = ""
 	at.Cookie = nil
 	at.Token = ""
 }
@@ -142,6 +143,13 @@ func (at *AccountsTester) Close() error {
 		}
 	}
 	return nil
+}
+
+// SetAPIKey ensures that all subsequent requests are going to use the given
+// API key for authentication.
+func (at *AccountsTester) SetAPIKey(ak string) {
+	at.ClearCredentials()
+	at.APIKey = ak
 }
 
 // SetCookie ensures that all subsequent requests are going to use the given
@@ -279,6 +287,9 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 	if req == nil {
 		return nil, nil, errors.New("invalid request")
 	}
+	if at.APIKey != "" {
+		req.Header.Set(api.APIKeyHeader, at.APIKey)
+	}
 	if at.Cookie != nil {
 		req.Header.Set("Cookie", at.Cookie.String())
 	}
@@ -360,23 +371,6 @@ func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.API
 	return r.StatusCode, nil
 }
 
-// UserLimitsGET performs a `GET /user/limits` request.
-func (at *AccountsTester) UserLimitsGET(params url.Values, headers map[string]string) (api.UserLimitsGET, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/limits", params, nil, headers)
-	if err != nil {
-		return api.UserLimitsGET{}, r.StatusCode, err
-	}
-	if r.StatusCode != http.StatusOK {
-		return api.UserLimitsGET{}, r.StatusCode, errors.New(string(b))
-	}
-	var result api.UserLimitsGET
-	err = json.Unmarshal(b, &result)
-	if err != nil {
-		return api.UserLimitsGET{}, 0, errors.AddContext(err, "failed to parse response")
-	}
-	return result, r.StatusCode, nil
-}
-
 // processResponse is a helper method which extracts the body from the response
 // and handles non-OK status codes.
 //
@@ -419,10 +413,33 @@ func (at *AccountsTester) TrackRegistryWrite() (int, error) {
 }
 
 // UserLimits performs a `GET /user/limits` request.
-func (at *AccountsTester) UserLimits() (api.UserLimitsGET, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/limits", nil, nil, nil)
+func (at *AccountsTester) UserLimits(params url.Values, headers map[string]string) (api.UserLimitsGET, int, error) {
+	r, b, err := at.request(http.MethodGet, "/user/limits", params, nil, headers)
 	if err != nil {
 		return api.UserLimitsGET{}, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.UserLimitsGET{}, r.StatusCode, errors.New(string(b))
+	}
+	var resp api.UserLimitsGET
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return api.UserLimitsGET{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
+}
+
+// UserLimitsSkylink performs a `GET /user/limits/:skylink` request.
+func (at *AccountsTester) UserLimitsSkylink(sl string, params url.Values, headers map[string]string) (api.UserLimitsGET, int, error) {
+	if !database.ValidSkylinkHash(sl) {
+		return api.UserLimitsGET{}, 0, database.ErrInvalidSkylink
+	}
+	r, b, err := at.request(http.MethodGet, "/user/limits/"+sl, params, nil, headers)
+	if err != nil {
+		return api.UserLimitsGET{}, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.UserLimitsGET{}, r.StatusCode, errors.New(string(b))
 	}
 	var resp api.UserLimitsGET
 	err = json.Unmarshal(b, &resp)

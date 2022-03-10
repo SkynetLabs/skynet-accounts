@@ -179,7 +179,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	at.SetCookie(test.ExtractCookie(r))
 	// Get the user's limit.
-	ul, _, err := at.UserLimits()
+	ul, _, err := at.UserLimits(nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestUserTierCache(t *testing.T) {
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// We expect to get tier with name and id matching TierPremium20 but with
 		// speeds matching TierAnonymous.
-		ul, _, err = at.UserLimits()
+		ul, _, err = at.UserLimits(nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -240,7 +240,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// We expect to get TierPremium20.
-		ul, _, err = at.UserLimits()
+		ul, _, err = at.UserLimits(nil, nil)
 		if err != nil {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}

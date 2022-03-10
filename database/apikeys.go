@@ -123,7 +123,7 @@ func (ak APIKey) String() string {
 // CoversSkylink tells us whether a given API key covers a given skylink.
 // Private API keys cover all skylinks while public ones - only a limited set.
 func (akr APIKeyRecord) CoversSkylink(sl string) bool {
-	if akr.Public {
+	if !akr.Public {
 		return true
 	}
 	for _, s := range akr.Skylinks {
