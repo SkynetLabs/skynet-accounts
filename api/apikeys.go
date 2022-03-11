@@ -29,7 +29,6 @@ type (
 		Remove []string
 	}
 	// APIKeyResponse is an API DTO which mirrors database.APIKey.
-	// TODO Should we reveal the Key each time for public keys?
 	APIKeyResponse struct {
 		ID        primitive.ObjectID `json:"id"`
 		UserID    primitive.ObjectID `json:"-"`
@@ -41,7 +40,6 @@ type (
 	// APIKeyResponseWithKey is an API DTO which mirrors database.APIKey but
 	// also reveals the value of the Key field. This should only be used on key
 	// creation.
-	// TODO Should we reveal the Key each time for public keys?
 	APIKeyResponseWithKey struct {
 		APIKeyResponse
 		Key database.APIKey `json:"key"`
@@ -62,7 +60,6 @@ func (akp APIKeyPOST) Valid() bool {
 }
 
 // FromAPIKey populates the struct's fields from the given API key.
-// TODO This might be more convenient as a constructor.
 func (rwk *APIKeyResponse) FromAPIKey(ak database.APIKeyRecord) {
 	rwk.ID = ak.ID
 	rwk.UserID = ak.UserID
@@ -73,7 +70,6 @@ func (rwk *APIKeyResponse) FromAPIKey(ak database.APIKeyRecord) {
 }
 
 // FromAPIKey populates the struct's fields from the given API key.
-// TODO This might be more convenient as a constructor.
 func (rwk *APIKeyResponseWithKey) FromAPIKey(ak database.APIKeyRecord) {
 	rwk.ID = ak.ID
 	rwk.UserID = ak.UserID
