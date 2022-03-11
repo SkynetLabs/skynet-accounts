@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
@@ -407,7 +408,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	// inBytes is a flag indicating that the caller wants all bandwidth limits
 	// to be presented in bytes per second. The default behaviour is to present
 	// them in bits per second.
-	inBytes := req.FormValue("unit") == "byte"
+	inBytes := strings.EqualFold(req.FormValue("unit"), "byte")
 	// First check for an API key.
 	ak, err := apiKeyFromRequest(req)
 	respAnon := userLimitsGetFromTier(database.TierAnonymous, inBytes)
