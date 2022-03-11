@@ -253,8 +253,14 @@ func (db *DB) APIKeyUpdate(ctx context.Context, user User, akID primitive.Object
 	opts := options.UpdateOptions{
 		Upsert: &False,
 	}
-	_, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
-	return err
+	ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
+	if err != nil {
+		return err
+	}
+	if ur.ModifiedCount == 0 {
+		return errors.New("public API key not found, no keys updated")
+	}
+	return nil
 }
 
 // APIKeyPatch updates an existing API key. This works by adding and removing
@@ -282,9 +288,12 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 		opts := options.UpdateOptions{
 			Upsert: &False,
 		}
-		_, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
+		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
 		if err != nil {
 			return err
+		}
+		if ur.ModifiedCount == 0 {
+			return errors.New("public API key not found, no keys updated")
 		}
 	}
 	// Then, remove all skylinks that need to be removed.
@@ -295,9 +304,12 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 		opts := options.UpdateOptions{
 			Upsert: &False,
 		}
-		_, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
+		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
 		if err != nil {
 			return err
+		}
+		if ur.ModifiedCount == 0 {
+			return errors.New("public API key not found, no keys updated")
 		}
 	}
 	return nil

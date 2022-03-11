@@ -19,6 +19,8 @@ import (
 // TestUserByEmail ensures UserByEmail works as expected.
 // This method also tests UserCreate.
 func TestUserByEmail(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -62,6 +64,8 @@ func TestUserByEmail(t *testing.T) {
 
 // TestUserByID ensures UserByID works as expected.
 func TestUserByID(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -101,6 +105,8 @@ func TestUserByID(t *testing.T) {
 // TestUserByPubKey makes sure UserByPubKey functions correctly, both with a
 // single and multiple pubkeys attached to a user.
 func TestUserByPubKey(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	name := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, name, test.DBTestCredentials(), nil)
@@ -152,6 +158,8 @@ func TestUserByPubKey(t *testing.T) {
 // TestUserByStripeID ensures UserByStripeID works as expected.
 // This method also tests UserCreate and UserSetStripeID.
 func TestUserByStripeID(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -196,6 +204,8 @@ func TestUserByStripeID(t *testing.T) {
 // TestUserBySub ensures UserBySub works as expected.
 // This method also tests UserCreate.
 func TestUserBySub(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -238,6 +248,8 @@ func TestUserBySub(t *testing.T) {
 // TestUserConfirmEmail ensures that email confirmation works as expected,
 // including resecting the expiration of tokens.
 func TestUserConfirmEmail(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -276,6 +288,8 @@ func TestUserConfirmEmail(t *testing.T) {
 
 // TestUserCreate ensures UserCreate works as expected.
 func TestUserCreate(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -325,6 +339,8 @@ func TestUserCreate(t *testing.T) {
 
 // TestUserDelete ensures UserDelete works as expected.
 func TestUserDelete(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -363,6 +379,8 @@ func TestUserDelete(t *testing.T) {
 
 // TestUserSave ensures that UserSave works as expected.
 func TestUserSave(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -409,6 +427,8 @@ func TestUserSave(t *testing.T) {
 
 // TestUserSetStripeID ensures that UserSetStripeID works as expected.
 func TestUserSetStripeID(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -440,6 +460,8 @@ func TestUserSetStripeID(t *testing.T) {
 
 // TestUserSetTier ensures that UserSetTier works as expected.
 func TestUserSetTier(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -469,6 +491,8 @@ func TestUserSetTier(t *testing.T) {
 
 // TestUserStats ensures we report accurate statistics for users.
 func TestUserStats(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
