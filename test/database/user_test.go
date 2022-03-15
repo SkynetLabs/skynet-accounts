@@ -23,7 +23,7 @@ func TestUserByEmail(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestUserByID(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestUserByPubKey(t *testing.T) {
 
 	ctx := context.Background()
 	name := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, name, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, name, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestUserByStripeID(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestUserBySub(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestUserConfirmEmail(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal("Failed to connect to the DB:", err)
 	}
@@ -292,7 +292,7 @@ func TestUserCreate(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +343,7 @@ func TestUserDelete(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +383,7 @@ func TestUserSave(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +431,7 @@ func TestUserSetStripeID(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +464,7 @@ func TestUserSetTier(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -495,7 +495,7 @@ func TestUserStats(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

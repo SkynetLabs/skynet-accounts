@@ -27,7 +27,7 @@ func TestWithDBSession(t *testing.T) {
 
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

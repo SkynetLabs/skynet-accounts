@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
@@ -42,6 +43,20 @@ type (
 	}
 )
 
+// CleanName sanitizes the input for all kinds of unwanted characters and
+// replaces those with underscores.
+// See https://docs.mongodb.com/manual/reference/limits/#naming-restrictions
+func CleanName(s string) string {
+	re := regexp.MustCompile(`[/\\.\s"$*<>:|?]`)
+	cleanDBName := re.ReplaceAllString(s, "_")
+	// 64 characters is MongoDB's limit on database names.
+	// See https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Length-of-Database-Names
+	if len(cleanDBName) > 64 {
+		cleanDBName = cleanDBName[:64]
+	}
+	return cleanDBName
+}
+
 // ExtractCookie is a helper method which extracts the login cookie from a
 // response, so we can use it with future requests while testing.
 func ExtractCookie(r *http.Response) *http.Cookie {
@@ -51,6 +66,11 @@ func ExtractCookie(r *http.Response) *http.Cookie {
 		}
 	}
 	return nil
+}
+
+// NewDatabase returns a new DB connection based on the passed parameters.
+func NewDatabase(ctx context.Context, dbName string, logger *logrus.Logger) (*database.DB, error) {
+	return database.NewCustomDB(ctx, CleanName(dbName), DBTestCredentials(), logger)
 }
 
 // NewAccountsTester creates and starts a new AccountsTester service.
@@ -68,7 +88,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	}
 
 	// Connect to the database.
-	db, err := database.NewCustomDB(ctx, dbName, DBTestCredentials(), logger)
+	db, err := NewDatabase(ctx, dbName, logger)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to connect to the DB")
 	}
