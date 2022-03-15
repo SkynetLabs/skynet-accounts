@@ -241,7 +241,7 @@ func (db *DB) APIKeyUpdate(ctx context.Context, user User, akID primitive.Object
 	// Validate all given skylinks.
 	for _, s := range skylinks {
 		if !ValidSkylinkHash(s) {
-			return ErrInvalidSkylink
+			return errors.AddContext(ErrInvalidSkylink, "offending skylink: "+s)
 		}
 	}
 	filter := bson.M{
@@ -272,7 +272,7 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 	// Validate all given skylinks.
 	for _, s := range append(addSkylinks, removeSkylinks...) {
 		if !ValidSkylinkHash(s) {
-			return ErrInvalidSkylink
+			return errors.AddContext(ErrInvalidSkylink, "offending skylink: "+s)
 		}
 	}
 	filter := bson.M{
@@ -283,7 +283,7 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 	// First, all new skylinks to the record.
 	if len(addSkylinks) > 0 {
 		update = bson.M{
-			"$push": bson.M{"skylinks": bson.M{"$each": addSkylinks}},
+			"$addToSet": bson.M{"skylinks": bson.M{"$each": addSkylinks}},
 		}
 		opts := options.UpdateOptions{
 			Upsert: &False,

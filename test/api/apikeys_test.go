@@ -135,7 +135,7 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 }
 
-// TestPublicAPIKeyFlow validates the creation, listing, and deletion of public
+// testPublicAPIKeysFlow validates the creation, listing, and deletion of public
 // API keys.
 func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())

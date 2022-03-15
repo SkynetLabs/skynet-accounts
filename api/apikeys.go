@@ -63,24 +63,32 @@ func (akp APIKeyPOST) Validate() error {
 	return nil
 }
 
-// FromAPIKey populates the struct's fields from the given API key.
-func (rwk *APIKeyResponse) FromAPIKey(ak database.APIKeyRecord) {
-	rwk.ID = ak.ID
-	rwk.UserID = ak.UserID
-	rwk.Public = ak.Public
-	rwk.Key = ak.Key
-	rwk.Skylinks = ak.Skylinks
-	rwk.CreatedAt = ak.CreatedAt
+// APIKeyResponseFromAPIKey creates a new APIKeyResponse from the given API key.
+func APIKeyResponseFromAPIKey(ak database.APIKeyRecord) *APIKeyResponse {
+	return &APIKeyResponse{
+		ID:        ak.ID,
+		UserID:    ak.UserID,
+		Public:    ak.Public,
+		Key:       ak.Key,
+		Skylinks:  ak.Skylinks,
+		CreatedAt: ak.CreatedAt,
+	}
 }
 
-// FromAPIKey populates the struct's fields from the given API key.
-func (rwk *APIKeyResponseWithKey) FromAPIKey(ak database.APIKeyRecord) {
-	rwk.ID = ak.ID
-	rwk.UserID = ak.UserID
-	rwk.Public = ak.Public
-	rwk.Key = ak.Key
-	rwk.Skylinks = ak.Skylinks
-	rwk.CreatedAt = ak.CreatedAt
+// APIKeyResponseWithKeyFromAPIKey creates a new APIKeyResponseWithKey from the
+// given API key.
+func APIKeyResponseWithKeyFromAPIKey(ak database.APIKeyRecord) *APIKeyResponseWithKey {
+	return &APIKeyResponseWithKey{
+		APIKeyResponse: APIKeyResponse{
+			ID:        ak.ID,
+			UserID:    ak.UserID,
+			Public:    ak.Public,
+			Key:       ak.Key,
+			Skylinks:  ak.Skylinks,
+			CreatedAt: ak.CreatedAt,
+		},
+		Key: ak.Key,
+	}
 }
 
 // userAPIKeyPOST creates a new API key for the user.
@@ -105,9 +113,7 @@ func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	var resp APIKeyResponseWithKey
-	resp.FromAPIKey(*ak)
-	api.WriteJSON(w, resp)
+	api.WriteJSON(w, APIKeyResponseWithKeyFromAPIKey(*ak))
 }
 
 // userAPIKeyGET returns a single API key.
@@ -127,9 +133,7 @@ func (api *API) userAPIKeyGET(u *database.User, w http.ResponseWriter, req *http
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	var resp APIKeyResponse
-	resp.FromAPIKey(ak)
-	api.WriteJSON(w, resp)
+	api.WriteJSON(w, APIKeyResponseFromAPIKey(ak))
 }
 
 // userAPIKeyLIST lists all API keys associated with the user.
@@ -139,11 +143,9 @@ func (api *API) userAPIKeyLIST(u *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	resp := make([]APIKeyResponse, 0, len(aks))
+	resp := make([]*APIKeyResponse, 0, len(aks))
 	for _, ak := range aks {
-		var r APIKeyResponse
-		r.FromAPIKey(ak)
-		resp = append(resp, r)
+		resp = append(resp, APIKeyResponseFromAPIKey(ak))
 	}
 	api.WriteJSON(w, resp)
 }

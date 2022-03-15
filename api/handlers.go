@@ -484,7 +484,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	// Validate the skylink.
 	skylink := ps.ByName("skylink")
 	if !database.ValidSkylinkHash(skylink) {
-		api.staticLogger.Tracef("Invalid skylink: %s", skylink)
+		api.staticLogger.Tracef("Invalid skylink: '%s'", skylink)
 		api.WriteJSON(w, respAnon)
 		return
 	}
