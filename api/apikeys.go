@@ -46,17 +46,21 @@ type (
 	}
 )
 
-// Valid checks if the request and its parts are valid.
-func (akp APIKeyPOST) Valid() bool {
+// Validate checks if the request and its parts are valid.
+func (akp APIKeyPOST) Validate() error {
 	if !akp.Public && len(akp.Skylinks) > 0 {
-		return false
+		return errors.New("public API keys cannot refer to skylinlks")
 	}
+	errs := make([]error, 0)
 	for _, s := range akp.Skylinks {
 		if !database.ValidSkylinkHash(s) {
-			return false
+			errs = append(errs, errors.New("invalid skylink:"+s))
 		}
 	}
-	return true
+	if len(errs) > 0 {
+		return errors.Compose(errs...)
+	}
+	return nil
 }
 
 // FromAPIKey populates the struct's fields from the given API key.
@@ -84,6 +88,10 @@ func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *htt
 	var body APIKeyPOST
 	err := parseRequestBodyJSON(req.Body, LimitBodySizeLarge, &body)
 	if err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := body.Validate(); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
