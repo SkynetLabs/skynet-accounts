@@ -53,12 +53,12 @@ const (
 	envServerDomain = "SERVER_DOMAIN"
 	// envStripeAPIKey hold the name of the environment variable for Stripe's
 	// API key. It's only required when integrating with Stripe.
-	envStripeAPIKey = "STRIPE_API_KEY" //#nosec
+	envStripeAPIKey = "STRIPE_API_KEY" // #nosec
 	// envMaxNumAPIKeysPerUser hold the name of the environment variable which
 	// sets the limit for number of API keys a single user can create. If a user
 	// reaches that limit they can always delete some API keys in order to make
 	// space for new ones.
-	envMaxNumAPIKeysPerUser = "ACCOUNTS_MAX_NUM_API_KEYS_PER_USER" //#nosec
+	envMaxNumAPIKeysPerUser = "ACCOUNTS_MAX_NUM_API_KEYS_PER_USER" // #nosec
 )
 
 type (
