@@ -10,8 +10,6 @@ import (
 
 // TestAPIKeys ensures the DB operations with API keys work as expected.
 func TestAPIKeys(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)

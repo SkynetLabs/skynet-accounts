@@ -127,30 +127,29 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to connect to DB")
 	}
-	database := c.Database(dbName)
+	db := c.Database(dbName)
 	if logger == nil {
 		logger = &logrus.Logger{}
 	}
-	err = ensureDBSchema(ctx, database, Schema, logger)
+	err = ensureDBSchema(ctx, db, Schema, logger)
 	if err != nil {
 		return nil, err
 	}
-	db := &DB{
-		staticDB:                     database,
-		staticUsers:                  database.Collection(collUsers),
-		staticSkylinks:               database.Collection(collSkylinks),
-		staticUploads:                database.Collection(collUploads),
-		staticDownloads:              database.Collection(collDownloads),
-		staticRegistryReads:          database.Collection(collRegistryReads),
-		staticRegistryWrites:         database.Collection(collRegistryWrites),
-		staticEmails:                 database.Collection(collEmails),
-		staticChallenges:             database.Collection(collChallenges),
-		staticUnconfirmedUserUpdates: database.Collection(collUnconfirmedUserUpdates),
-		staticConfiguration:          database.Collection(collConfiguration),
-		staticAPIKeys:                database.Collection(collAPIKeys),
+	return &DB{
+		staticDB:                     db,
+		staticUsers:                  db.Collection(collUsers),
+		staticSkylinks:               db.Collection(collSkylinks),
+		staticUploads:                db.Collection(collUploads),
+		staticDownloads:              db.Collection(collDownloads),
+		staticRegistryReads:          db.Collection(collRegistryReads),
+		staticRegistryWrites:         db.Collection(collRegistryWrites),
+		staticEmails:                 db.Collection(collEmails),
+		staticChallenges:             db.Collection(collChallenges),
+		staticUnconfirmedUserUpdates: db.Collection(collUnconfirmedUserUpdates),
+		staticConfiguration:          db.Collection(collConfiguration),
+		staticAPIKeys:                db.Collection(collAPIKeys),
 		staticLogger:                 logger,
-	}
-	return db, nil
+	}, nil
 }
 
 // Disconnect closes the connection to the database in an orderly fashion.

@@ -14,8 +14,6 @@ import (
 // TestUploadsByUser ensures UploadsByUser returns the correct uploads,
 // in the correct order, with the correct sized and so on.
 func TestUploadsByUser(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
