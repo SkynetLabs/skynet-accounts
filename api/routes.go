@@ -16,7 +16,7 @@ import (
 var (
 	// APIKeyHeader holds the name of the header we use for API keys. This
 	// header name matches the established standard used by Swagger and others.
-	APIKeyHeader = "Skynet-API-Key"
+	APIKeyHeader = "Skynet-API-Key" // #nosec
 	// ErrNoAPIKey is an error returned when we expect an API key but we don't
 	// find one.
 	ErrNoAPIKey = errors.New("no api key found")
@@ -55,6 +55,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.DELETE("/user", api.withAuth(api.userDELETE))
 	api.staticRouter.GET("/user/limits", api.noAuth(api.userLimitsGET))
 	api.staticRouter.GET("/user/stats", api.withAuth(api.userStatsGET))
+	api.staticRouter.DELETE("/user/pubkey/:pubKey", api.WithDBSession(api.withAuth(api.userPubKeyDELETE)))
 	api.staticRouter.GET("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterGET)))
 	api.staticRouter.POST("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterPOST)))
 	api.staticRouter.GET("/user/uploads", api.withAuth(api.userUploadsGET))

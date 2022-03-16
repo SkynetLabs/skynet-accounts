@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -654,6 +655,43 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 		}
 	}
 	api.loginUser(w, u, true)
+}
+
+// userPubKeyDELETE removes a given pubkey from the list of pubkeys associated
+// with this user. It does not require a challenge-response because the used
+// does not need to prove the key is theirs.
+func (api *API) userPubKeyDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	ctx := req.Context()
+	var pk database.PubKey
+	err := pk.LoadString(ps.ByName("pubKey"))
+	if err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if !u.HasKey(pk) {
+		// This pubkey does not belong to this user.
+		api.WriteError(w, errors.New("the given pubkey is not associated with this user"), http.StatusBadRequest)
+		return
+	}
+	// Find the position of the pubkey in the list.
+	keyIdx := -1
+	for i, k := range u.PubKeys {
+		if subtle.ConstantTimeCompare(pk[:], k[:]) == 1 {
+			keyIdx = i
+			break
+		}
+	}
+	if keyIdx == -1 {
+		build.Critical("Reaching this should be impossible. It would indicate a concurrent change of the user struct.")
+	}
+	// Remove the pubkey.
+	u.PubKeys = append(u.PubKeys[:keyIdx], u.PubKeys[keyIdx+1:]...)
+	err = api.staticDB.UserSave(ctx, u)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
 }
 
 // userPubKeyRegisterGET generates an update challenge for the caller.
