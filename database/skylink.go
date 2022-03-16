@@ -65,10 +65,17 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 		opts := options.Update().SetUpsert(true)
 		var ur *mongo.UpdateResult
 		ur, err = db.staticSkylinks.UpdateOne(ctx, filter, upsert, opts)
+		if err != nil {
+			return nil, err
+		}
 		// The UpsertedID might be nil in case the skylink got added to the DB
-		// by another server in between the calls.
-		if err == nil && ur.UpsertedID != nil {
+		// by another server in between the calls. In that case we'll fetch the
+		// skylink record from the DB.
+		if ur.UpsertedID != nil {
 			skylinkRec.ID = ur.UpsertedID.(primitive.ObjectID)
+		} else {
+			sr = db.staticSkylinks.FindOne(ctx, filter)
+			err = sr.Decode(&skylinkRec)
 		}
 	}
 	if err != nil {
