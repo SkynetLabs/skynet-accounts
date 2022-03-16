@@ -1025,58 +1025,7 @@ func (api *API) trackUploadPOST(u *database.User, w http.ResponseWriter, req *ht
 }
 
 // trackDownloadPOST registers a new download in the system.
-func (api *API) trackDownloadPOST(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	err := req.ParseForm()
-	if err != nil {
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
-	downloadedBytes, err := strconv.ParseInt(req.Form.Get("bytes"), 10, 64)
-	if err != nil {
-		downloadedBytes = 0
-		api.staticLogger.Traceln("Failed to parse bytes downloaded:", err)
-	}
-	if downloadedBytes < 0 {
-		api.WriteError(w, errors.New("negative download size"), http.StatusBadRequest)
-		return
-	}
-	// We don't need to track zero-sized downloads. Those are usually additional
-	// control requests made by browsers.
-	if downloadedBytes == 0 {
-		api.WriteSuccess(w)
-		return
-	}
-
-	sl := ps.ByName("skylink")
-	if sl == "" {
-		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
-		return
-	}
-	skylink, err := api.staticDB.Skylink(req.Context(), sl)
-	if errors.Contains(err, database.ErrInvalidSkylink) {
-		api.WriteError(w, err, http.StatusBadRequest)
-		return
-	}
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	if skylink.Size == 0 {
-		// Zero size means that we haven't fetched the skyfile's size yet.
-		// Queue the skylink to have its metadata fetched. We do not specify a user
-		// here because this is not an upload, so nobody's used storage needs to be
-		// adjusted.
-		go func() {
-			api.staticMF.Queue <- metafetcher.Message{
-				SkylinkID: skylink.ID,
-			}
-		}()
-	}
+func (api *API) trackDownloadPOST(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	api.WriteSuccess(w)
 }
 
