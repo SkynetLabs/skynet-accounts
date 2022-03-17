@@ -51,7 +51,7 @@ func (akp APIKeyPOST) Validate() error {
 	if !akp.Public && len(akp.Skylinks) > 0 {
 		return errors.New("public API keys cannot refer to skylinlks")
 	}
-	errs := make([]error, 0)
+	var errs []error
 	for _, s := range akp.Skylinks {
 		if !database.ValidSkylinkHash(s) {
 			errs = append(errs, errors.New("invalid skylink:"+s))
