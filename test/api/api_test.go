@@ -23,8 +23,6 @@ import (
 // TestWithDBSession ensures that database transactions are started, committed,
 // and aborted properly.
 func TestWithDBSession(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -139,8 +137,6 @@ func TestWithDBSession(t *testing.T) {
 
 // TestUserTierCache ensures out tier cache works as expected.
 func TestUserTierCache(t *testing.T) {
-	t.Parallel()
-
 	dbName := test.DBNameForTest(t.Name())
 	at, err := test.NewAccountsTester(dbName)
 	if err != nil {

@@ -81,10 +81,10 @@ func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Missing key '%s'! Set: %+v", ak2.ID.Hex(), aks)
 	}
 
-	// Try to delete the same key again. Expect a Bad Request.
+	// Try to delete the same key again. Expect a 404.
 	status, _ = at.UserAPIKeysDELETE(ak1.ID)
-	if status != http.StatusBadRequest {
-		t.Fatalf("Expected status 400, got %d.", status)
+	if status != http.StatusNotFound {
+		t.Fatalf("Expected status 404, got %d.", status)
 	}
 }
 

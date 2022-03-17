@@ -159,7 +159,7 @@ func (api *API) userAPIKeyDELETE(u *database.User, w http.ResponseWriter, req *h
 	}
 	err = api.staticDB.APIKeyDelete(req.Context(), *u, akID)
 	if err == mongo.ErrNoDocuments {
-		api.WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -183,6 +183,10 @@ func (api *API) userAPIKeyPUT(u *database.User, w http.ResponseWriter, req *http
 		return
 	}
 	err = api.staticDB.APIKeyUpdate(req.Context(), *u, akID, body.Skylinks)
+	if errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -206,6 +210,10 @@ func (api *API) userAPIKeyPATCH(u *database.User, w http.ResponseWriter, req *ht
 		return
 	}
 	err = api.staticDB.APIKeyPatch(req.Context(), *u, akID, body.Add, body.Remove)
+	if errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

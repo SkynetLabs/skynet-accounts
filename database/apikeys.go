@@ -246,7 +246,7 @@ func (db *DB) APIKeyUpdate(ctx context.Context, user User, akID primitive.Object
 	}
 	filter := bson.M{
 		"_id":     akID,
-		"public":  &True, // you can only update public API keys
+		"public":  true,
 		"user_id": user.ID,
 	}
 	update := bson.M{"$set": bson.M{"skylinks": skylinks}}
@@ -258,7 +258,7 @@ func (db *DB) APIKeyUpdate(ctx context.Context, user User, akID primitive.Object
 		return err
 	}
 	if ur.ModifiedCount == 0 {
-		return errors.New("public API key not found, no keys updated")
+		return mongo.ErrNoDocuments
 	}
 	return nil
 }
@@ -293,7 +293,7 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 			return err
 		}
 		if ur.ModifiedCount == 0 {
-			return errors.New("public API key not found, no keys updated")
+			return mongo.ErrNoDocuments
 		}
 	}
 	// Then, remove all skylinks that need to be removed.
