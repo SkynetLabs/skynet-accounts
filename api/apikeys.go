@@ -49,7 +49,7 @@ type (
 // Validate checks if the request and its parts are valid.
 func (akp APIKeyPOST) Validate() error {
 	if !akp.Public && len(akp.Skylinks) > 0 {
-		return errors.New("public API keys cannot refer to skylinlks")
+		return errors.New("public API keys cannot refer to skylinks")
 	}
 	var errs []error
 	for _, s := range akp.Skylinks {
