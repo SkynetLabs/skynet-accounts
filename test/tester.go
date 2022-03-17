@@ -57,6 +57,7 @@ func ExtractCookie(r *http.Response) *http.Cookie {
 func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	ctx := context.Background()
 	logger := logrus.New()
+	logger.Out = ioutil.Discard
 
 	// Initialise the environment.
 	jwt.PortalName = testPortalAddr
@@ -312,8 +313,12 @@ func (at *AccountsTester) TrackRegistryWrite() (int, error) {
 }
 
 // UserLimits performs a `GET /user/limits` request.
-func (at *AccountsTester) UserLimits() (api.UserLimitsGET, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/limits", nil, nil)
+func (at *AccountsTester) UserLimits(unit string) (api.UserLimitsGET, int, error) {
+	queryParams := url.Values{}
+	if unit != "" {
+		queryParams.Set("unit", unit)
+	}
+	r, b, err := at.request(http.MethodGet, "/user/limits", queryParams, nil)
 	if err != nil {
 		return api.UserLimitsGET{}, r.StatusCode, err
 	}
