@@ -8,7 +8,6 @@ import (
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -51,26 +50,14 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 	}
 	// Try to find the skylink in the database.
 	filter := bson.D{{"skylink", skylinkHash}}
-	sr := db.staticSkylinks.FindOne(ctx, filter)
-	err = sr.Decode(&skylinkRec)
-	if errors.Contains(err, mongo.ErrNoDocuments) {
-		// It's not there, upsert it. We use upsert instead of insert in order
-		// to avoid races. And we use an update object instead of just passing
-		// the skylink record to UpdateOne because we want to omit the _id in
-		// case it has a zero value. The struct tags instruct the compiler to
-		// omit it when it's empty but that doesn't cover the case where it's
-		// zero because in that case it's a valid array of ints which happen to
-		// be zeros.
-		upsert := bson.M{"$set": bson.M{"skylink": skylinkHash}}
-		opts := options.Update().SetUpsert(true)
-		var ur *mongo.UpdateResult
-		ur, err = db.staticSkylinks.UpdateOne(ctx, filter, upsert, opts)
-		// The UpsertedID might be nil in case the skylink got added to the DB
-		// by another server in between the calls.
-		if err == nil && ur.UpsertedID != nil {
-			skylinkRec.ID = ur.UpsertedID.(primitive.ObjectID)
-		}
+	upsert := bson.M{"$setOnInsert": bson.M{"skylink": skylinkHash}}
+	after := options.After
+	opts := &options.FindOneAndUpdateOptions{
+		ReturnDocument: &after,
+		Upsert:         &True,
 	}
+	sr := db.staticSkylinks.FindOneAndUpdate(ctx, filter, upsert, opts)
+	err = sr.Decode(&skylinkRec)
 	if err != nil {
 		return nil, err
 	}

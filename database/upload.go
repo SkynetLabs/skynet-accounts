@@ -50,7 +50,7 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 		return nil, errors.New("invalid user")
 	}
 	if skylink.ID.IsZero() {
-		return nil, ErrInvalidSkylink
+		return nil, errors.New("skylink doesn't exist")
 	}
 	up := Upload{
 		UserID:    user.ID,
