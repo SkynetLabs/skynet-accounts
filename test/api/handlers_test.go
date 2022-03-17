@@ -441,7 +441,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	defer at.ClearCredentials()
 
 	// Call /user/limits with a cookie. Expect FreeTier response.
-	tl, _, err := at.UserLimits()
+	tl, _, err := at.UserLimits("byte")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +457,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 
 	// Call /user/limits without a cookie. Expect FreeAnonymous response.
 	at.ClearCredentials()
-	tl, _, err = at.UserLimits()
+	tl, _, err = at.UserLimits("byte")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +506,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// Check the user's limits. We expect the tier to be Free but the limits to
 		// match Anonymous.
-		tl, _, err = at.UserLimits()
+		tl, _, err = at.UserLimits("byte")
 		if err != nil {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}
@@ -523,6 +523,36 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Test the `unit` parameter. The only valid value is `byte`, anything else
+	// is ignored and the results are returned in bits per second.
+	tl, _, err = at.UserLimits("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Request it with an invalid value. Expect it to be ignored.
+	tlBits, _, err := at.UserLimits("not-a-byte")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tlBits.UploadBandwidth != tl.UploadBandwidth || tlBits.DownloadBandwidth != tl.DownloadBandwidth {
+		t.Fatalf("Expected these to be equal. %+v, %+v", tl, tlBits)
+	}
+	tlBytes, _, err := at.UserLimits("byte")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tlBytes.UploadBandwidth*8 != tl.UploadBandwidth || tlBytes.DownloadBandwidth*8 != tl.DownloadBandwidth {
+		t.Fatalf("Invalid values in bytes. Values in bps: %+v, values in Bps: %+v", tl, tlBytes)
+	}
+	// Ensure we're not case-sensitive.
+	tlBytes2, _, err := at.UserLimits("ByTe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tlBytes2.UploadBandwidth != tlBytes.UploadBandwidth || tlBytes2.DownloadBandwidth != tlBytes.DownloadBandwidth {
+		t.Fatalf("Got different values for different capitalizations of 'byte'.\nValues for 'byte': %+v, values for 'ByTe': %+v", tlBytes, tlBytes2)
 	}
 }
 

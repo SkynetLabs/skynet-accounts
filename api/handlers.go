@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
@@ -79,11 +80,13 @@ type (
 		EmailConfirmed bool `json:"emailConfirmed"`
 	}
 	// UserLimitsGET is response of GET /user/limits
+	// The returned speeds might be in bits or bytes per second, depending on
+	// the client's request.
 	UserLimitsGET struct {
 		TierID            int    `json:"tierID"`
 		TierName          string `json:"tierName"`
-		UploadBandwidth   int    `json:"upload"`        // bytes per second
-		DownloadBandwidth int    `json:"download"`      // bytes per second
+		UploadBandwidth   int    `json:"upload"`        // bits or bytes per second
+		DownloadBandwidth int    `json:"download"`      // bits or bytes per second
 		MaxUploadSize     int64  `json:"maxUploadSize"` // the max size of a single upload in bytes
 		MaxNumberUploads  int    `json:"-"`
 		RegistryDelay     int    `json:"registry"` // ms delay
@@ -402,9 +405,13 @@ func (api *API) userGET(u *database.User, w http.ResponseWriter, _ *http.Request
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
 func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// inBytes is a flag indicating that the caller wants all bandwidth limits
+	// to be presented in bytes per second. The default behaviour is to present
+	// them in bits per second.
+	inBytes := strings.EqualFold(req.FormValue("unit"), "byte")
 	// First check for an API key.
 	ak, err := apiKeyFromRequest(req)
-	respAnon := userLimitsGetFromTier(database.TierAnonymous)
+	respAnon := userLimitsGetFromTier(database.TierAnonymous, inBytes)
 	if err == nil {
 		u, err := api.staticDB.UserByAPIKey(req.Context(), ak)
 		if err != nil {
@@ -412,12 +419,12 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			api.WriteJSON(w, respAnon)
 			return
 		}
-		resp := userLimitsGetFromTier(u.Tier)
+		resp := userLimitsGetFromTier(u.Tier, inBytes)
 		// If the quota is exceeded we should keep the user's tier but report
 		// anonymous-level speeds.
 		if u.QuotaExceeded {
 			// Report the speeds for tier anonymous.
-			resp = userLimitsGetFromTier(database.TierAnonymous)
+			resp = userLimitsGetFromTier(database.TierAnonymous, inBytes)
 			// But keep reporting the user's actual tier and it's name.
 			resp.TierID = u.Tier
 			resp.TierName = database.UserLimits[u.Tier].TierName
@@ -455,12 +462,12 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			build.Critical("Failed to fetch user from UserTierCache right after setting it.")
 		}
 	}
-	resp := userLimitsGetFromTier(tier)
+	resp := userLimitsGetFromTier(tier, inBytes)
 	// If the quota is exceeded we should keep the user's tier but report
 	// anonymous-level speeds.
 	if qe {
 		// Report anonymous speeds.
-		resp = userLimitsGetFromTier(database.TierAnonymous)
+		resp = userLimitsGetFromTier(database.TierAnonymous, inBytes)
 		// Keep reporting the user's actual tier and tier name.
 		resp.TierID = tier
 		resp.TierName = database.UserLimits[tier].TierName
@@ -1196,17 +1203,24 @@ func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, objRef interfac
 }
 
 // userLimitsGetFromTier is a helper that lets us succinctly translate
-// from the database DTO to the API DTO.
-func userLimitsGetFromTier(tier int) *UserLimitsGET {
+// from the database DTO to the API DTO. The `inBytes` parameter determines
+// whether the returned speeds will be in Bps or bps.
+func userLimitsGetFromTier(tier int, inBytes bool) *UserLimitsGET {
 	t := database.UserLimits[tier]
-	return &UserLimitsGET{
-		TierID:            tier,
-		TierName:          t.TierName,
-		UploadBandwidth:   t.UploadBandwidth,
-		DownloadBandwidth: t.DownloadBandwidth,
-		MaxUploadSize:     t.MaxUploadSize,
-		MaxNumberUploads:  t.MaxNumberUploads,
-		RegistryDelay:     t.RegistryDelay,
-		Storage:           t.Storage,
+	ul := UserLimitsGET{
+		TierID:           tier,
+		TierName:         t.TierName,
+		MaxUploadSize:    t.MaxUploadSize,
+		MaxNumberUploads: t.MaxNumberUploads,
+		RegistryDelay:    t.RegistryDelay,
+		Storage:          t.Storage,
 	}
+	if inBytes {
+		ul.UploadBandwidth = t.UploadBandwidth
+		ul.DownloadBandwidth = t.DownloadBandwidth
+	} else {
+		ul.UploadBandwidth = t.UploadBandwidth * 8
+		ul.DownloadBandwidth = t.DownloadBandwidth * 8
+	}
+	return &ul
 }
