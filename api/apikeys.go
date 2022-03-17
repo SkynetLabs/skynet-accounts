@@ -54,7 +54,7 @@ func (akp APIKeyPOST) Validate() error {
 	var errs []error
 	for _, s := range akp.Skylinks {
 		if !database.ValidSkylinkHash(s) {
-			errs = append(errs, errors.New("invalid skylink:"+s))
+			errs = append(errs, errors.New("invalid skylink: "+s))
 		}
 	}
 	if len(errs) > 0 {
