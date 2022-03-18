@@ -1,14 +1,11 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
-	jwt2 "github.com/lestrrat-go/jwx/jwt"
-
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -54,6 +51,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.PUT("/user", api.WithDBSession(api.withAuth(api.userPUT)))
 	api.staticRouter.DELETE("/user", api.withAuth(api.userDELETE))
 	api.staticRouter.GET("/user/limits", api.noAuth(api.userLimitsGET))
+	api.staticRouter.GET("/user/limits/:skylink", api.noAuth(api.userLimitsSkylinkGET))
 	api.staticRouter.GET("/user/stats", api.withAuth(api.userStatsGET))
 	api.staticRouter.GET("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterGET)))
 	api.staticRouter.POST("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterPOST)))
@@ -63,7 +61,10 @@ func (api *API) buildHTTPRoutes() {
 
 	// Endpoints for user API keys.
 	api.staticRouter.POST("/user/apikeys", api.WithDBSession(api.withAuth(api.userAPIKeyPOST)))
-	api.staticRouter.GET("/user/apikeys", api.withAuth(api.userAPIKeyGET))
+	api.staticRouter.GET("/user/apikeys", api.withAuth(api.userAPIKeyLIST))
+	api.staticRouter.GET("/user/apikeys/:id", api.withAuth(api.userAPIKeyGET))
+	api.staticRouter.PUT("/user/apikeys/:id", api.WithDBSession(api.withAuth(api.userAPIKeyPUT)))
+	api.staticRouter.PATCH("/user/apikeys/:id", api.WithDBSession(api.withAuth(api.userAPIKeyPATCH)))
 	api.staticRouter.DELETE("/user/apikeys/:id", api.withAuth(api.userAPIKeyDELETE))
 
 	// Endpoints for email communication with the user.
@@ -91,43 +92,22 @@ func (api *API) noAuth(h HandlerWithUser) httprouter.Handle {
 func (api *API) withAuth(h HandlerWithUser) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.logRequest(req)
-		var u *database.User
-		var token jwt2.Token
-		// Check for an API key. We only return an error if an invalid API key
-		// is provided.
-		ak, err := apiKeyFromRequest(req)
-		if err == nil {
-			// We have an API key. Let's generate a token based on it.
-			token, err = api.tokenFromAPIKey(req.Context(), ak)
-			u, err = api.staticDB.UserByAPIKey(req.Context(), ak)
+		// Check for an API key.
+		u, token, err := api.userAndTokenByAPIKey(req)
+		// If there is an unexpected error, that is a 500.
+		if err != nil && !errors.Contains(err, ErrNoAPIKey) && !errors.Contains(err, database.ErrInvalidAPIKey) && !errors.Contains(err, database.ErrUserNotFound) {
+			api.WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
+		if err != nil && (errors.Contains(err, database.ErrInvalidAPIKey) || errors.Contains(err, database.ErrUserNotFound)) {
+			api.WriteError(w, errors.AddContext(err, "failed to fetch user by API key"), http.StatusUnauthorized)
+			return
+		}
+		// If there is no API key check for a token.
+		if errors.Contains(err, ErrNoAPIKey) {
+			u, token, err = api.userAndTokenByRequestToken(req)
 			if err != nil {
-				api.staticLogger.Debugf("Error fetching user for API key %s. Error: %s", ak, err)
-				api.WriteError(w, errors.AddContext(err, "failed to fetch user by API key"), http.StatusUnauthorized)
-				return
-			}
-		} else {
-			// No API key. Let's check for a token in the request.
-			token, err = tokenFromRequest(req)
-			if err != nil {
-				api.staticLogger.Debugln("Error fetching token from request:", err)
 				api.WriteError(w, err, http.StatusUnauthorized)
-				return
-			}
-			sub, _, _, err := jwt.TokenFields(token)
-			if err != nil {
-				api.staticLogger.Debugln("Error decoding token from request:", err)
-				api.WriteError(w, err, http.StatusUnauthorized)
-				return
-			}
-			u, err = api.staticDB.UserBySub(req.Context(), sub)
-			if errors.Contains(err, database.ErrUserNotFound) {
-				api.staticLogger.Debugln("User that created this token no longer exists:", err)
-				api.WriteError(w, err, http.StatusUnauthorized)
-				return
-			}
-			if err != nil {
-				api.staticLogger.Debugln("Error fetching user by token from request:", err)
-				api.WriteError(w, err, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -140,66 +120,9 @@ func (api *API) withAuth(h HandlerWithUser) httprouter.Handle {
 // logRequest logs information about the current request.
 func (api *API) logRequest(r *http.Request) {
 	hasAuth := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer")
+	hasAPIKey := r.Header.Get(APIKeyHeader) != "" || r.FormValue("apiKey") != ""
 	c, err := r.Cookie(CookieName)
 	hasCookie := err == nil && c != nil
-	api.staticLogger.Tracef("Processing request: %v %v, Auth: %v, Skynet Cookie: %v, Referer: %v, Host: %v, RemoreAddr: %v", r.Method, r.URL, hasAuth, hasCookie, r.Referer(), r.Host, r.RemoteAddr)
-}
-
-// tokenFromAPIKey returns a token, generated for the owner of the given API key.
-func (api *API) tokenFromAPIKey(ctx context.Context, ak database.APIKey) (jwt2.Token, error) {
-	u, err := api.staticDB.UserByAPIKey(ctx, ak)
-	if err != nil {
-		return nil, err
-	}
-	tk, err := jwt.TokenForUser(u.Email, u.Sub)
-	return tk, err
-}
-
-// apiKeyFromRequest extracts the API key from the request and returns it.
-// It first checks the headers and then the query.
-func apiKeyFromRequest(r *http.Request) (database.APIKey, error) {
-	// Check the headers for an API key.
-	akStr := r.Header.Get(APIKeyHeader)
-	// If there is no API key in the headers, try the query.
-	if akStr == "" {
-		akStr = r.FormValue("apiKey")
-	}
-	if akStr == "" {
-		return "", ErrNoAPIKey
-	}
-	ak, err := database.NewAPIKeyFromString(akStr)
-	if err != nil {
-		return "", err
-	}
-	return *ak, nil
-}
-
-// tokenFromRequest extracts the JWT token from the request and returns it.
-// It first checks the request headers and then the cookies.
-// The token is validated before being returned.
-func tokenFromRequest(r *http.Request) (jwt2.Token, error) {
-	var tokenStr string
-	// Check the headers for a token.
-	parts := strings.Split(r.Header.Get("Authorization"), "Bearer")
-	if len(parts) == 2 {
-		tokenStr = strings.TrimSpace(parts[1])
-	} else {
-		// Check the cookie for a token.
-		cookie, err := r.Cookie(CookieName)
-		if errors.Contains(err, http.ErrNoCookie) {
-			return nil, ErrNoToken
-		}
-		if err != nil {
-			return nil, errors.AddContext(err, "cookie exists but it's not valid")
-		}
-		err = secureCookie.Decode(CookieName, cookie.Value, &tokenStr)
-		if err != nil {
-			return nil, errors.AddContext(err, "failed to decode token")
-		}
-	}
-	token, err := jwt.ValidateToken(tokenStr)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to validate token")
-	}
-	return token, nil
+	api.staticLogger.Tracef("Processing request: %v %v, Auth: %v, API Key: %v, Cookie: %v, Referer: %v, Host: %v, RemoreAddr: %v",
+		r.Method, r.URL, hasAuth, hasAPIKey, hasCookie, r.Referer(), r.Host, r.RemoteAddr)
 }

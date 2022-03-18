@@ -140,7 +140,7 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 		config.ServerLockID = config.PortalName
 		logger.Warningf(`Environment variable %s is missing! This server's identity`+
 			` is set to the default '%s' value. That is OK only if this server is running on its own`+
-			` and it's not sharing its DB with other nodes.\n`, envServerDomain, config.ServerLockID)
+			` and it's not sharing its DB with other nodes.`, envServerDomain, config.ServerLockID)
 	}
 
 	if sk := os.Getenv(envStripeAPIKey); sk != "" {

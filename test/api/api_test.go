@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -21,32 +20,9 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-// TestResponseWriter is a testing ResponseWriter implementation.
-type TestResponseWriter struct {
-	Buffer bytes.Buffer
-	Status int
-}
-
-// Header implementation.
-func (w TestResponseWriter) Header() http.Header {
-	return http.Header{}
-}
-
-// Write implementation.
-func (w TestResponseWriter) Write(b []byte) (int, error) {
-	return w.Buffer.Write(b)
-}
-
-// WriteHeader implementation.
-func (w TestResponseWriter) WriteHeader(statusCode int) {
-	w.Status = statusCode
-}
-
 // TestWithDBSession ensures that database transactions are started, committed,
 // and aborted properly.
 func TestWithDBSession(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -125,7 +101,7 @@ func TestWithDBSession(t *testing.T) {
 		testAPI.WriteError(w, errors.New("error"), http.StatusInternalServerError)
 	}
 
-	var rw TestResponseWriter
+	var rw test.ResponseWriter
 	var ps httprouter.Params
 	req := (&http.Request{}).WithContext(ctx)
 	// Call the success handler.
@@ -161,8 +137,6 @@ func TestWithDBSession(t *testing.T) {
 
 // TestUserTierCache ensures out tier cache works as expected.
 func TestUserTierCache(t *testing.T) {
-	t.Parallel()
-
 	dbName := test.DBNameForTest(t.Name())
 	at, err := test.NewAccountsTester(dbName)
 	if err != nil {
@@ -201,7 +175,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	at.SetCookie(test.ExtractCookie(r))
 	// Get the user's limit.
-	ul, _, err := at.UserLimits("byte")
+	ul, _, err := at.UserLimits("byte", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +210,7 @@ func TestUserTierCache(t *testing.T) {
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// We expect to get tier with name and id matching TierPremium20 but with
 		// speeds matching TierAnonymous.
-		ul, _, err = at.UserLimits("byte")
+		ul, _, err = at.UserLimits("byte", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -262,7 +236,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// We expect to get TierPremium20.
-		ul, _, err = at.UserLimits("byte")
+		ul, _, err = at.UserLimits("byte", nil)
 		if err != nil {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}

@@ -21,8 +21,8 @@ func TestUserTierCache(t *testing.T) {
 	if ok || tier != database.TierAnonymous {
 		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", database.TierAnonymous, false, tier, ok)
 	}
-	// Set the user in the cache.
-	cache.Set(u)
+	// Set the use in the cache.
+	cache.Set(u.Sub, u)
 	// Check again.
 	tier, qe, ok := cache.Get(u.Sub)
 	if !ok || tier != u.Tier {
@@ -32,7 +32,7 @@ func TestUserTierCache(t *testing.T) {
 		t.Fatal("Quota exceeded flag doesn't match.")
 	}
 	u.QuotaExceeded = true
-	cache.Set(u)
+	cache.Set(u.Sub, u)
 	tier, qe, ok = cache.Get(u.Sub)
 	if !ok || tier != u.Tier {
 		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", u.Tier, true, tier, ok)
@@ -53,10 +53,31 @@ func TestUserTierCache(t *testing.T) {
 	timeToMonthRollover := 30 * time.Minute
 	u.SubscribedUntil = time.Now().UTC().Add(timeToMonthRollover)
 	// Update the cache.
-	cache.Set(u)
+	cache.Set(u.Sub, u)
 	// Expect the cache entry's ExpiresAt to be after 30 minutes.
 	timeIn30 := time.Now().UTC().Add(time.Hour - timeToMonthRollover)
 	if ce.ExpiresAt.After(timeIn30) && ce.ExpiresAt.Before(timeIn30.Add(time.Second)) {
 		t.Fatalf("Expected ExpiresAt to be within 1 second of %s, but it was %s (off by %d ns)", timeIn30.String(), ce.ExpiresAt.String(), (time.Hour - timeIn30.Sub(ce.ExpiresAt)).Nanoseconds())
+	}
+
+	// Create a new API key.
+	ak := database.NewAPIKey()
+	if !ak.IsValid() {
+		t.Fatal("Invalid API key.")
+	}
+	// Try to get a value from the cache. Expect this to fail.
+	_, _, ok = cache.Get(string(ak))
+	if ok {
+		t.Fatal("Did not expect to get a cache entry!")
+	}
+	// Update the cache with a custom key.
+	cache.Set(string(ak), u)
+	// Fetch the data for the custom key.
+	tier, _, ok = cache.Get(string(ak))
+	if !ok {
+		t.Fatal("Expected the entry to exist.")
+	}
+	if tier != u.Tier {
+		t.Fatalf("Expected tier %+v, got %+v", u.Tier, tier)
 	}
 }

@@ -69,7 +69,7 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 // number of such uploads.
 func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]UploadResponse, int, error) {
 	if skylink.ID.IsZero() {
-		return nil, 0, errors.New("invalid skylink")
+		return nil, 0, ErrInvalidSkylink
 	}
 	if err := validateOffsetPageSize(offset, pageSize); err != nil {
 		return nil, 0, err
@@ -85,7 +85,7 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pag
 // the number of unpinned uploads.
 func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int64, error) {
 	if skylink.ID.IsZero() {
-		return 0, errors.New("invalid skylink")
+		return 0, ErrInvalidSkylink
 	}
 	if user.ID.IsZero() {
 		return 0, errors.New("invalid user")

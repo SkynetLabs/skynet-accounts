@@ -28,6 +28,9 @@ const (
 	// LimitBodySizeSmall defines a size limit for requests that we don't expect
 	// to contain a lot of data.
 	LimitBodySizeSmall = 4 * skynet.KiB
+	// LimitBodySizeLarge defines a size limit for requests that we expect to
+	// contain a lot of data.
+	LimitBodySizeLarge = 4 * skynet.MiB
 )
 
 type (
@@ -409,29 +412,42 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	// to be presented in bytes per second. The default behaviour is to present
 	// them in bits per second.
 	inBytes := strings.EqualFold(req.FormValue("unit"), "byte")
+	respAnon := userLimitsGetFromTier(database.TierAnonymous, false, inBytes)
 	// First check for an API key.
 	ak, err := apiKeyFromRequest(req)
-	respAnon := userLimitsGetFromTier(database.TierAnonymous, inBytes)
 	if err == nil {
-		u, err := api.staticDB.UserByAPIKey(req.Context(), ak)
+		// Check the cache before going any further.
+		tier, qe, ok := api.staticUserTierCache.Get(ak.String())
+		if ok {
+			api.staticLogger.Traceln("Fetching user limits from cache by API key.")
+			api.WriteJSON(w, userLimitsGetFromTier(tier, qe, inBytes))
+			return
+		}
+		// Get the API key.
+		akr, err := api.staticDB.APIKeyByKey(req.Context(), ak.String())
+		if err != nil {
+			api.staticLogger.Trace("API key doesn't exist in the database.")
+			api.WriteJSON(w, respAnon)
+			return
+		}
+		if akr.Public {
+			api.staticLogger.Trace("API key is public, cannot be used for general requests")
+			api.WriteJSON(w, respAnon)
+			return
+		}
+		// Get the owner of this API key from the database.
+		u, err := api.staticDB.UserByID(req.Context(), akr.UserID)
 		if err != nil {
 			api.staticLogger.Traceln("Error while fetching user by API key:", err)
 			api.WriteJSON(w, respAnon)
 			return
 		}
-		resp := userLimitsGetFromTier(u.Tier, inBytes)
-		// If the quota is exceeded we should keep the user's tier but report
-		// anonymous-level speeds.
-		if u.QuotaExceeded {
-			// Report the speeds for tier anonymous.
-			resp = userLimitsGetFromTier(database.TierAnonymous, inBytes)
-			// But keep reporting the user's actual tier and it's name.
-			resp.TierID = u.Tier
-			resp.TierName = database.UserLimits[u.Tier].TierName
-		}
-		api.WriteJSON(w, resp)
+		// Cache the user under the API key they used.
+		api.staticUserTierCache.Set(ak.String(), u)
+		api.WriteJSON(w, userLimitsGetFromTier(u.Tier, u.QuotaExceeded, inBytes))
 		return
 	}
+	// Next check for a token.
 	token, err := tokenFromRequest(req)
 	if err != nil {
 		api.WriteJSON(w, respAnon)
@@ -454,25 +470,77 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			api.WriteJSON(w, respAnon)
 			return
 		}
-		api.staticUserTierCache.Set(u)
+		api.staticUserTierCache.Set(u.Sub, u)
 		// Populate the tier and qe values, while simultaneously making sure
 		// that we can read the record from the cache.
-		tier, qe, ok = api.staticUserTierCache.Get(sub)
+		tier, qe, ok = api.staticUserTierCache.Get(u.Sub)
 		if !ok {
 			build.Critical("Failed to fetch user from UserTierCache right after setting it.")
 		}
 	}
-	resp := userLimitsGetFromTier(tier, inBytes)
-	// If the quota is exceeded we should keep the user's tier but report
-	// anonymous-level speeds.
-	if qe {
-		// Report anonymous speeds.
-		resp = userLimitsGetFromTier(database.TierAnonymous, inBytes)
-		// Keep reporting the user's actual tier and tier name.
-		resp.TierID = tier
-		resp.TierName = database.UserLimits[tier].TierName
+	api.WriteJSON(w, userLimitsGetFromTier(tier, qe, inBytes))
+}
+
+// userLimitsSkylinkGET returns the speed limits which apply to a GET call to
+// the given skylink. This method exists to accommodate public API keys.
+//
+// NOTE: This handler needs to use the noAuth middleware in order to be able to
+// optimise its calls to the DB and the use of caching.
+func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	// inBytes is a flag indicating that the caller wants all bandwidth limits
+	// to be presented in bytes per second. The default behaviour is to present
+	// them in bits per second.
+	inBytes := strings.EqualFold(req.FormValue("unit"), "byte")
+	respAnon := userLimitsGetFromTier(database.TierAnonymous, false, inBytes)
+	// Validate the skylink.
+	skylink := ps.ByName("skylink")
+	if !database.ValidSkylinkHash(skylink) {
+		api.staticLogger.Tracef("Invalid skylink: '%s'", skylink)
+		api.WriteJSON(w, respAnon)
+		return
 	}
-	api.WriteJSON(w, resp)
+	// Try to fetch an API attached to the request.
+	ak, err := apiKeyFromRequest(req)
+	if errors.Contains(err, ErrNoAPIKey) {
+		// We failed to fetch an API key from this request but the request might
+		// be authenticated in another way, so we'll defer to userLimitsGET.
+		api.userLimitsGET(u, w, req, ps)
+		return
+	}
+	if err != nil {
+		api.staticLogger.Debugf("Error while processing API key: %s", err)
+		api.WriteJSON(w, respAnon)
+		return
+	}
+	// Check the cache before hitting the database.
+	tier, qe, ok := api.staticUserTierCache.Get(ak.String() + skylink)
+	if ok {
+		api.staticLogger.Traceln("Fetching user limits from cache by API key.")
+		api.WriteJSON(w, userLimitsGetFromTier(tier, qe, inBytes))
+		return
+	}
+	// Get the API key.
+	akr, err := api.staticDB.APIKeyByKey(req.Context(), ak.String())
+	if err != nil {
+		api.staticLogger.Trace("API key doesn't exist in the database.")
+		api.WriteJSON(w, respAnon)
+		return
+	}
+	if !akr.CoversSkylink(skylink) {
+		api.staticLogger.Trace("API key doesn't cover this skylink.")
+		api.WriteJSON(w, respAnon)
+		return
+	}
+	// Get the owner of this API key from the database.
+	user, err := api.staticDB.UserByID(req.Context(), akr.UserID)
+	if err != nil {
+		api.staticLogger.Tracef("Failed to get user for user ID: %v", err)
+		api.WriteJSON(w, respAnon)
+		return
+	}
+	// Store the user in the cache with a custom key.
+	api.staticUserTierCache.Set(ak.String()+skylink, user)
+	api.WriteJSON(w, userLimitsGetFromTier(user.Tier, user.QuotaExceeded, inBytes))
 }
 
 // userStatsGET returns statistics about an existing user.
@@ -1111,7 +1179,7 @@ func (api *API) trackRegistryWritePOST(u *database.User, w http.ResponseWriter, 
 func (api *API) userUploadsDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sl := ps.ByName("skylink")
 	if !database.ValidSkylinkHash(sl) {
-		api.WriteError(w, errors.New("invalid skylink"), http.StatusBadRequest)
+		api.WriteError(w, database.ErrInvalidSkylink, http.StatusBadRequest)
 		return
 	}
 	skylink, err := api.staticDB.Skylink(req.Context(), sl)
@@ -1153,7 +1221,7 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 		if err != nil {
 			api.staticLogger.Warnf("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
-		api.staticUserTierCache.Set(u)
+		api.staticUserTierCache.Set(u.Sub, u)
 	}
 }
 
@@ -1196,31 +1264,41 @@ func fetchPageSize(form url.Values) (int, error) {
 }
 
 // parseRequestBodyJSON reads a limited portion of the body and decodes it into
-// the given obj. The purpose of this is to prevent DoS attacks that rely on
-// excessively large request bodies.
-func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, objRef interface{}) error {
-	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&objRef)
+// the given struct v. The purpose of this is to prevent DoS attacks that rely
+// on excessively large request bodies.
+func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, v interface{}) error {
+	return json.NewDecoder(io.LimitReader(body, maxBodySize)).Decode(&v)
 }
 
 // userLimitsGetFromTier is a helper that lets us succinctly translate
 // from the database DTO to the API DTO. The `inBytes` parameter determines
 // whether the returned speeds will be in Bps or bps.
-func userLimitsGetFromTier(tier int, inBytes bool) *UserLimitsGET {
-	t := database.UserLimits[tier]
-	ul := UserLimitsGET{
-		TierID:           tier,
-		TierName:         t.TierName,
-		MaxUploadSize:    t.MaxUploadSize,
-		MaxNumberUploads: t.MaxNumberUploads,
-		RegistryDelay:    t.RegistryDelay,
-		Storage:          t.Storage,
+func userLimitsGetFromTier(tierID int, quotaExceeded, inBytes bool) *UserLimitsGET {
+	t, ok := database.UserLimits[tierID]
+	if !ok {
+		build.Critical("userLimitsGetFromTier was called with non-existent tierID: " + strconv.Itoa(tierID))
+		t = database.UserLimits[database.TierAnonymous]
 	}
+	limitsTier := t
+	if quotaExceeded {
+		limitsTier = database.UserLimits[database.TierAnonymous]
+	}
+	// If we need to return the result in bits per second, we multiply by 8,
+	// otherwise, we multiply by 1.
+	bpsMul := 8
 	if inBytes {
-		ul.UploadBandwidth = t.UploadBandwidth
-		ul.DownloadBandwidth = t.DownloadBandwidth
-	} else {
-		ul.UploadBandwidth = t.UploadBandwidth * 8
-		ul.DownloadBandwidth = t.DownloadBandwidth * 8
+		bpsMul = 1
 	}
-	return &ul
+	return &UserLimitsGET{
+		TierID:   tierID,
+		TierName: t.TierName,
+		Storage:  t.Storage,
+		// If the user exceeds their quota, there will be brought down to
+		// anonymous levels.
+		UploadBandwidth:   limitsTier.UploadBandwidth * bpsMul,
+		DownloadBandwidth: limitsTier.DownloadBandwidth * bpsMul,
+		MaxUploadSize:     limitsTier.MaxUploadSize,
+		MaxNumberUploads:  limitsTier.MaxNumberUploads,
+		RegistryDelay:     limitsTier.RegistryDelay,
+	}
 }
