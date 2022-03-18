@@ -69,8 +69,10 @@ func TestHandlers(t *testing.T) {
 		{name: "StandardUserFlow", test: testUserFlow},
 		{name: "Challenge-Response/Registration", test: testRegistration},
 		{name: "Challenge-Response/Login", test: testLogin},
-		{name: "APIKeysFlow", test: testAPIKeysFlow},
-		{name: "APIKeysUsage", test: testAPIKeysUsage},
+		{name: "PrivateAPIKeysFlow", test: testPrivateAPIKeysFlow},
+		{name: "PrivateAPIKeysUsage", test: testPrivateAPIKeysUsage},
+		{name: "PublicAPIKeysFlow", test: testPublicAPIKeysFlow},
+		{name: "PublicAPIKeysUsage", test: testPublicAPIKeysUsage},
 	}
 
 	// Run subtests
@@ -83,16 +85,9 @@ func TestHandlers(t *testing.T) {
 
 // testHandlerHealthGET tests the /health handler.
 func testHandlerHealthGET(t *testing.T, at *test.AccountsTester) {
-	_, b, err := at.Get("/health", nil)
+	status, _, err := at.HealthGet()
 	if err != nil {
 		t.Fatal(err)
-	}
-	status := struct {
-		DBAlive bool `json:"dbAlive"`
-	}{}
-	err = json.Unmarshal(b, &status)
-	if err != nil {
-		t.Fatal("Failed to unmarshal service's response: ", err)
 	}
 	// DBAlive should never be false because if we couldn't reach the DB, we
 	// wouldn't have made it this far in the test.
@@ -441,8 +436,14 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	at.SetCookie(c)
 	defer at.ClearCredentials()
 
+	// Create an API key for this user.
+	akr, _, err := at.UserAPIKeysPOST(api.APIKeyPOST{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Call /user/limits with a cookie. Expect FreeTier response.
-	tl, _, err := at.UserLimits()
+	tl, _, err := at.UserLimits("byte", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +459,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 
 	// Call /user/limits without a cookie. Expect FreeAnonymous response.
 	at.ClearCredentials()
-	tl, _, err = at.UserLimits()
+	tl, _, err = at.UserLimits("byte", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,6 +471,21 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 	if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
 		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
+	}
+
+	// Call /user/limits with an API key. Expect TierFree response.
+	tl, _, err = at.UserLimits("byte", map[string]string{api.APIKeyHeader: string(akr.Key)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tl.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierFree].TierName, tl.TierName)
+	}
+	if tl.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
+	}
+	if tl.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
+		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierFree].DownloadBandwidth, tl.DownloadBandwidth)
 	}
 
 	// Create a new user which we'll use to test the quota limits. We can't use
@@ -507,7 +523,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// Check the user's limits. We expect the tier to be Free but the limits to
 		// match Anonymous.
-		tl, _, err = at.UserLimits()
+		tl, _, err = at.UserLimits("byte", nil)
 		if err != nil {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}
@@ -524,6 +540,36 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Test the `unit` parameter. The only valid value is `byte`, anything else
+	// is ignored and the results are returned in bits per second.
+	tl, _, err = at.UserLimits("", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Request it with an invalid value. Expect it to be ignored.
+	tlBits, _, err := at.UserLimits("not-a-byte", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tlBits.UploadBandwidth != tl.UploadBandwidth || tlBits.DownloadBandwidth != tl.DownloadBandwidth {
+		t.Fatalf("Expected these to be equal. %+v, %+v", tl, tlBits)
+	}
+	tlBytes, _, err := at.UserLimits("byte", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tlBytes.UploadBandwidth*8 != tl.UploadBandwidth || tlBytes.DownloadBandwidth*8 != tl.DownloadBandwidth {
+		t.Fatalf("Invalid values in bytes. Values in bps: %+v, values in Bps: %+v", tl, tlBytes)
+	}
+	// Ensure we're not case-sensitive.
+	tlBytes2, _, err := at.UserLimits("ByTe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tlBytes2.UploadBandwidth != tlBytes.UploadBandwidth || tlBytes2.DownloadBandwidth != tlBytes.DownloadBandwidth {
+		t.Fatalf("Got different values for different capitalizations of 'byte'.\nValues for 'byte': %+v, values for 'ByTe': %+v", tlBytes, tlBytes2)
 	}
 }
 

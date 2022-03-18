@@ -47,10 +47,10 @@ func (utc *userTierCache) Get(sub string) (int, bool, bool) {
 	return ce.Tier, ce.QuotaExceeded, true
 }
 
-// Set stores the user's tier in the cache.
-func (utc *userTierCache) Set(u *database.User) {
+// Set stores the user's tier in the cache under the given key.
+func (utc *userTierCache) Set(key string, u *database.User) {
 	utc.mu.Lock()
-	utc.cache[u.Sub] = userTierCacheEntry{
+	utc.cache[key] = userTierCacheEntry{
 		Tier:          u.Tier,
 		QuotaExceeded: u.QuotaExceeded,
 		ExpiresAt:     time.Now().UTC().Add(userTierCacheTTL),

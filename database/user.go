@@ -48,6 +48,8 @@ const (
 var (
 	// True is a helper for when we need to pass a *bool to MongoDB.
 	True = true
+	// False is a helper for when we need to pass a *bool to MongoDB.
+	False = false
 	// UserLimits defines the speed limits for each tier.
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
@@ -157,20 +159,6 @@ type (
 		Storage           int64  `json:"-"`
 	}
 )
-
-// UserByAPIKey returns the user who owns the given API key.
-func (db *DB) UserByAPIKey(ctx context.Context, ak APIKey) (*User, error) {
-	sr := db.staticAPIKeys.FindOne(ctx, bson.M{"key": ak})
-	if sr.Err() != nil {
-		return nil, sr.Err()
-	}
-	var apiKey APIKeyRecord
-	err := sr.Decode(&apiKey)
-	if err != nil {
-		return nil, err
-	}
-	return db.UserByID(ctx, apiKey.UserID)
-}
 
 // UserByEmail returns the user with the given username.
 func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {

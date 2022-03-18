@@ -29,28 +29,28 @@ func TestAPIKeyFromRequest(t *testing.T) {
 	}
 
 	// API key from request form.
-	token := randomAPIKeyString()
-	req.Form.Add("apiKey", token)
-	tk, err := apiKeyFromRequest(req)
+	akStr := randomAPIKeyString()
+	req.Form.Add("apiKey", akStr)
+	ak, err := apiKeyFromRequest(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(tk) != token {
-		t.Fatalf("Expected '%s', got '%s'.", token, tk)
+	if ak.String() != akStr {
+		t.Fatalf("Expected '%s', got '%s'.", akStr, ak)
 	}
 
 	// API key from headers. Expect this to take precedence over request form.
 	token2 := randomAPIKeyString()
 	req.Header.Set(APIKeyHeader, token2)
-	tk, err = apiKeyFromRequest(req)
+	ak, err = apiKeyFromRequest(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(tk) == token {
+	if ak.String() == akStr {
 		t.Fatal("Form token took precedence over headers token.")
 	}
-	if string(tk) != token2 {
-		t.Fatalf("Expected '%s', got '%s'.", token2, tk)
+	if ak.String() != token2 {
+		t.Fatalf("Expected '%s', got '%s'.", token2, ak)
 	}
 }
 
