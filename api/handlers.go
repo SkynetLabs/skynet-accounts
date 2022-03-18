@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
@@ -82,11 +83,13 @@ type (
 		EmailConfirmed bool `json:"emailConfirmed"`
 	}
 	// UserLimitsGET is response of GET /user/limits
+	// The returned speeds might be in bits or bytes per second, depending on
+	// the client's request.
 	UserLimitsGET struct {
 		TierID            int    `json:"tierID"`
 		TierName          string `json:"tierName"`
-		UploadBandwidth   int    `json:"upload"`        // bytes per second
-		DownloadBandwidth int    `json:"download"`      // bytes per second
+		UploadBandwidth   int    `json:"upload"`        // bits or bytes per second
+		DownloadBandwidth int    `json:"download"`      // bits or bytes per second
 		MaxUploadSize     int64  `json:"maxUploadSize"` // the max size of a single upload in bytes
 		MaxNumberUploads  int    `json:"-"`
 		RegistryDelay     int    `json:"registry"` // ms delay
@@ -405,7 +408,11 @@ func (api *API) userGET(u *database.User, w http.ResponseWriter, _ *http.Request
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
 func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	respAnon := userLimitsGetFromTier(database.TierAnonymous, false)
+	// inBytes is a flag indicating that the caller wants all bandwidth limits
+	// to be presented in bytes per second. The default behaviour is to present
+	// them in bits per second.
+	inBytes := strings.EqualFold(req.FormValue("unit"), "byte")
+	respAnon := userLimitsGetFromTier(database.TierAnonymous, false, inBytes)
 	// First check for an API key.
 	ak, err := apiKeyFromRequest(req)
 	if err == nil {
@@ -413,7 +420,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 		tier, qe, ok := api.staticUserTierCache.Get(ak.String())
 		if ok {
 			api.staticLogger.Traceln("Fetching user limits from cache by API key.")
-			api.WriteJSON(w, userLimitsGetFromTier(tier, qe))
+			api.WriteJSON(w, userLimitsGetFromTier(tier, qe, inBytes))
 			return
 		}
 		// Get the API key.
@@ -437,7 +444,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 		}
 		// Cache the user under the API key they used.
 		api.staticUserTierCache.Set(ak.String(), u)
-		api.WriteJSON(w, userLimitsGetFromTier(u.Tier, u.QuotaExceeded))
+		api.WriteJSON(w, userLimitsGetFromTier(u.Tier, u.QuotaExceeded, inBytes))
 		return
 	}
 	// Next check for a token.
@@ -471,7 +478,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 			build.Critical("Failed to fetch user from UserTierCache right after setting it.")
 		}
 	}
-	api.WriteJSON(w, userLimitsGetFromTier(tier, qe))
+	api.WriteJSON(w, userLimitsGetFromTier(tier, qe, inBytes))
 }
 
 // userLimitsSkylinkGET returns the speed limits which apply to a GET call to
@@ -480,7 +487,11 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
 func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	respAnon := userLimitsGetFromTier(database.TierAnonymous, false)
+	// inBytes is a flag indicating that the caller wants all bandwidth limits
+	// to be presented in bytes per second. The default behaviour is to present
+	// them in bits per second.
+	inBytes := strings.EqualFold(req.FormValue("unit"), "byte")
+	respAnon := userLimitsGetFromTier(database.TierAnonymous, false, inBytes)
 	// Validate the skylink.
 	skylink := ps.ByName("skylink")
 	if !database.ValidSkylinkHash(skylink) {
@@ -505,7 +516,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	tier, qe, ok := api.staticUserTierCache.Get(ak.String() + skylink)
 	if ok {
 		api.staticLogger.Traceln("Fetching user limits from cache by API key.")
-		api.WriteJSON(w, userLimitsGetFromTier(tier, qe))
+		api.WriteJSON(w, userLimitsGetFromTier(tier, qe, inBytes))
 		return
 	}
 	// Get the API key.
@@ -529,7 +540,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	}
 	// Store the user in the cache with a custom key.
 	api.staticUserTierCache.Set(ak.String()+skylink, user)
-	api.WriteJSON(w, userLimitsGetFromTier(user.Tier, user.QuotaExceeded))
+	api.WriteJSON(w, userLimitsGetFromTier(user.Tier, user.QuotaExceeded, inBytes))
 }
 
 // userStatsGET returns statistics about an existing user.
@@ -1260,8 +1271,9 @@ func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, v interface{}) 
 }
 
 // userLimitsGetFromTier is a helper that lets us succinctly translate
-// from the database DTO to the API DTO.
-func userLimitsGetFromTier(tierID int, quotaExceeded bool) *UserLimitsGET {
+// from the database DTO to the API DTO. The `inBytes` parameter determines
+// whether the returned speeds will be in Bps or bps.
+func userLimitsGetFromTier(tierID int, quotaExceeded, inBytes bool) *UserLimitsGET {
 	t, ok := database.UserLimits[tierID]
 	if !ok {
 		build.Critical("userLimitsGetFromTier was called with non-existent tierID: " + strconv.Itoa(tierID))
@@ -1271,14 +1283,20 @@ func userLimitsGetFromTier(tierID int, quotaExceeded bool) *UserLimitsGET {
 	if quotaExceeded {
 		limitsTier = database.UserLimits[database.TierAnonymous]
 	}
+	// If we need to return the result in bits per second, we multiply by 8,
+	// otherwise, we multiply by 1.
+	bpsMul := 8
+	if inBytes {
+		bpsMul = 1
+	}
 	return &UserLimitsGET{
 		TierID:   tierID,
 		TierName: t.TierName,
 		Storage:  t.Storage,
 		// If the user exceeds their quota, there will be brought down to
 		// anonymous levels.
-		UploadBandwidth:   limitsTier.UploadBandwidth,
-		DownloadBandwidth: limitsTier.DownloadBandwidth,
+		UploadBandwidth:   limitsTier.UploadBandwidth * bpsMul,
+		DownloadBandwidth: limitsTier.DownloadBandwidth * bpsMul,
 		MaxUploadSize:     limitsTier.MaxUploadSize,
 		MaxNumberUploads:  limitsTier.MaxNumberUploads,
 		RegistryDelay:     limitsTier.RegistryDelay,

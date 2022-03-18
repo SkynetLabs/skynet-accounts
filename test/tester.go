@@ -454,8 +454,12 @@ func (at *AccountsTester) TrackRegistryWrite() (int, error) {
 }
 
 // UserLimits performs a `GET /user/limits` request.
-func (at *AccountsTester) UserLimits(params url.Values, headers map[string]string) (api.UserLimitsGET, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/limits", params, nil, headers)
+func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
+	queryParams := url.Values{}
+	if unit != "" {
+		queryParams.Set("unit", unit)
+	}
+	r, b, err := at.request(http.MethodGet, "/user/limits", queryParams, nil, headers)
 	if err != nil {
 		return api.UserLimitsGET{}, r.StatusCode, err
 	}
@@ -471,11 +475,15 @@ func (at *AccountsTester) UserLimits(params url.Values, headers map[string]strin
 }
 
 // UserLimitsSkylink performs a `GET /user/limits/:skylink` request.
-func (at *AccountsTester) UserLimitsSkylink(sl string, params url.Values, headers map[string]string) (api.UserLimitsGET, int, error) {
+func (at *AccountsTester) UserLimitsSkylink(sl string, unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
+	queryParams := url.Values{}
+	if unit != "" {
+		queryParams.Set("unit", unit)
+	}
 	if !database.ValidSkylinkHash(sl) {
 		return api.UserLimitsGET{}, 0, database.ErrInvalidSkylink
 	}
-	r, b, err := at.request(http.MethodGet, "/user/limits/"+sl, params, nil, headers)
+	r, b, err := at.request(http.MethodGet, "/user/limits/"+sl, queryParams, nil, headers)
 	if err != nil {
 		return api.UserLimitsGET{}, r.StatusCode, err
 	}

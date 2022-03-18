@@ -269,7 +269,7 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Get the user's limits for downloading a skylink covered by the public
 	// API key. Expect to get TierFree values.
-	ul, _, err := at.UserLimitsSkylink(sl.Skylink, nil, nil)
+	ul, _, err := at.UserLimitsSkylink(sl.Skylink, "byte", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Get the user's limits for downloading a skylink that is not covered by
 	// the public API key. Expect to get TierAnonymous values.
-	ul, _, err = at.UserLimitsSkylink(sl2.Skylink, nil, nil)
+	ul, _, err = at.UserLimitsSkylink(sl2.Skylink, "byte", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
