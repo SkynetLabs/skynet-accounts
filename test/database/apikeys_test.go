@@ -24,22 +24,25 @@ func TestAPIKeys(t *testing.T) {
 	sl2 := test.RandomSkylink()
 
 	// Create a private API key.
-	akr1, err := db.APIKeyCreate(ctx, *u, false, nil)
+	akr1, err := db.APIKeyCreate(ctx, *u, "keyname", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if akr1.Name != "keyname" {
+		t.Fatal("Unexpected name.")
+	}
 	// Create a private API key with skylinks. Expect to fail.
-	_, err = db.APIKeyCreate(ctx, *u, false, []string{sl1})
+	_, err = db.APIKeyCreate(ctx, *u, "", false, []string{sl1})
 	if err == nil {
 		t.Fatal("Managed to create a private API key with skylinks.")
 	}
 	// Create a public API key
-	akr2, err := db.APIKeyCreate(ctx, *u, true, []string{sl1})
+	akr2, err := db.APIKeyCreate(ctx, *u, "", true, []string{sl1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Create a public API key without any skylinks.
-	akr3, err := db.APIKeyCreate(ctx, *u, true, nil)
+	akr3, err := db.APIKeyCreate(ctx, *u, "", true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
