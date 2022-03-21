@@ -1,0 +1,236 @@
+openapi: 3.0.0
+servers:
+  - description: Skynet Dev Server
+    url: https://account.siasky.dev/api/
+tags:
+  - name: Login
+    description: Login and logout flows
+    # externalDocs:
+    #   description: Find out more
+    #   url: 'http://swagger.io'
+  - name: User
+    description: User information - limits, statistics, etc.
+  - name: MySky
+    description: Adding, removing, and checking MySky identities attached to current account.
+  - name: API Keys
+    description: API keys, both public and private.
+info:
+  description: Accounts is a service that manages user accounts for a Skynet portal
+  version: "1.0.0"
+  title: Accounts
+  contact:
+    email: devs@skynetlabs.com
+  license:
+    name: MIT
+    url: 'https://opensource.org/licenses/MIT'
+paths:
+  /login:
+    post:
+      summary: creates a user session
+      operationId: login
+      tags:
+        - Login
+      description: |
+        Creates a new user session by identifying the user in one of three ways:
+         - username and password
+         - challenge-response (undocumented)
+         - authorization header (undocumented)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginPOSTCredentials'
+        description: Login credentials.
+      responses:
+        '204':
+          description: login successful
+          headers:
+            Skynet-Token:
+              schema:
+                type: string
+              description: |
+                Unencrypted JWT that can be used for authentication via the 
+                `Authorization: Bearer <JWT>` header.
+            Set-Cookie:
+              schema:
+                type: string
+              description: Sets an encrypted cookie that contains the user's JWT.
+              example: skynet-jwt=abcde12345; Path=/; HttpOnly; Secure
+        '400':
+          description: invalid input
+        '401':
+          description: invalid credentials, invalid token, or failed challenge-response
+        '500':
+          description: internal server error
+  /logout:
+    post:
+      summary: ends a user session
+      operationId: logout
+      tags:
+        - Login
+      description: ends a user session by invalidating the user's cookie
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '204':
+          description: logout successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Sets an encrypted cookie that contains the user's JWT.
+        '500':
+          description: internal server error
+  /user/limits:
+    get:
+      tags:
+        - User
+      summary: user limits
+      operationId: userLimits
+      description: |
+        Returns all current limits imposed on the user. These include:
+         - tier ID
+         - tier name
+         - upload and download bandwidth
+         - registry actions delay
+         - maximum size of uploaded files
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+        - { } # Authentication is optional.
+      parameters:
+        - in: query
+          name: unit
+          description: |
+            unit for bandwidth representation, either "byte" for bytes per second
+            or anything else for bits per second
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: user limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserLimitsResponse'
+  /user/apikeys:
+    post:
+      summary: creates a new API key
+      operationId: apikeyCreate
+      tags:
+        - User
+        - API Keys
+      description: Creates a new public or private API key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APIKeyRequest'
+        description: API creation request
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyResponse'
+        '400':
+          description: invalid input
+        '401':
+          description: invalid credentials, invalid token, or failed challenge-response
+        '500':
+          description: internal server error
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: Skynet-Api-Key
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: skynet-jwt
+  schemas:
+    LoginPOSTCredentials:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: tr4@gmail.com
+        password:
+          type: string
+          format: password
+          example: me1fzxCVXqHeu619nuiMjlVQ
+    UserLimitsResponse:
+      type: object
+      properties:
+        tierID:
+          type: integer
+          example: 1
+        tierName:
+          type: string
+          example: "plus"
+        upload:
+          type: integer
+        download:
+          type: integer
+        maxUploadSize:
+          type: integer
+        registry:
+          type: integer
+    APIKeyRequest:
+      type: object
+      properties:
+        public:
+          type: boolean
+          description: |
+            specifies whether the API key is public or private. defaults to private
+          example: true
+        skylinks:
+          type: array
+          description: |
+            list of skylinks, covered by this API key. only allowed for public
+            API keys
+          items:
+            type: string
+            description: skylink
+          example: [ "AAAKvcU4_Jhzd907PyU2Tnup7INBQCh-RNr6PmvQQ0lTzQ", "_A3dyZt5FAD4Trdn800eTxAPuZVZsvQalmK-vL-l14KIsg" ]
+    APIKeyResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 6228cecc2e3367f7d2690c21
+        public:
+          type: boolean
+          description: |
+            specifies whether the API key is public or private. defaults to private
+          example: true
+        key:
+          type: string
+          description: the API key itself, only shown on API key creation
+        skylinks:
+          type: array
+          description: |
+            list of skylinks, covered by this API key. only allowed for public
+            API keys
+          items:
+            type: string
+            description: skylink
+          example: [ "AAAKvcU4_Jhzd907PyU2Tnup7INBQCh-RNr6PmvQQ0lTzQ", "_A3dyZt5FAD4Trdn800eTxAPuZVZsvQalmK-vL-l14KIsg" ]
+        createdAt:
+          type: string
+          format: date-time
+          example: 2022-03-09T15:59:08.817Z
