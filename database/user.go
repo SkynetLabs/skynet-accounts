@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net/mail"
+	"strings"
 	"sync"
 	"time"
 
@@ -504,6 +505,9 @@ func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
 		Upsert: &False,
 	}
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, &opts)
+	if err != nil && strings.Contains(err.Error(), "Cannot apply $pull to a non-array value") {
+		return mongo.ErrNoDocuments
+	}
 	return err
 }
 

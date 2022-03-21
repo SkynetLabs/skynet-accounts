@@ -14,6 +14,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.sia.tech/siad/crypto"
 )
 
@@ -455,9 +456,16 @@ func TestUserPubKey(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
-	// Add a pubkey.
 	pk := database.PubKey(make([]byte, database.PubKeySize))
 	copy(pk[:], fastrand.Bytes(database.PubKeySize))
+	pk1 := database.PubKey(make([]byte, database.PubKeySize))
+	copy(pk1[:], fastrand.Bytes(database.PubKeySize))
+	// Try to remove a pubkey. Expect this to fail.
+	err = db.UserPubKeyRemove(ctx, *u, pk)
+	if err == nil || !errors.Contains(err, mongo.ErrNoDocuments) {
+		t.Fatal(err)
+	}
+	// Add a pubkey.
 	err = db.UserPubKeyAdd(ctx, *u, pk)
 	if err != nil {
 		t.Fatal(err)
@@ -470,8 +478,6 @@ func TestUserPubKey(t *testing.T) {
 		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u1.PubKeys, pk)
 	}
 	// Add another.
-	var pk1 database.PubKey
-	copy(pk1[:], fastrand.Bytes(database.PubKeySize))
 	err = db.UserPubKeyAdd(ctx, *u, pk)
 	if err != nil {
 		t.Fatal(err)

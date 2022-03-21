@@ -748,6 +748,10 @@ func (api *API) userPubKeyDELETE(u *database.User, w http.ResponseWriter, req *h
 		return
 	}
 	err = api.staticDB.UserPubKeyRemove(ctx, *u, pk)
+	if errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

@@ -222,6 +222,11 @@ func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	if len(aks) != 0 {
 		t.Fatalf("Expected no API keys, got %d.", len(aks))
 	}
+	// Delete the same key again. Expect a 404.
+	status, err = at.UserAPIKeysDELETE(akr.ID)
+	if status != http.StatusNotFound {
+		t.Fatal("Expected status 404, got", status)
+	}
 }
 
 // testPublicAPIKeysUsage makes sure that we can use public API keys to make
