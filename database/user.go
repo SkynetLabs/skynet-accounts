@@ -477,16 +477,23 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 
 // UserPubKeyAdd adds a new PubKey to the given user's set.
 func (db *DB) UserPubKeyAdd(ctx context.Context, u User, pk PubKey) (err error) {
-	// If the set of pubkeys is not initialised we cannot use mongo's mutation
-	// operations, such as $addToSet, so we'll save the entire user record.
-	if u.PubKeys == nil {
-		u.PubKeys = make([]PubKey, 1)
-		u.PubKeys[0] = pk
-		return db.UserSave(ctx, &u)
-	}
 	filter := bson.M{"_id": u.ID}
-	update := bson.M{
-		"$addToSet": bson.M{"pub_keys": pk},
+	// This update is so complicated because we can't use mutation operations
+	// like $push, $addToSet and so on if the target field is null. That's why
+	// here we check if the field is an array and then merge the key in. If the
+	// field is not an array (i.e. it's null) we set it to an empty array before
+	// performing the merge.
+	update := bson.A{
+		bson.M{
+			"$set": bson.M{
+				"pub_keys": bson.M{
+					"$cond": bson.A{
+						bson.M{"$eq": bson.A{bson.M{"$type": "$pub_keys"}, "array"}},
+						bson.M{"$setUnion": bson.A{"$pub_keys", bson.A{pk}}},
+						bson.A{pk},
+					}},
+			},
+		},
 	}
 	opts := options.UpdateOptions{
 		Upsert: &False,
