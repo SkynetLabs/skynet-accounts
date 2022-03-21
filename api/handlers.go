@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -748,20 +747,7 @@ func (api *API) userPubKeyDELETE(u *database.User, w http.ResponseWriter, req *h
 		api.WriteError(w, errors.New("the given pubkey is not associated with this user"), http.StatusBadRequest)
 		return
 	}
-	// Find the position of the pubkey in the list.
-	keyIdx := -1
-	for i, k := range u.PubKeys {
-		if subtle.ConstantTimeCompare(pk[:], k[:]) == 1 {
-			keyIdx = i
-			break
-		}
-	}
-	if keyIdx == -1 {
-		build.Critical("Reaching this should be impossible. It would indicate a concurrent change of the user struct.")
-	}
-	// Remove the pubkey.
-	u.PubKeys = append(u.PubKeys[:keyIdx], u.PubKeys[keyIdx+1:]...)
-	err = api.staticDB.UserSave(ctx, u)
+	err = api.staticDB.UserPubKeyRemove(ctx, *u, pk)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -852,8 +838,12 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 		api.WriteError(w, errors.New("user's sub doesn't match update sub"), http.StatusBadRequest)
 		return
 	}
-	u.PubKeys = append(u.PubKeys, pk)
-	err = api.staticDB.UserSave(ctx, u)
+	err = api.staticDB.UserPubKeyAdd(ctx, *u, pk)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	updatedUser, err := api.staticDB.UserByID(ctx, u.ID)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -863,7 +853,7 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.loginUser(w, u, true)
+	api.loginUser(w, updatedUser, true)
 }
 
 // userUploadsGET returns all uploads made by the current user.

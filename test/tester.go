@@ -475,11 +475,10 @@ func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (ap
 }
 
 // UserLimitsSkylink performs a `GET /user/limits/:skylink` request.
-func (at *AccountsTester) UserLimitsSkylink(sl string, unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
+func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, headers map[string]string) (api.UserLimitsGET, int, error) {
 	queryParams := url.Values{}
-	if unit != "" {
-		queryParams.Set("unit", unit)
-	}
+	queryParams.Set("unit", unit)
+	queryParams.Set("apiKey", apikey)
 	if !database.ValidSkylinkHash(sl) {
 		return api.UserLimitsGET{}, 0, database.ErrInvalidSkylink
 	}

@@ -128,10 +128,7 @@ type (
 		SubscriptionCancelAtPeriodEnd    bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
 		StripeID                         string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                    bool               `bson:"quota_exceeded" json:"quotaExceeded"`
-		// The currently active (or default) key is going to be the first one in
-		// the list. If we want to activate a new pubkey, we'll just move it to
-		// the first position in the list.
-		PubKeys []PubKey `bson:"pub_keys" json:"-"`
+		PubKeys                          []PubKey           `bson:"pub_keys" json:"-"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
@@ -475,6 +472,39 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 		return errors.AddContext(err, "failed to update")
 	}
 	return nil
+}
+
+// UserPubKeyAdd adds a new PubKey to the given user's set.
+func (db *DB) UserPubKeyAdd(ctx context.Context, u User, pk PubKey) (err error) {
+	// If the set of pubkeys is not initialised we cannot use mongo's mutation
+	// operations, such as $addToSet, so we'll save the entire user record.
+	if u.PubKeys == nil {
+		u.PubKeys = make([]PubKey, 1)
+		u.PubKeys[0] = pk
+		return db.UserSave(ctx, &u)
+	}
+	filter := bson.M{"_id": u.ID}
+	update := bson.M{
+		"$addToSet": bson.M{"pub_keys": pk},
+	}
+	opts := options.UpdateOptions{
+		Upsert: &False,
+	}
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, &opts)
+	return err
+}
+
+// UserPubKeyRemove removes a PubKey from the given user's set.
+func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
+	filter := bson.M{"_id": u.ID}
+	update := bson.M{
+		"$pull": bson.M{"pub_keys": pk},
+	}
+	opts := options.UpdateOptions{
+		Upsert: &False,
+	}
+	_, err := db.staticUsers.UpdateOne(ctx, filter, update, &opts)
+	return err
 }
 
 // UserSetStripeID changes the user's stripe id in the DB.

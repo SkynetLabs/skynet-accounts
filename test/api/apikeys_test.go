@@ -255,12 +255,12 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 		Public:   true,
 		Skylinks: []string{sl.Skylink},
 	}
-	akWithKey, _, err := at.UserAPIKeysPOST(apiKeyPOST)
+	pakWithKey, _, err := at.UserAPIKeysPOST(apiKeyPOST)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Stop using the cookie, use the public API key instead.
-	at.SetAPIKey(akWithKey.Key.String())
+	at.SetAPIKey(pakWithKey.Key.String())
 	// Try to fetch the user's stats with the new public API key.
 	// Expect this to fail.
 	_, _, err = at.Get("/user/stats", nil)
@@ -269,7 +269,7 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Get the user's limits for downloading a skylink covered by the public
 	// API key. Expect to get TierFree values.
-	ul, _, err := at.UserLimitsSkylink(sl.Skylink, "byte", nil)
+	ul, _, err := at.UserLimitsSkylink(sl.Skylink, "byte", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,11 +278,22 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Get the user's limits for downloading a skylink that is not covered by
 	// the public API key. Expect to get TierAnonymous values.
-	ul, _, err = at.UserLimitsSkylink(sl2.Skylink, "byte", nil)
+	ul, _, err = at.UserLimitsSkylink(sl2.Skylink, "byte", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ul.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
 		t.Fatalf("Expected to get download bandwidth of %d, got %d", database.UserLimits[database.TierAnonymous].DownloadBandwidth, ul.DownloadBandwidth)
+	}
+	// Stop using the header, pass the skylink as a query parameter.
+	at.ClearCredentials()
+	// Get the user's limits for downloading a skylink covered by the public
+	// API key. Expect to get TierFree values.
+	ul, _, err = at.UserLimitsSkylink(sl.Skylink, "byte", pakWithKey.Key.String(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ul.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
+		t.Fatalf("Expected to get download bandwidth of %d, got %d", database.UserLimits[database.TierFree].DownloadBandwidth, ul.DownloadBandwidth)
 	}
 }
