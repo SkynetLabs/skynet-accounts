@@ -99,7 +99,7 @@ func (ak APIKey) IsValid() bool {
 // LoadBytes encodes a []byte of size PubKeySize into an API key.
 func (ak *APIKey) LoadBytes(b []byte) error {
 	if len(b) != PubKeySize {
-		return errors.New(fmt.Sprintf("unexpected API key size, %d != %d", len(b), PubKeySize))
+		return fmt.Errorf("unexpected API key size, %d != %d", len(b), PubKeySize)
 	}
 	*ak = APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
 	return nil
