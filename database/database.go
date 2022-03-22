@@ -203,6 +203,9 @@ func (db *DB) Lock(ctx context.Context, resource, lockID, owner string) (err err
 		// retry. We'll do that until the context times out.
 		if errors.Contains(err, lock.ErrAlreadyLocked) {
 			select {
+			// TODO Should this wait for the context to time out or have its own TTL?
+			// 	Personally, I would prefer own TTL but I don't know what would make a good value.
+			// 	5 seconds? 30? Custom, specified by the caller?
 			case <-ctx.Done():
 				break
 			default:

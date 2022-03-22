@@ -268,11 +268,25 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 	if u.EmailConfirmationTokenExpiration.Before(time.Now().UTC()) {
 		return nil, errors.AddContext(ErrInvalidToken, "token expired")
 	}
-	u.EmailConfirmationToken = ""
-	err = db.UserSave(ctx, u)
+	err = db.Lock(ctx, u.Sub, u.Sub, "UserConfirmEmail")
 	if err != nil {
-		return nil, errors.AddContext(err, "failed to update user")
+		return nil, err
 	}
+	unlockFn := func() {
+		ls, err := db.Unlock(ctx, u.Sub)
+		if err != nil {
+			db.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}
+	defer unlockFn()
+	filter := bson.M{"_id": u.ID}
+	update := bson.M{"$set": bson.M{"email_confirmation_token": ""}}
+	opts := options.Update().SetUpsert(false)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to update")
+	}
+	u.EmailConfirmationToken = ""
 	return u, nil
 }
 
@@ -303,6 +317,17 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	if !errors.Contains(err, ErrUserNotFound) {
 		return nil, ErrUserAlreadyExists
 	}
+	err = db.Lock(ctx, sub, sub, "UserCreate")
+	if err != nil {
+		return nil, err
+	}
+	unlockFn := func() {
+		ls, err := db.Unlock(ctx, sub)
+		if err != nil {
+			db.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}
+	defer unlockFn()
 	// Check for an existing user with this sub.
 	_, err = db.managedUserBySub(ctx, sub)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
@@ -349,13 +374,24 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 
 // UserCreateEmailConfirmation creates a new email confirmation record for this
 // user.
-func (db *DB) UserCreateEmailConfirmation(ctx context.Context, uID primitive.ObjectID) (string, error) {
+func (db *DB) UserCreateEmailConfirmation(ctx context.Context, u User) (string, error) {
 	exp := time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond)
 	tk, err := lib.GenerateUUID()
 	if err != nil {
 		return "", err
 	}
-	filter := bson.M{"_id": uID}
+	err = db.Lock(ctx, u.Sub, u.Sub, "UserCreateEmailConfirmation")
+	if err != nil {
+		return "", err
+	}
+	unlockFn := func() {
+		ls, err := db.Unlock(ctx, u.Sub)
+		if err != nil {
+			db.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}
+	defer unlockFn()
+	filter := bson.M{"_id": u.ID}
 	update := bson.M{
 		"$set": bson.M{
 			"email_confirmation_token":            tk,
@@ -396,6 +432,17 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 			return nil, errors.AddContext(err, "failed to generate user sub")
 		}
 	}
+	err = db.Lock(ctx, sub, sub, "UserCreatePK")
+	if err != nil {
+		return nil, err
+	}
+	unlockFn := func() {
+		ls, err := db.Unlock(ctx, sub)
+		if err != nil {
+			db.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}
+	defer unlockFn()
 	// Check for an existing user with this sub.
 	_, err = db.managedUserBySub(ctx, sub)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
@@ -445,9 +492,20 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if u.ID.IsZero() {
 		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
 	}
+	err := db.Lock(ctx, u.Sub, u.Sub, "UserDelete")
+	if err != nil {
+		return err
+	}
+	unlockFn := func() {
+		ls, err := db.Unlock(ctx, u.Sub)
+		if err != nil {
+			db.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}
+	defer unlockFn()
 	// Delete all data associated with this user.
 	filter := bson.D{{"user_id", u.ID}}
-	_, err := db.staticDownloads.DeleteMany(ctx, filter)
+	_, err = db.staticDownloads.DeleteMany(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user downloads")
 	}
@@ -494,12 +552,47 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 	return nil
 }
 
+// UserSetQuotaExceeded sets the user's quota exceeded flag.
+// TODO Add tests.
+func (db *DB) UserSetQuotaExceeded(ctx context.Context, u *User, qe bool) error {
+	err := db.Lock(ctx, u.Sub, u.Sub, "UserSetQuotaExceeded")
+	if err != nil {
+		return err
+	}
+	unlockFn := func() {
+		ls, err := db.Unlock(ctx, u.Sub)
+		if err != nil {
+			db.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}
+	defer unlockFn()
+	filter := bson.M{"_id": u.ID}
+	update := bson.M{"$set": bson.M{"quota_exceeded": qe}}
+	opts := options.Update().SetUpsert(false)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return errors.AddContext(err, "failed to update")
+	}
+	return nil
+}
+
 // UserSetStripeID changes the user's stripe id in the DB.
-func (db *DB) UserSetStripeID(ctx context.Context, uID primitive.ObjectID, stripeID string) error {
-	filter := bson.M{"_id": uID}
+func (db *DB) UserSetStripeID(ctx context.Context, u *User, stripeID string) error {
+	err := db.Lock(ctx, u.Sub, u.Sub, "UserSetStripeID")
+	if err != nil {
+		return err
+	}
+	unlockFn := func() {
+		ls, err := db.Unlock(ctx, u.Sub)
+		if err != nil {
+			db.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}
+	defer unlockFn()
+	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{"stripe_id": stripeID}}
 	opts := options.Update().SetUpsert(true)
-	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
 	}
@@ -507,14 +600,25 @@ func (db *DB) UserSetStripeID(ctx context.Context, uID primitive.ObjectID, strip
 }
 
 // UserSetTier sets the user's tier to the given value.
-func (db *DB) UserSetTier(ctx context.Context, uID primitive.ObjectID, t int) error {
+func (db *DB) UserSetTier(ctx context.Context, u *User, t int) error {
 	if t <= TierAnonymous || t >= TierMaxReserved {
 		return errors.New("invalid tier value")
 	}
-	filter := bson.M{"_id": uID}
+	err := db.Lock(ctx, u.Sub, u.Sub, "UserSetStripeID")
+	if err != nil {
+		return err
+	}
+	unlockFn := func() {
+		ls, err := db.Unlock(ctx, u.Sub)
+		if err != nil {
+			db.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}
+	defer unlockFn()
+	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{"tier": t}}
 	opts := options.Update().SetUpsert(true)
-	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
 	}
@@ -760,7 +864,7 @@ func (db *DB) userDownloadStats(ctx context.Context, uID primitive.ObjectID, mon
 		}},
 	}
 	// This stage checks if the download has a non-zero `bytes` field and if so,
-	// it takes it as the download's size. Otherwise it reports the full
+	// it takes it as the download's size. Otherwise, it reports the full
 	// skylink's size as download's size.
 	projectStage := bson.D{{"$project", bson.D{
 		{"size", bson.D{

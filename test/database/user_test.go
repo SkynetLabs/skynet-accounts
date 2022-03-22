@@ -175,7 +175,7 @@ func TestUserByStripeID(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
-	err = db.UserSetStripeID(ctx, u.ID, stripeID)
+	err = db.UserSetStripeID(ctx, u, stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestUserCreateEmailConfirmation(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
-	tk, err := db.UserCreateEmailConfirmation(ctx, u.ID)
+	tk, err := db.UserCreateEmailConfirmation(ctx, *u)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,7 +444,7 @@ func TestUserSetStripeID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stripeID := t.Name() + "stripeid"
+	stripeID := t.Name() + "stripeID"
 	// Create a test user with the respective StripeID.
 	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
@@ -453,7 +453,7 @@ func TestUserSetStripeID(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
-	err = db.UserSetStripeID(ctx, u.ID, stripeID)
+	err = db.UserSetStripeID(ctx, u, stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +482,7 @@ func TestUserSetTier(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
-	err = db.UserSetTier(ctx, u.ID, database.TierPremium80)
+	err = db.UserSetTier(ctx, u, database.TierPremium80)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -504,7 +504,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	if errors.Contains(err, ErrNoAPIKey) {
 		// We failed to fetch an API key from this request but the request might
 		// be authenticated in another way, so we'll defer to userLimitsGET.
-		api.userLimitsGET(nil, w, req, ps)
+		api.userLimitsGET(u, w, req, ps)
 		return
 	}
 	if err != nil {
@@ -643,17 +643,12 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 	}
 
 	ctx := req.Context()
-	err = api.staticDB.Lock(ctx, u.Sub, u.Sub, "userPUT")
+	unlock, err := api.userLock(req.Context(), u.Sub, "userPUT")
 	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to lock user for update"), http.StatusInternalServerError)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	defer func() {
-		ls, err := api.staticDB.Unlock(ctx, u.Sub)
-		if err != nil {
-			api.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
-		}
-	}()
+	defer unlock()
 	// Re-fetch the user from the DB in order to avoid any race conditions.
 	u, err = api.staticDB.UserByID(ctx, u.ID)
 	if err != nil {
@@ -802,6 +797,18 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 		api.WriteError(w, errors.AddContext(err, "failed to validate challenge response"), http.StatusBadRequest)
 		return
 	}
+	unlock, err := api.userLock(req.Context(), u.Sub, "userPubKeyRegisterPOST")
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	defer unlock()
+	// Re-fetch the user from the DB in order to avoid any race conditions.
+	u, err = api.staticDB.UserByID(ctx, u.ID)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
 	// Check if the pubkey is already associated with the current user.
 	if u.HasKey(pk) {
 		// This pubkey already belongs to the user. Log them in and return.
@@ -924,7 +931,7 @@ func (api *API) userConfirmGET(_ *database.User, w http.ResponseWriter, req *htt
 // The user needs to be logged in.
 func (api *API) userReconfirmPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	var err error
-	tk, err := api.staticDB.UserCreateEmailConfirmation(req.Context(), u.ID)
+	tk, err := api.staticDB.UserCreateEmailConfirmation(req.Context(), *u)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to generate a new confirmation token"), http.StatusInternalServerError)
 		return
@@ -982,6 +989,20 @@ func (api *API) userRecoverRequestPOST(_ *database.User, w http.ResponseWriter, 
 		// If they used the wrong email, they will get an email that indicates
 		// that, otherwise they will get nothing.
 		api.WriteSuccess(w)
+		return
+	}
+	unlock, err := api.userLock(req.Context(), u.Sub, "userRecoverRequestPOST")
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	defer unlock()
+	// Re-fetch the user from the DB in order to avoid any race conditions.
+	// We couldn't have locked before fetching it the first time because we want
+	// to lock by the user's sub.
+	u, err = api.staticDB.UserByID(req.Context(), u.ID)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if err != nil {
@@ -1055,6 +1076,20 @@ func (api *API) userRecoverPOST(_ *database.User, w http.ResponseWriter, req *ht
 	u, err := api.staticDB.UserByRecoveryToken(req.Context(), payload.Token)
 	if err != nil {
 		api.WriteError(w, errors.New("no such user"), http.StatusBadRequest)
+		return
+	}
+	unlock, err := api.userLock(req.Context(), u.Sub, "userRecoverPOST")
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	defer unlock()
+	// Re-fetch the user from the DB in order to avoid any race conditions.
+	// We couldn't have locked before fetching it the first time because we want
+	// to lock by the user's sub.
+	u, err = api.staticDB.UserByID(req.Context(), u.ID)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 	passHash, err := hash.Generate(payload.Password)
@@ -1227,11 +1262,11 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 	quota := database.UserLimits[u.Tier]
 	quotaExceeded := numUploads > quota.MaxNumberUploads || storageUsed > quota.Storage
 	if quotaExceeded != u.QuotaExceeded {
-		u.QuotaExceeded = quotaExceeded
-		err = api.staticDB.UserSave(ctx, u)
+		err = api.staticDB.UserSetQuotaExceeded(ctx, u, quotaExceeded)
 		if err != nil {
 			api.staticLogger.Warnf("Failed to save user. User: %+v, err: %s", u, err.Error())
 		}
+		u.QuotaExceeded = quotaExceeded
 		api.staticUserTierCache.Set(u.Sub, u)
 	}
 }
@@ -1312,4 +1347,20 @@ func userLimitsGetFromTier(tierID int, quotaExceeded, inBytes bool) *UserLimitsG
 		MaxNumberUploads:  limitsTier.MaxNumberUploads,
 		RegistryDelay:     limitsTier.RegistryDelay,
 	}
+}
+
+// userLock is a helper that locks the given user with the given owner and
+// returns an unlock function that's to be deferred.
+func (api *API) userLock(ctx context.Context, sub, owner string) (func(), error) {
+	err := api.staticDB.Lock(ctx, sub, sub, owner)
+	if err != nil {
+		return nil, err
+	}
+	unlockFn := func() {
+		ls, err := api.staticDB.Unlock(ctx, sub)
+		if err != nil {
+			api.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}
+	return unlockFn, nil
 }
