@@ -12,7 +12,7 @@ jobs:
       - name: Install revive
         run: go install github.com/mgechev/revive@latest
       - name: Install analyze
-        run: go install gitlab.com/NebulousLabs/analyze
+        run: go get gitlab.com/NebulousLabs/analyze
       - name: Install golangci-lint
         run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.45.0
       - name: Lint
