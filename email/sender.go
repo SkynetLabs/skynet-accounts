@@ -38,19 +38,6 @@ var (
 		},
 	).(string)
 
-	// ServerLockID holds the name of the name of this particular server. Its
-	// value is controlled by the SERVER_DOMAIN entry in the .env file. If the
-	// SERVER_DOMAIN entry is empty or missing, the PORTAL_DOMAIN (preceded by
-	// schema) will be used instead. The only exception is testing where there's
-	// nothing to set it, so we want to always have it set.
-	ServerLockID = build.Select(
-		build.Var{
-			Dev:      "",
-			Testing:  "siasky.test",
-			Standard: "",
-		},
-	).(string)
-
 	// matchPattern extracts all relevant configuration values from an email
 	// connection URI
 	matchPattern = regexp.MustCompile("smtps://(?P<user>.*):(?P<password>.*)@(?P<server>.*):(?P<port>\\d*)(/\\??skip_ssl_verify=(?P<skip_ssl_verify>\\w*))?")
@@ -107,13 +94,13 @@ func NewSender(ctx context.Context, db *database.DB, logger *logrus.Logger, deps
 // sent and sending them.
 func (s Sender) Start() {
 	go func() {
-		s.ScanAndSend(ServerLockID)
+		s.ScanAndSend(database.ServerLockID)
 		for {
 			select {
 			case <-s.staticCtx.Done():
 				return
 			case <-time.After(sleepBetweenScans):
-				s.ScanAndSend(ServerLockID)
+				s.ScanAndSend(database.ServerLockID)
 			}
 		}
 	}()

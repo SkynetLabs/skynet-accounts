@@ -175,7 +175,7 @@ func TestUserByStripeID(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
-	err = db.UserSetStripeID(ctx, u, stripeID)
+	err = db.UserSetStripeID(ctx, u.ID, stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +453,7 @@ func TestUserSetStripeID(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
-	err = db.UserSetStripeID(ctx, u, stripeID)
+	err = db.UserSetStripeID(ctx, u.ID, stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +482,7 @@ func TestUserSetTier(t *testing.T) {
 	defer func(user *database.User) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
-	err = db.UserSetTier(ctx, u, database.TierPremium80)
+	err = db.UserSetTier(ctx, u.ID, database.TierPremium80)
 	if err != nil {
 		t.Fatal(err)
 	}

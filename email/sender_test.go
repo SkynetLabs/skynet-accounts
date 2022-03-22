@@ -2,6 +2,8 @@ package email
 
 import (
 	"testing"
+
+	"github.com/SkynetLabs/skynet-accounts/database"
 )
 
 // TestConfig ensures that config properly parses email connection URIs.
@@ -28,7 +30,7 @@ func TestConfig(t *testing.T) {
 // TestServerLockID make sure that ServerLockID is set in testing mode. If it's
 // not, that might compromise the other tests in the project.
 func TestServerLockID(t *testing.T) {
-	if ServerLockID == "" {
+	if database.ServerLockID == "" {
 		t.Fatal("Expected ServerLockID to not be empty.")
 	}
 }

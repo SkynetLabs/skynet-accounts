@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	lock "github.com/square/mongo-lock"
+	"go.sia.tech/siad/build"
 
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -54,9 +56,6 @@ var (
 	// collLocks defines the name of the collection used for distributed locks.
 	collLocks = "locks"
 
-	// DefaultPageSize defines the default number of records to return.
-	DefaultPageSize = 10
-
 	// mongoCompressors defines the compressors we are going to use for the
 	// connection to MongoDB
 	mongoCompressors = "zstd,zlib,snappy"
@@ -83,6 +82,26 @@ var (
 	// ErrInvalidSkylink is returned when the given string is not a valid
 	// skylink.
 	ErrInvalidSkylink = errors.New("invalid skylink")
+
+	// DefaultPageSize defines the default number of records to return.
+	DefaultPageSize = 10
+
+	// LockRetrySleep defines how long we'll sleep between attempts to lock a
+	// record that's already locked.
+	LockRetrySleep = 10. * time.Millisecond
+
+	// ServerLockID holds the name of the name of this particular server. Its
+	// value is controlled by the SERVER_DOMAIN entry in the .env file. If the
+	// SERVER_DOMAIN entry is empty or missing, the PORTAL_DOMAIN (preceded by
+	// schema) will be used instead. The only exception is testing where there's
+	// nothing to set it, so we want to always have it set.
+	ServerLockID = build.Select(
+		build.Var{
+			Dev:      "",
+			Testing:  "siasky.test",
+			Standard: "",
+		},
+	).(string)
 )
 
 type (
@@ -170,6 +189,36 @@ func (db *DB) Disconnect(ctx context.Context) error {
 // NewSession starts a new Mongo session.
 func (db *DB) NewSession() (mongo.Session, error) {
 	return db.staticDB.Client().StartSession()
+}
+
+// Lock creates a new distributed database lock.
+func (db *DB) Lock(ctx context.Context, resource, lockID, owner string) (err error) {
+	ld := lock.LockDetails{
+		Owner: owner,
+		Host:  ServerLockID,
+	}
+	for {
+		err = db.staticLockClient.XLock(ctx, resource, lockID, ld)
+		// If the resource is already locked we'll sleep for a bit and then
+		// retry. We'll do that until the context times out.
+		if errors.Contains(err, lock.ErrAlreadyLocked) {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+			}
+			time.Sleep(LockRetrySleep)
+			continue
+		}
+		// On success or any other we'll break and return.
+		break
+	}
+	return err
+}
+
+// Unlock removes an existing distributed database lock.
+func (db *DB) Unlock(ctx context.Context, lockID string) ([]lock.LockStatus, error) {
+	return db.staticLockClient.Unlock(ctx, lockID)
 }
 
 // connectionString is a helper that returns a valid MongoDB connection string

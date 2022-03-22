@@ -504,7 +504,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	if errors.Contains(err, ErrNoAPIKey) {
 		// We failed to fetch an API key from this request but the request might
 		// be authenticated in another way, so we'll defer to userLimitsGET.
-		api.userLimitsGET(u, w, req, ps)
+		api.userLimitsGET(nil, w, req, ps)
 		return
 	}
 	if err != nil {
@@ -643,6 +643,23 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 	}
 
 	ctx := req.Context()
+	err = api.staticDB.Lock(ctx, u.Sub, u.Sub, "userPUT")
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to lock user for update"), http.StatusInternalServerError)
+		return
+	}
+	defer func() {
+		ls, err := api.staticDB.Unlock(ctx, u.Sub)
+		if err != nil {
+			api.staticLogger.Errorf("Failed to unlock a user record. Error: %s, Lock status: %+v", err, ls)
+		}
+	}()
+	// Re-fetch the user from the DB in order to avoid any race conditions.
+	u, err = api.staticDB.UserByID(ctx, u.ID)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
 	if payload.Password != "" {
 		// Check if the registrations are open. If they are not then changing
 		// passwords is also not allowed.
