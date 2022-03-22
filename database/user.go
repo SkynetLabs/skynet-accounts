@@ -351,6 +351,29 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	return u, nil
 }
 
+// UserCreateEmailConfirmation creates a new email confirmation record for this
+// user.
+func (db *DB) UserCreateEmailConfirmation(ctx context.Context, uID primitive.ObjectID) (string, error) {
+	exp := time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond)
+	tk, err := lib.GenerateUUID()
+	if err != nil {
+		return "", err
+	}
+	filter := bson.M{"_id": uID}
+	update := bson.M{
+		"$set": bson.M{
+			"email_confirmation_token":            tk,
+			"email_confirmation_token_expiration": exp,
+		},
+	}
+	opts := options.Update().SetUpsert(false)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return "", err
+	}
+	return tk, nil
+}
+
 // UserCreatePK creates a new user with a pubkey in the DB.
 //
 // The `pass` and `sub` fields are optional.
@@ -467,9 +490,7 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 // UserSave saves the user to the DB.
 func (db *DB) UserSave(ctx context.Context, u *User) error {
 	filter := bson.M{"_id": u.ID}
-	opts := &options.ReplaceOptions{
-		Upsert: &True,
-	}
+	opts := options.Replace().SetUpsert(true)
 	_, err := db.staticUsers.ReplaceOne(ctx, filter, u, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")

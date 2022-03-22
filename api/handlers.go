@@ -907,18 +907,12 @@ func (api *API) userConfirmGET(_ *database.User, w http.ResponseWriter, req *htt
 // The user needs to be logged in.
 func (api *API) userReconfirmPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	var err error
-	u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(database.EmailConfirmationTokenTTL).Truncate(time.Millisecond)
-	u.EmailConfirmationToken, err = lib.GenerateUUID()
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to generate a token"), http.StatusInternalServerError)
-		return
-	}
-	err = api.staticDB.UserSave(req.Context(), u)
+	tk, err := api.staticDB.UserCreateEmailConfirmation(req.Context(), u.ID)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to generate a new confirmation token"), http.StatusInternalServerError)
 		return
 	}
-	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
+	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, tk)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to send the new confirmation token"), http.StatusInternalServerError)
 		return
