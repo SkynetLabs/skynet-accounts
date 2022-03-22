@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/SkynetLabs/skynet-accounts/lib"
+	lock "github.com/square/mongo-lock"
 
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -48,8 +49,10 @@ var (
 	// collConfiguration defines the name of the db table with configuration
 	// settings.
 	collConfiguration = "configuration"
-	// collAPIKeys defines the name of the db table with API keys for users.
+	// collAPIKeys defines the name of the collection with API keys for users.
 	collAPIKeys = "api_keys"
+	// collLocks defines the name of the collection used for distributed locks.
+	collLocks = "locks"
 
 	// DefaultPageSize defines the default number of records to return.
 	DefaultPageSize = 10
@@ -97,6 +100,7 @@ type (
 		staticUnconfirmedUserUpdates *mongo.Collection
 		staticConfiguration          *mongo.Collection
 		staticAPIKeys                *mongo.Collection
+		staticLockClient             *lock.Client
 		staticDeps                   lib.Dependencies
 		staticLogger                 *logrus.Logger
 	}
@@ -135,6 +139,11 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 	if err != nil {
 		return nil, err
 	}
+	lockClient := lock.NewClient(db.Collection(collLocks))
+	err = lockClient.CreateIndexes(ctx)
+	if err != nil {
+		return nil, errors.AddContext(err, "failed to create the indexes needed for locking")
+	}
 	return &DB{
 		staticDB:                     db,
 		staticUsers:                  db.Collection(collUsers),
@@ -148,6 +157,7 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 		staticUnconfirmedUserUpdates: db.Collection(collUnconfirmedUserUpdates),
 		staticConfiguration:          db.Collection(collConfiguration),
 		staticAPIKeys:                db.Collection(collAPIKeys),
+		staticLockClient:             lockClient,
 		staticLogger:                 logger,
 	}, nil
 }

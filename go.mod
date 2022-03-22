@@ -16,6 +16,7 @@ require (
 	github.com/klauspost/reedsolomon v1.9.16 // indirect
 	github.com/lestrrat-go/jwx v1.2.18
 	github.com/sirupsen/logrus v1.8.1
+	github.com/square/mongo-lock v0.0.0-20201208161834-4db518ed7fb2
 	github.com/stripe/stripe-go/v71 v71.48.0
 	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/tus/tusd v1.8.0 // indirect

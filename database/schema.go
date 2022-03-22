@@ -112,5 +112,7 @@ var (
 				Options: options.Index().SetName("user_id"),
 			},
 		},
+		// collLocks is not covered here because the collection and indexes will
+		// be created by the tool itself.
 	}
 )
