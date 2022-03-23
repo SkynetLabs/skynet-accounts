@@ -486,8 +486,8 @@ func TestUserStats(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 
-	testUploadSizeSmall := int64(1 + fastrand.Intn(4*skynet.MiB-1))
-	testUploadSizeBig := int64(4*skynet.MiB + 1 + fastrand.Intn(4*skynet.MiB))
+	testUploadSizeSmall := int64(1 + fastrand.Intn(4*skynet.MB-1))
+	testUploadSizeBig := int64(4*skynet.MB + 1 + fastrand.Intn(4*skynet.MB))
 	expectedUploadBandwidth := int64(0)
 	expectedDownloadBandwidth := int64(0)
 
@@ -506,9 +506,9 @@ func TestUserStats(t *testing.T) {
 		t.Fatalf("Expected a total of %d uploads, got %d.", 1, stats.NumUploads)
 	}
 	if stats.BandwidthUploads != expectedUploadBandwidth {
-		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB,
-			stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+		t.Fatalf("Expected upload bandwidth of %d (%d MB), got %d (%d MB).",
+			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MB,
+			stats.BandwidthUploads, stats.BandwidthUploads/skynet.MB)
 	}
 
 	// Create a big upload.
@@ -526,13 +526,13 @@ func TestUserStats(t *testing.T) {
 		t.Fatalf("Expected a total of %d uploads, got %d.", 2, stats.NumUploads)
 	}
 	if stats.BandwidthUploads != expectedUploadBandwidth {
-		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB,
-			stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+		t.Fatalf("Expected upload bandwidth of %d (%d MB), got %d (%d MB).",
+			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MB,
+			stats.BandwidthUploads, stats.BandwidthUploads/skynet.MB)
 	}
 
 	// Register a small download.
-	smallDownload := int64(1 + fastrand.Intn(4*skynet.MiB))
+	smallDownload := int64(1 + fastrand.Intn(4*skynet.MB))
 	err = db.DownloadCreate(ctx, u, *skylinkSmall, smallDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
@@ -547,12 +547,12 @@ func TestUserStats(t *testing.T) {
 		t.Fatalf("Expected a total of %d downloads, got %d.", 1, stats.NumDownloads)
 	}
 	if stats.BandwidthDownloads != expectedDownloadBandwidth {
-		t.Fatalf("Expected download bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MiB,
-			stats.BandwidthDownloads, stats.BandwidthDownloads/skynet.MiB)
+		t.Fatalf("Expected download bandwidth of %d (%d MB), got %d (%d MB).",
+			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MB,
+			stats.BandwidthDownloads, stats.BandwidthDownloads/skynet.MB)
 	}
 	// Register a big download.
-	bigDownload := int64(100*skynet.MiB + fastrand.Intn(4*skynet.MiB))
+	bigDownload := int64(100*skynet.MB + fastrand.Intn(4*skynet.MB))
 	err = db.DownloadCreate(ctx, u, *skylinkBig, bigDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
@@ -567,9 +567,9 @@ func TestUserStats(t *testing.T) {
 		t.Fatalf("Expected a total of %d downloads, got %d.", 2, stats.NumDownloads)
 	}
 	if stats.BandwidthDownloads != expectedDownloadBandwidth {
-		t.Fatalf("Expected download bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MiB,
-			stats.BandwidthDownloads, stats.BandwidthDownloads/skynet.MiB)
+		t.Fatalf("Expected download bandwidth of %d (%d MB), got %d (%d MB).",
+			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MB,
+			stats.BandwidthDownloads, stats.BandwidthDownloads/skynet.MB)
 	}
 
 	// Register a registry read.
@@ -587,9 +587,9 @@ func TestUserStats(t *testing.T) {
 		t.Fatalf("Expected a total of %d registry reads, got %d.", 1, stats.NumRegReads)
 	}
 	if stats.BandwidthRegReads != expectedRegReadBandwidth {
-		t.Fatalf("Expected registry read bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedRegReadBandwidth, expectedRegReadBandwidth/skynet.MiB,
-			stats.BandwidthRegReads, stats.BandwidthRegReads/skynet.MiB)
+		t.Fatalf("Expected registry read bandwidth of %d (%d MB), got %d (%d MB).",
+			expectedRegReadBandwidth, expectedRegReadBandwidth/skynet.MB,
+			stats.BandwidthRegReads, stats.BandwidthRegReads/skynet.MB)
 	}
 	// Register a registry read.
 	_, err = db.RegistryReadCreate(ctx, *u)
@@ -606,9 +606,9 @@ func TestUserStats(t *testing.T) {
 		t.Fatalf("Expected a total of %d registry reads, got %d.", 2, stats.NumRegReads)
 	}
 	if stats.BandwidthRegReads != expectedRegReadBandwidth {
-		t.Fatalf("Expected registry read bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedRegReadBandwidth, expectedRegReadBandwidth/skynet.MiB,
-			stats.BandwidthRegReads, stats.BandwidthRegReads/skynet.MiB)
+		t.Fatalf("Expected registry read bandwidth of %d (%d MB), got %d (%d MB).",
+			expectedRegReadBandwidth, expectedRegReadBandwidth/skynet.MB,
+			stats.BandwidthRegReads, stats.BandwidthRegReads/skynet.MB)
 	}
 
 	// Register a registry write.
@@ -626,9 +626,9 @@ func TestUserStats(t *testing.T) {
 		t.Fatalf("Expected a total of %d registry writes, got %d.", 1, stats.NumRegWrites)
 	}
 	if stats.BandwidthRegWrites != expectedRegWriteBandwidth {
-		t.Fatalf("Expected registry write bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedRegWriteBandwidth, expectedRegWriteBandwidth/skynet.MiB,
-			stats.BandwidthRegWrites, stats.BandwidthRegWrites/skynet.MiB)
+		t.Fatalf("Expected registry write bandwidth of %d (%d MB), got %d (%d MB).",
+			expectedRegWriteBandwidth, expectedRegWriteBandwidth/skynet.MB,
+			stats.BandwidthRegWrites, stats.BandwidthRegWrites/skynet.MB)
 	}
 	// Register a registry write.
 	_, err = db.RegistryWriteCreate(ctx, *u)
@@ -645,8 +645,8 @@ func TestUserStats(t *testing.T) {
 		t.Fatalf("Expected a total of %d registry writes, got %d.", 2, stats.NumRegWrites)
 	}
 	if stats.BandwidthRegWrites != expectedRegWriteBandwidth {
-		t.Fatalf("Expected registry write bandwidth of %d (%d MiB), got %d (%d MiB).",
-			expectedRegWriteBandwidth, expectedRegWriteBandwidth/skynet.MiB,
-			stats.BandwidthRegWrites, stats.BandwidthRegWrites/skynet.MiB)
+		t.Fatalf("Expected registry write bandwidth of %d (%d MB), got %d (%d MB).",
+			expectedRegWriteBandwidth, expectedRegWriteBandwidth/skynet.MB,
+			stats.BandwidthRegWrites, stats.BandwidthRegWrites/skynet.MB)
 	}
 }

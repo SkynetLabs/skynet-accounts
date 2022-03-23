@@ -1,4 +1,4 @@
-FROM golang:1.17.8 as builder
+FROM golang:1.18.0 as builder
 LABEL maintainer="SkynetLabs <devs@skynetlabs.com>"
 
 WORKDIR /root

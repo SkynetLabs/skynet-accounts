@@ -29,10 +29,10 @@ import (
 const (
 	// LimitBodySizeSmall defines a size limit for requests that we don't expect
 	// to contain a lot of data.
-	LimitBodySizeSmall = 4 * skynet.KiB
+	LimitBodySizeSmall = 4 * skynet.KB
 	// LimitBodySizeLarge defines a size limit for requests that we expect to
 	// contain a lot of data.
-	LimitBodySizeLarge = 4 * skynet.MiB
+	LimitBodySizeLarge = 4 * skynet.MB
 )
 
 type (
