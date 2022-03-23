@@ -54,7 +54,6 @@ markdown-spellcheck:
 # lint runs golangci-lint (which includes revive, a spellcheck of the codebase,
 # and other linters), the custom analyzers, and also a markdown spellchecker.
 lint: fmt markdown-spellcheck vet
-	revive ./...
 	golangci-lint run -c .golangci.yml
 	go mod tidy
 	analyze -lockcheck -- $(pkgs)
