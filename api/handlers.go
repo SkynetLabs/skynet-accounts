@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -1342,23 +1342,8 @@ func userLimitsGetFromTier(tierID int, quotaExceeded, inBytes bool) *UserLimitsG
 // validateIP is a simple pass-through helper that returns valid IPs as they are
 // and returns an empty string for invalid IPs.
 func validateIP(ip string) string {
-	ip = strings.ToLower(ip)
-	reV4 := regexp.MustCompile("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$")
-	if reV4.MatchString(ip) {
-		submatches := reV4.FindAllStringSubmatch(ip, -1)
-		for i := 1; i < len(submatches[0]); i++ {
-			n, err := strconv.Atoi(submatches[0][i])
-			if err != nil || n < 0 || n > 255 {
-				return ""
-			}
-		}
-		return ip
-	}
-
-	// see https://stackoverflow.com/questions/53497/regular-expression-that-matches-valid-ipv6-addresses
-	reV6 := regexp.MustCompile("^(([0-9a-f]{1,4}:){7,7}[0-9a-f]{1,4}|([0-9a-f]{1,4}:){1,7}:|([0-9a-f]{1,4}:){1,6}:[0-9a-f]{1,4}|([0-9a-f]{1,4}:){1,5}(:[0-9a-f]{1,4}){1,2}|([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,3}|([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,4}|([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,5}|[0-9a-f]{1,4}:((:[0-9a-f]{1,4}){1,6})|:((:[0-9a-f]{1,4}){1,7}|:)|fe80:(:[0-9a-f]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-f]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$")
-	if reV6.MatchString(ip) {
-		return ip
+	if parsedIP := net.ParseIP(ip); parsedIP != nil {
+		return parsedIP.String()
 	}
 	return ""
 }
