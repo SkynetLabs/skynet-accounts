@@ -1105,7 +1105,9 @@ func (api *API) trackUploadPOST(_ *database.User, w http.ResponseWriter, req *ht
 	// administrative details, such as user's quotas check.
 	// Note that this call is not affected by the request's context, so we use
 	// a separate one.
-	go api.checkUserQuotas(context.Background(), u)
+	if u != nil && !u.ID.IsZero() {
+		go api.checkUserQuotas(context.Background(), u)
+	}
 }
 
 // trackDownloadPOST registers a new download in the system.
@@ -1340,6 +1342,7 @@ func userLimitsGetFromTier(tierID int, quotaExceeded, inBytes bool) *UserLimitsG
 // validateIP is a simple pass-through helper that returns valid IPs as they are
 // and returns an empty string for invalid IPs.
 func validateIP(ip string) string {
+	ip = strings.ToLower(ip)
 	reV4 := regexp.MustCompile("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$")
 	if reV4.MatchString(ip) {
 		submatches := reV4.FindAllStringSubmatch(ip, -1)
@@ -1352,7 +1355,8 @@ func validateIP(ip string) string {
 		return ip
 	}
 
-	reV6 := regexp.MustCompile("^([0-9a-f]{4})\\.([0-9a-f]{4})\\.([0-9a-f]{4})\\.([0-9a-f]{4})\\.([0-9a-f]{4})\\.([0-9a-f]{4})\\.([0-9a-f]{4})\\.([0-9a-f]{4})$")
+	// see https://stackoverflow.com/questions/53497/regular-expression-that-matches-valid-ipv6-addresses
+	reV6 := regexp.MustCompile("^(([0-9a-f]{1,4}:){7,7}[0-9a-f]{1,4}|([0-9a-f]{1,4}:){1,7}:|([0-9a-f]{1,4}:){1,6}:[0-9a-f]{1,4}|([0-9a-f]{1,4}:){1,5}(:[0-9a-f]{1,4}){1,2}|([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,3}|([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,4}|([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,5}|[0-9a-f]{1,4}:((:[0-9a-f]{1,4}){1,6})|:((:[0-9a-f]{1,4}){1,7}|:)|fe80:(:[0-9a-f]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-f]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$")
 	if reV6.MatchString(ip) {
 		return ip
 	}

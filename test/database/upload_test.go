@@ -254,11 +254,26 @@ func TestUploadCreateAnon(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Register an anonymous upload.
-	up, err := db.UploadCreate(ctx, nil, *skylink)
+	ip := "1.0.2.233"
+	up, err := db.UploadCreate(ctx, nil, ip, *skylink)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !up.UserID.IsZero() {
 		t.Fatal("Expected zero user ID.")
+	}
+	if up.IP != ip {
+		t.Fatalf("Expected IP '%s', got '%s'", ip, up.IP)
+	}
+	// Register an anonymous upload without an IP address.
+	up, err = db.UploadCreate(ctx, nil, "", *skylink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !up.UserID.IsZero() {
+		t.Fatal("Expected zero user ID.")
+	}
+	if up.IP != "" {
+		t.Fatalf("Expected empty IP, got '%s'", up.IP)
 	}
 }

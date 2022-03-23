@@ -93,12 +93,8 @@ func (api *API) withAuth(h HandlerWithUser) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.logRequest(req)
 		u, token, err := api.userFromRequest(req)
-		if errors.Contains(err, database.ErrInvalidAPIKey) || errors.Contains(err, database.ErrUserNotFound) || errors.Contains(err, ErrNoToken) {
-			api.WriteError(w, err, http.StatusUnauthorized)
-			return
-		}
 		if err != nil {
-			api.WriteError(w, err, http.StatusInternalServerError)
+			api.WriteError(w, err, http.StatusUnauthorized)
 			return
 		}
 		// Embed the verified token in the context of the request.

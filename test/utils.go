@@ -160,7 +160,7 @@ func RegisterTestUpload(ctx context.Context, db *database.DB, user *database.Use
 	if user == nil {
 		user = &database.User{}
 	}
-	up, err := db.UploadCreate(ctx, user, *skylink)
+	up, err := db.UploadCreate(ctx, user, "", *skylink)
 	if err != nil {
 		return nil, primitive.ObjectID{}, errors.AddContext(err, "failed to register an upload")
 	}

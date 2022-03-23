@@ -128,3 +128,30 @@ func TestUserLimitsGetFromTier(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestValidateIP ensures that validateIP works as expected for both IPv4 and
+// IPv6 IP addresses.
+func TestValidateIP(t *testing.T) {
+	tests := []struct {
+		in       string
+		expected string
+	}{
+		{in: "", expected: ""},
+		{in: "12.12.12", expected: ""},
+		{in: "1.2.3.256", expected: ""},
+		{in: "1.2.3.4", expected: "1.2.3.4"},
+		{in: "0.0.0.0", expected: "0.0.0.0"},
+		{in: "2001:0db8:85a3:0000:0000:8a2e:0370:7334", expected: "2001:0db8:85a3:0000:0000:8a2e:0370:7334"},
+		{in: "FE80:0000:0000:0000:0202:B3FF:FE1E:8329", expected: strings.ToLower("FE80:0000:0000:0000:0202:B3FF:FE1E:8329")},
+		{in: "2001:db8:0:0:0:ff00:42:8329", expected: "2001:db8:0:0:0:ff00:42:8329"},
+		{in: "2001:db8::ff00:42:8329", expected: "2001:db8::ff00:42:8329"},
+		{in: "::1", expected: "::1"},
+	}
+
+	for _, tt := range tests {
+		out := validateIP(tt.in)
+		if out != tt.expected {
+			t.Errorf("Expected '%s' to get me '%s' but got '%s'", tt.in, tt.expected, out)
+		}
+	}
+}

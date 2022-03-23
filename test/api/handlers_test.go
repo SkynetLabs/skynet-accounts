@@ -215,8 +215,9 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Expected the cookie to have expired already.")
 	}
 	// Expect to be unable to get the user with this cookie.
-	_, _, err = at.Get("/user", nil)
+	_, b, err = at.Get("/user", nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Logf("Error: %s", string(b))
 		t.Fatal("Expected to be unable to fetch the user with this cookie.")
 	}
 	// Try logging out again. This should fail with a 401.
@@ -915,11 +916,11 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	}
 	expectedStats := database.UserStats{}
 
-	// Call trackUpload without a cookie.
+	// Call trackUpload without a cookie. We expect this to succeed.
 	at.ClearCredentials()
 	_, err = at.TrackUpload(skylink.String())
-	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
+	if err != nil {
+		t.Fatal(err)
 	}
 	at.SetCookie(c)
 	// Call trackUpload with an invalid skylink.
@@ -938,25 +939,25 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats.BandwidthUploads += skynet.BandwidthUploadCost(0)
 	expectedStats.RawStorageUsed += skynet.RawStorageUsed(0)
 
-	// Call trackDownload without a cookie.
+	// Call trackDownload without a cookie. Expect this to succeed.
 	at.ClearCredentials()
-	_, err = at.TrackDownload(skylink.String(), 100)
-	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
+	_, err = at.TrackDownload(skylink.String(), 100, "")
+	if err != nil {
+		t.Fatal(err)
 	}
 	at.SetCookie(c)
 	// Call trackDownload with an invalid skylink.
-	_, err = at.TrackDownload("INVALID_SKYLINK", 100)
+	_, err = at.TrackDownload("INVALID_SKYLINK", 100, "")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackDownload with a valid skylink and a negative size download
-	_, err = at.TrackDownload(skylink.String(), -100)
+	_, err = at.TrackDownload(skylink.String(), -100, "")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackDownload with a valid skylink.
-	_, err = at.TrackDownload(skylink.String(), 100)
+	_, err = at.TrackDownload(skylink.String(), 100, "")
 	if err != nil {
 		t.Fatal(err)
 	}
