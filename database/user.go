@@ -34,10 +34,6 @@ const (
 	// TierMaxReserved is a guard value that helps us validate tier values.
 	TierMaxReserved
 
-	// mbpsToBytesPerSecond is a multiplier to get from megabits per second to
-	// bytes per second.
-	mbpsToBytesPerSecond = 1024 * 1024 / 8
-
 	// filesAllowedPerTB defines a limit of number of uploaded files we impose
 	// on users. While we define it per TB, we impose it based on their entire
 	// quota, so an Extreme user will be able to upload up to 400_000 files
@@ -55,50 +51,50 @@ var (
 	UserLimits = map[int]TierLimits{
 		TierAnonymous: {
 			TierName:        "anonymous",
-			UploadBandwidth: 5 * mbpsToBytesPerSecond,
+			UploadBandwidth: 5 * skynet.MB,
 			// TODO: temporarily lowered the download bandwidth on the anon tier
 			// from 20mbps to 5mpbs
-			DownloadBandwidth: 5 * mbpsToBytesPerSecond,
-			MaxUploadSize:     1 * skynet.GiB,
+			DownloadBandwidth: 5 * skynet.MB,
+			MaxUploadSize:     1 * skynet.GB,
 			MaxNumberUploads:  0,
 			RegistryDelay:     250,
 			Storage:           0,
 		},
 		TierFree: {
 			TierName:          "free",
-			UploadBandwidth:   10 * mbpsToBytesPerSecond,
-			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
-			MaxUploadSize:     100 * skynet.GiB,
+			UploadBandwidth:   10 * skynet.MB,
+			DownloadBandwidth: 40 * skynet.MB,
+			MaxUploadSize:     100 * skynet.GB,
 			MaxNumberUploads:  0.1 * filesAllowedPerTB,
 			RegistryDelay:     125,
-			Storage:           100 * skynet.GiB,
+			Storage:           100 * skynet.GB,
 		},
 		TierPremium5: {
 			TierName:          "plus",
-			UploadBandwidth:   20 * mbpsToBytesPerSecond,
-			DownloadBandwidth: 80 * mbpsToBytesPerSecond,
-			MaxUploadSize:     1 * skynet.TiB,
+			UploadBandwidth:   20 * skynet.MB,
+			DownloadBandwidth: 80 * skynet.MB,
+			MaxUploadSize:     1 * skynet.TB,
 			MaxNumberUploads:  1 * filesAllowedPerTB,
 			RegistryDelay:     0,
-			Storage:           1 * skynet.TiB,
+			Storage:           1 * skynet.TB,
 		},
 		TierPremium20: {
 			TierName:          "pro",
-			UploadBandwidth:   40 * mbpsToBytesPerSecond,
-			DownloadBandwidth: 160 * mbpsToBytesPerSecond,
-			MaxUploadSize:     4 * skynet.TiB,
+			UploadBandwidth:   40 * skynet.MB,
+			DownloadBandwidth: 160 * skynet.MB,
+			MaxUploadSize:     4 * skynet.TB,
 			MaxNumberUploads:  4 * filesAllowedPerTB,
 			RegistryDelay:     0,
-			Storage:           4 * skynet.TiB,
+			Storage:           4 * skynet.TB,
 		},
 		TierPremium80: {
 			TierName:          "extreme",
-			UploadBandwidth:   80 * mbpsToBytesPerSecond,
-			DownloadBandwidth: 320 * mbpsToBytesPerSecond,
-			MaxUploadSize:     10 * skynet.TiB,
+			UploadBandwidth:   80 * skynet.MB,
+			DownloadBandwidth: 320 * skynet.MB,
+			MaxUploadSize:     10 * skynet.TB,
 			MaxNumberUploads:  20 * filesAllowedPerTB,
 			RegistryDelay:     0,
-			Storage:           20 * skynet.TiB,
+			Storage:           20 * skynet.TB,
 		},
 	}
 

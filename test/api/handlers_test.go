@@ -588,7 +588,7 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	defer at.ClearCredentials()
 
 	// Create an upload.
-	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128%skynet.KiB)
+	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128%skynet.KB)
 	// Make sure it shows up for this user.
 	_, b, err := at.Get("/user/uploads", nil)
 	if err != nil {
