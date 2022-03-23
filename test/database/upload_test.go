@@ -7,7 +7,6 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
-
 	"gitlab.com/NebulousLabs/fastrand"
 )
 
@@ -238,5 +237,28 @@ func TestUnpinUploads(t *testing.T) {
 	if stats.BandwidthUploads != expectedUploadBandwidth {
 		t.Fatalf("Expected upload bandwidth used of %d (%d MiB), got %d (%d MiB).",
 			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+	}
+}
+
+// TestUploadCreateAnon ensures that UploadCreate can create anonymous uploads.
+func TestUploadCreateAnon(t *testing.T) {
+	ctx := context.Background()
+	dbName := test.DBNameForTest(t.Name())
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sl := test.RandomSkylink()
+	skylink, err := db.Skylink(ctx, sl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Register an anonymous upload.
+	up, err := db.UploadCreate(ctx, nil, *skylink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !up.UserID.IsZero() {
+		t.Fatal("Expected zero user ID.")
 	}
 }

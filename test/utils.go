@@ -157,7 +157,10 @@ func RandomSkylink() string {
 // RegisterTestUpload registers an upload of the given skylink by the given user.
 // Returns the skylink, the upload's id and error.
 func RegisterTestUpload(ctx context.Context, db *database.DB, user *database.User, skylink *database.Skylink) (*database.Skylink, primitive.ObjectID, error) {
-	up, err := db.UploadCreate(ctx, *user, *skylink)
+	if user == nil {
+		user = &database.User{}
+	}
+	up, err := db.UploadCreate(ctx, user, *skylink)
 	if err != nil {
 		return nil, primitive.ObjectID{}, errors.AddContext(err, "failed to register an upload")
 	}

@@ -375,7 +375,7 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = at.DB.DownloadCreate(at.Ctx, *u.User, *sl, 128)
+	err = at.DB.DownloadCreate(at.Ctx, u.User, *sl, 128)
 	if err != nil {
 		t.Fatal(err)
 	}

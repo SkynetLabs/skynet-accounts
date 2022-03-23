@@ -41,8 +41,8 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/register", api.WithDBSession(api.noAuth(api.registerPOST)))
 
 	// Endpoints at which Nginx reports portal usage.
-	api.staticRouter.POST("/track/upload/:skylink", api.withAuth(api.trackUploadPOST))
-	api.staticRouter.POST("/track/download/:skylink", api.withAuth(api.trackDownloadPOST))
+	api.staticRouter.POST("/track/upload/:skylink", api.noAuth(api.trackUploadPOST))
+	api.staticRouter.POST("/track/download/:skylink", api.noAuth(api.trackDownloadPOST))
 	api.staticRouter.POST("/track/registry/read", api.withAuth(api.trackRegistryReadPOST))
 	api.staticRouter.POST("/track/registry/write", api.withAuth(api.trackRegistryWritePOST))
 
@@ -92,24 +92,14 @@ func (api *API) noAuth(h HandlerWithUser) httprouter.Handle {
 func (api *API) withAuth(h HandlerWithUser) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.logRequest(req)
-		// Check for an API key.
-		u, token, err := api.userAndTokenByAPIKey(req)
-		// If there is an unexpected error, that is a 500.
-		if err != nil && !errors.Contains(err, ErrNoAPIKey) && !errors.Contains(err, database.ErrInvalidAPIKey) && !errors.Contains(err, database.ErrUserNotFound) {
+		u, token, err := api.userFromRequest(req)
+		if errors.Contains(err, database.ErrInvalidAPIKey) || errors.Contains(err, database.ErrUserNotFound) || errors.Contains(err, ErrNoToken) {
+			api.WriteError(w, err, http.StatusUnauthorized)
+			return
+		}
+		if err != nil {
 			api.WriteError(w, err, http.StatusInternalServerError)
 			return
-		}
-		if err != nil && (errors.Contains(err, database.ErrInvalidAPIKey) || errors.Contains(err, database.ErrUserNotFound)) {
-			api.WriteError(w, errors.AddContext(err, "failed to fetch user by API key"), http.StatusUnauthorized)
-			return
-		}
-		// If there is no API key check for a token.
-		if errors.Contains(err, ErrNoAPIKey) {
-			u, token, err = api.userAndTokenByRequestToken(req)
-			if err != nil {
-				api.WriteError(w, err, http.StatusUnauthorized)
-				return
-			}
 		}
 		// Embed the verified token in the context of the request.
 		ctx := jwt.ContextWithToken(req.Context(), token)

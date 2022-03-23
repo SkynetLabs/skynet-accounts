@@ -533,7 +533,7 @@ func TestUserStats(t *testing.T) {
 
 	// Register a small download.
 	smallDownload := int64(1 + fastrand.Intn(4*skynet.MiB))
-	err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
+	err = db.DownloadCreate(ctx, u, *skylinkSmall, smallDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
@@ -553,7 +553,7 @@ func TestUserStats(t *testing.T) {
 	}
 	// Register a big download.
 	bigDownload := int64(100*skynet.MiB + fastrand.Intn(4*skynet.MiB))
-	err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
+	err = db.DownloadCreate(ctx, u, *skylinkBig, bigDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}

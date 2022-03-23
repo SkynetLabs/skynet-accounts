@@ -15,6 +15,7 @@ import (
 type Upload struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
+	IP        string             `bson:"ip" json:"IP"`
 	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
 	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
 	Unpinned  bool               `bson:"unpinned" json:"-"`
@@ -45,15 +46,18 @@ func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, e
 
 // UploadCreate registers a new upload and counts it towards the user's used
 // storage.
-func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Upload, error) {
-	if user.ID.IsZero() {
-		return nil, errors.New("invalid user")
+func (db *DB) UploadCreate(ctx context.Context, user *User, ip string, skylink Skylink) (*Upload, error) {
+	if user == nil {
+		// If there is no user passed, we initialise it with the zero ID in
+		// order to denote an anonymous upload.
+		user = &User{ID: primitive.ObjectID{}}
 	}
 	if skylink.ID.IsZero() {
 		return nil, errors.New("skylink doesn't exist")
 	}
 	up := Upload{
 		UserID:    user.ID,
+		IP:        ip,
 		SkylinkID: skylink.ID,
 		Timestamp: time.Now().UTC(),
 	}
