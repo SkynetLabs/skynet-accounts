@@ -428,17 +428,18 @@ func processResponse(r *http.Response) (*http.Response, []byte, error) {
 }
 
 // TrackDownload performs a `POST /track/download/:skylink` request.
-func (at *AccountsTester) TrackDownload(skylink string, bytes int64, ip string) (int, error) {
+func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error) {
 	form := url.Values{}
 	form.Set("bytes", fmt.Sprint(bytes))
-	form.Set("ip", ip)
 	r, _, err := at.request(http.MethodPost, "/track/download/"+skylink, form, nil, nil)
 	return r.StatusCode, err
 }
 
 // TrackUpload performs a `POST /track/upload/:skylink` request.
-func (at *AccountsTester) TrackUpload(skylink string) (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, nil, nil, nil)
+func (at *AccountsTester) TrackUpload(skylink string, ip string) (int, error) {
+	form := url.Values{}
+	form.Set("ip", ip)
+	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
 	return r.StatusCode, err
 }
 

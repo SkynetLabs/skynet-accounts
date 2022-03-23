@@ -215,9 +215,8 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Expected the cookie to have expired already.")
 	}
 	// Expect to be unable to get the user with this cookie.
-	_, b, err = at.Get("/user", nil)
+	_, _, err = at.Get("/user", nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Logf("Error: %s", string(b))
 		t.Fatal("Expected to be unable to fetch the user with this cookie.")
 	}
 	// Try logging out again. This should fail with a 401.
@@ -513,7 +512,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	// Make a specific call to trackUploadPOST in order to trigger the
 	// checkUserQuotas method. This wil register the upload a second time but
 	// that doesn't affect the test.
-	_, err = at.TrackUpload(sl.Skylink)
+	_, err = at.TrackUpload(sl.Skylink, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -917,19 +916,21 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats := database.UserStats{}
 
 	// Call trackUpload without a cookie. We expect this to succeed.
+	// While we expect this to succeed, it won't be counted towards the user's
+	// quota, so we don't increment the expected stats.
 	at.ClearCredentials()
-	_, err = at.TrackUpload(skylink.String())
+	_, err = at.TrackUpload(skylink.String(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	at.SetCookie(c)
 	// Call trackUpload with an invalid skylink.
-	_, err = at.TrackUpload("INVALID_SKYLINK")
+	_, err = at.TrackUpload("INVALID_SKYLINK", "")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackUpload with a valid skylink.
-	_, err = at.TrackUpload(skylink.String())
+	_, err = at.TrackUpload(skylink.String(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -940,31 +941,33 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats.RawStorageUsed += skynet.RawStorageUsed(0)
 
 	// Call trackDownload without a cookie. Expect this to succeed.
+	// While we expect this to succeed, it won't be counted towards the user's
+	// quota, so we don't increment the expected stats.
 	at.ClearCredentials()
-	_, err = at.TrackDownload(skylink.String(), 100, "")
+	_, err = at.TrackDownload(skylink.String(), 100)
 	if err != nil {
 		t.Fatal(err)
 	}
 	at.SetCookie(c)
 	// Call trackDownload with an invalid skylink.
-	_, err = at.TrackDownload("INVALID_SKYLINK", 100, "")
+	_, err = at.TrackDownload("INVALID_SKYLINK", 100)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackDownload with a valid skylink and a negative size download
-	_, err = at.TrackDownload(skylink.String(), -100, "")
+	_, err = at.TrackDownload(skylink.String(), -100)
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackDownload with a valid skylink.
-	_, err = at.TrackDownload(skylink.String(), 100, "")
+	_, err = at.TrackDownload(skylink.String(), 200)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Adjust the expectations.
 	expectedStats.NumDownloads++
-	expectedStats.BandwidthDownloads += skynet.BandwidthDownloadCost(100)
-	expectedStats.TotalDownloadsSize += 100
+	expectedStats.BandwidthDownloads += skynet.BandwidthDownloadCost(200)
+	expectedStats.TotalDownloadsSize += 200
 
 	// Call trackRegistryRead without a cookie.
 	at.ClearCredentials()

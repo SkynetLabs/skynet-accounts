@@ -200,7 +200,7 @@ func TestUserTierCache(t *testing.T) {
 	// Make a specific call to trackUploadPOST in order to trigger the
 	// checkUserQuotas method. This wil register the upload a second time but
 	// that doesn't affect the test.
-	_, err = at.TrackUpload(sl.Skylink)
+	_, err = at.TrackUpload(sl.Skylink, "")
 	if err != nil {
 		t.Fatal(err)
 	}
