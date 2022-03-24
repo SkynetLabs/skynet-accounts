@@ -104,7 +104,7 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	uploadSize := int64(fastrand.Intn(int(modules.SectorSize / 2)))
-	_, _, err = test.CreateTestUpload(at.Ctx, at.DB, u, uploadSize)
+	_, _, err = test.CreateTestUpload(at.Ctx, at.DB, *u, uploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,11 +242,11 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	uploadSize := int64(fastrand.Intn(int(modules.SectorSize / 2)))
-	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u, uploadSize)
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u, uploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sl2, _, err := test.CreateTestUpload(at.Ctx, at.DB, u, uploadSize)
+	sl2, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u, uploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}

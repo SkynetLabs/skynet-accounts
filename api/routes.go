@@ -42,7 +42,7 @@ func (api *API) buildHTTPRoutes() {
 
 	// Endpoints at which Nginx reports portal usage.
 	api.staticRouter.POST("/track/upload/:skylink", api.noAuth(api.trackUploadPOST))
-	api.staticRouter.POST("/track/download/:skylink", api.noAuth(api.trackDownloadPOST))
+	api.staticRouter.POST("/track/download/:skylink", api.withAuth(api.trackDownloadPOST))
 	api.staticRouter.POST("/track/registry/read", api.withAuth(api.trackRegistryReadPOST))
 	api.staticRouter.POST("/track/registry/write", api.withAuth(api.trackRegistryWritePOST))
 

@@ -30,7 +30,7 @@ func TestUploadsByUser(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Create a skylink record and register an upload for it.
-	sl, _, err := test.CreateTestUpload(ctx, db, u, testUploadSize)
+	sl, _, err := test.CreateTestUpload(ctx, db, *u, testUploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestUploadsByUser(t *testing.T) {
 	}
 	// Create a second upload for the same skylink. The user's used storage
 	// should stay the same but the upload bandwidth should increase.
-	_, _, err = test.RegisterTestUpload(ctx, db, u, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, *u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
@@ -105,7 +105,7 @@ func TestUploadsByUser(t *testing.T) {
 		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
 	}
 	// Upload the same file again. Uploads go up, storage stays the same.
-	_, _, err = test.RegisterTestUpload(ctx, db, u, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, *u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload after unpinning.", err)
 	}
@@ -163,17 +163,17 @@ func TestUnpinUploads(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u2)
 	// Create a skylink record and register an upload for it.
-	sl, _, err := test.CreateTestUpload(ctx, db, u1, testUploadSize)
+	sl, _, err := test.CreateTestUpload(ctx, db, *u1, testUploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Upload it again for the same user.
-	_, _, err = test.RegisterTestUpload(ctx, db, u1, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, *u1, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
 	// Upload it for the second user.
-	_, _, err = test.RegisterTestUpload(ctx, db, u2, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, *u2, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
@@ -255,7 +255,7 @@ func TestUploadCreateAnon(t *testing.T) {
 	}
 	// Register an anonymous upload.
 	ip := "1.0.2.233"
-	up, err := db.UploadCreate(ctx, nil, ip, *skylink)
+	up, err := db.UploadCreate(ctx, database.AnonUser, ip, *skylink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestUploadCreateAnon(t *testing.T) {
 		t.Fatalf("Expected IP '%s', got '%s'", ip, up.IP)
 	}
 	// Register an anonymous upload without an IP address.
-	up, err = db.UploadCreate(ctx, nil, "", *skylink)
+	up, err = db.UploadCreate(ctx, database.AnonUser, "", *skylink)
 	if err != nil {
 		t.Fatal(err)
 	}

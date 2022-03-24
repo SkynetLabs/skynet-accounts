@@ -1079,14 +1079,13 @@ func (api *API) trackUploadPOST(_ *database.User, w http.ResponseWriter, req *ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, _, err := api.userFromRequest(req)
-	if err != nil {
+	u, _, _ := api.userFromRequest(req)
+	if u == nil {
 		// This will be tracked as an anonymous request.
-		// The assignment below is redundant but adds clarity.
-		u = nil
+		u = &database.AnonUser
 	}
 	ip := validateIP(req.Form.Get("ip"))
-	_, err = api.staticDB.UploadCreate(req.Context(), u, ip, *skylink)
+	_, err = api.staticDB.UploadCreate(req.Context(), *u, ip, *skylink)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -1111,7 +1110,7 @@ func (api *API) trackUploadPOST(_ *database.User, w http.ResponseWriter, req *ht
 }
 
 // trackDownloadPOST registers a new download in the system.
-func (api *API) trackDownloadPOST(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) trackDownloadPOST(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	err := req.ParseForm()
 	if err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -1147,13 +1146,7 @@ func (api *API) trackDownloadPOST(_ *database.User, w http.ResponseWriter, req *
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, _, err := api.userFromRequest(req)
-	if err != nil {
-		// This will be tracked as an anonymous request.
-		// The assignment below is redundant but adds clarity.
-		u = nil
-	}
-	err = api.staticDB.DownloadCreate(req.Context(), u, *skylink, downloadedBytes)
+	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

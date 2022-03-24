@@ -46,12 +46,7 @@ func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, e
 
 // UploadCreate registers a new upload and counts it towards the user's used
 // storage.
-func (db *DB) UploadCreate(ctx context.Context, user *User, ip string, skylink Skylink) (*Upload, error) {
-	if user == nil {
-		// If there is no user passed, we initialise it with the zero ID in
-		// order to denote an anonymous upload.
-		user = &User{ID: primitive.ObjectID{}}
-	}
+func (db *DB) UploadCreate(ctx context.Context, user User, ip string, skylink Skylink) (*Upload, error) {
 	if skylink.ID.IsZero() {
 		return nil, errors.New("skylink doesn't exist")
 	}

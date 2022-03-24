@@ -371,11 +371,11 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Failed to create a user and log in:", err)
 	}
 	// Create some data for this user.
-	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128)
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = at.DB.DownloadCreate(at.Ctx, u.User, *sl, 128)
+	err = at.DB.DownloadCreate(at.Ctx, *u.User, *sl, 128)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +505,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	// anonymous levels. Their tier should remain Free.
 	dbu2 := *u2.User
 	filesize := database.UserLimits[database.TierFree].Storage + 1
-	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, &dbu2, filesize)
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, dbu2, filesize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -588,7 +588,7 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	defer at.ClearCredentials()
 
 	// Create an upload.
-	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128%skynet.KB)
+	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128%skynet.KB)
 	// Make sure it shows up for this user.
 	_, b, err := at.Get("/user/uploads", nil)
 	if err != nil {

@@ -51,12 +51,7 @@ func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Downloa
 
 // DownloadCreate registers a new download. Marks partial downloads by supplying
 // the `bytes` param. If `bytes` is 0 we assume a full download.
-func (db *DB) DownloadCreate(ctx context.Context, user *User, skylink Skylink, bytes int64) error {
-	if user == nil {
-		// If there is no user passed, we initialise it with the zero ID in
-		// order to denote an anonymous download.
-		user = &User{ID: primitive.ObjectID{}}
-	}
+func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, bytes int64) error {
 	if skylink.ID.IsZero() {
 		return ErrInvalidSkylink
 	}

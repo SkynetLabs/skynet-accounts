@@ -492,7 +492,7 @@ func TestUserStats(t *testing.T) {
 	expectedDownloadBandwidth := int64(0)
 
 	// Create a small upload.
-	skylinkSmall, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeSmall)
+	skylinkSmall, _, err := test.CreateTestUpload(ctx, db, *u, testUploadSizeSmall)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -512,7 +512,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Create a big upload.
-	skylinkBig, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeBig)
+	skylinkBig, _, err := test.CreateTestUpload(ctx, db, *u, testUploadSizeBig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -533,7 +533,7 @@ func TestUserStats(t *testing.T) {
 
 	// Register a small download.
 	smallDownload := int64(1 + fastrand.Intn(4*skynet.MB))
-	err = db.DownloadCreate(ctx, u, *skylinkSmall, smallDownload)
+	err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
@@ -553,7 +553,7 @@ func TestUserStats(t *testing.T) {
 	}
 	// Register a big download.
 	bigDownload := int64(100*skynet.MB + fastrand.Intn(4*skynet.MB))
-	err = db.DownloadCreate(ctx, u, *skylinkBig, bigDownload)
+	err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
