@@ -28,7 +28,10 @@ func TestUploadsByUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	// Create a skylink record and register an upload for it.
 	sl, _, err := test.CreateTestUpload(ctx, db, u, testUploadSize)
@@ -153,7 +156,10 @@ func TestUnpinUploads(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u1)
 	sub2 := string(fastrand.Bytes(test.UserSubLen))
 	u2, err := db.UserCreate(ctx, "email2@example.com", "", sub2, database.TierPremium5)
@@ -161,7 +167,10 @@ func TestUnpinUploads(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u2)
 	// Create a skylink record and register an upload for it.
 	sl, _, err := test.CreateTestUpload(ctx, db, u1, testUploadSize)
