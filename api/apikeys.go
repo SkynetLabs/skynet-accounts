@@ -13,6 +13,10 @@ import (
 )
 
 type (
+	// Revive complains about these names stuttering but we like them as they
+	// are, so we'll disable revive for a moment here.
+	//revive:disable
+
 	// APIKeyPOST describes the body of a POST request that creates an API key
 	APIKeyPOST struct {
 		Name     string   `json:"name"`
@@ -46,6 +50,8 @@ type (
 		APIKeyResponse
 		Key database.APIKey `json:"key"`
 	}
+
+	//revive:enable
 )
 
 // Validate checks if the request and its parts are valid.
@@ -64,6 +70,8 @@ func (akp APIKeyPOST) Validate() error {
 	}
 	return nil
 }
+
+//revive:disable
 
 // APIKeyResponseFromAPIKey creates a new APIKeyResponse from the given API key.
 func APIKeyResponseFromAPIKey(ak database.APIKeyRecord) *APIKeyResponse {
@@ -94,6 +102,8 @@ func APIKeyResponseWithKeyFromAPIKey(ak database.APIKeyRecord) *APIKeyResponseWi
 		Key: ak.Key,
 	}
 }
+
+//revive:enable
 
 // userAPIKeyPOST creates a new API key for the user.
 func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {

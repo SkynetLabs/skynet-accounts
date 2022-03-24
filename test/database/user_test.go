@@ -323,6 +323,34 @@ func TestUserCreate(t *testing.T) {
 	}
 }
 
+// TestUserCreateEmailConfirmation tests UserCreateEmailConfirmation.
+func TestUserCreateEmailConfirmation(t *testing.T) {
+	ctx := context.Background()
+	dbName := test.DBNameForTest(t.Name())
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+	tk, err := db.UserCreateEmailConfirmation(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u1, err := db.UserByEmail(ctx, u.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u1.EmailConfirmationToken != tk {
+		t.Fatal("Unexpected confirmation token.")
+	}
+}
+
 // TestUserDelete ensures UserDelete works as expected.
 func TestUserDelete(t *testing.T) {
 	ctx := context.Background()

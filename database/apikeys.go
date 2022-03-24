@@ -100,7 +100,7 @@ func (ak APIKey) IsValid() bool {
 // LoadBytes encodes a []byte of size PubKeySize into an API key.
 func (ak *APIKey) LoadBytes(b []byte) error {
 	if len(b) != PubKeySize {
-		return errors.New(fmt.Sprintf("unexpected API key size, %d != %d", len(b), PubKeySize))
+		return fmt.Errorf("unexpected API key size, %d != %d", len(b), PubKeySize)
 	}
 	*ak = APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
 	return nil
@@ -252,10 +252,8 @@ func (db *DB) APIKeyUpdate(ctx context.Context, user User, akID primitive.Object
 		"user_id": user.ID,
 	}
 	update := bson.M{"$set": bson.M{"skylinks": skylinks}}
-	opts := options.UpdateOptions{
-		Upsert: &False,
-	}
-	ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
+	opts := options.Update().SetUpsert(false)
+	ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		return err
 	}
@@ -287,10 +285,8 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 		update = bson.M{
 			"$addToSet": bson.M{"skylinks": bson.M{"$each": addSkylinks}},
 		}
-		opts := options.UpdateOptions{
-			Upsert: &False,
-		}
-		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
+		opts := options.Update().SetUpsert(false)
+		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, opts)
 		if err != nil {
 			return err
 		}
@@ -303,10 +299,8 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 		update = bson.M{
 			"$pull": bson.M{"skylinks": bson.M{"$in": removeSkylinks}},
 		}
-		opts := options.UpdateOptions{
-			Upsert: &False,
-		}
-		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
+		opts := options.Update().SetUpsert(false)
+		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, opts)
 		if err != nil {
 			return err
 		}
