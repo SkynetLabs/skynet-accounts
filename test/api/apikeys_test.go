@@ -1,14 +1,11 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
-	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/modules"
@@ -124,20 +121,12 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	// Get user stats without a cookie or headers - pass the API key via a query
 	// variable. The main thing we want to see here is whether we get
 	// an `Unauthorized` error or not but we'll validate the stats as well.
-	params := url.Values{}
-	params.Set("apiKey", akWithKey.Key.String())
-	_, body, err := at.Get("/user/stats", params)
-	if err != nil {
-		t.Fatal(err, string(body))
+	h := map[string]string{
+		api.APIKeyHeader: akWithKey.Key.String(),
 	}
-	var us database.UserStats
-	err = json.Unmarshal(body, &us)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if us.TotalUploadsSize != uploadSize || us.NumUploads != 1 || us.BandwidthUploads != skynet.BandwidthUploadCost(uploadSize) {
-		t.Fatalf("Unexpected user stats. Expected TotalUploadSize %d (got %d), NumUploads 1 (got %d), BandwidthUploads %d (got %d).",
-			uploadSize, us.TotalDownloadsSize, us.NumUploads, skynet.BandwidthUploadCost(uploadSize), us.BandwidthUploads)
+	ulg, _, err := at.UserLimits("", h)
+	if ulg.TierID != database.TierFree {
+		t.Fatal("Unexpected user tier.")
 	}
 }
 
