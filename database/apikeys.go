@@ -61,6 +61,7 @@ type (
 	APIKeyRecord struct {
 		ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 		UserID    primitive.ObjectID `bson:"user_id" json:"-"`
+		Name      string             `bson:"name" json:"name"`
 		Public    bool               `bson:"public,string" json:"public,string"`
 		Key       APIKey             `bson:"key" json:"-"`
 		Skylinks  []string           `bson:"skylinks" json:"skylinks"`
@@ -135,7 +136,7 @@ func (akr APIKeyRecord) CoversSkylink(sl string) bool {
 }
 
 // APIKeyCreate creates a new API key.
-func (db *DB) APIKeyCreate(ctx context.Context, user User, public bool, skylinks []string) (*APIKeyRecord, error) {
+func (db *DB) APIKeyCreate(ctx context.Context, user User, name string, public bool, skylinks []string) (*APIKeyRecord, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
@@ -151,6 +152,7 @@ func (db *DB) APIKeyCreate(ctx context.Context, user User, public bool, skylinks
 	}
 	akr := APIKeyRecord{
 		UserID:    user.ID,
+		Name:      name,
 		Public:    public,
 		Key:       NewAPIKey(),
 		Skylinks:  skylinks,

@@ -15,6 +15,7 @@ import (
 type (
 	// APIKeyPOST describes the body of a POST request that creates an API key
 	APIKeyPOST struct {
+		Name     string   `json:"name"`
 		Public   bool     `json:"public,string"`
 		Skylinks []string `json:"skylinks"`
 	}
@@ -32,6 +33,7 @@ type (
 	APIKeyResponse struct {
 		ID        primitive.ObjectID `json:"id"`
 		UserID    primitive.ObjectID `json:"-"`
+		Name      string             `json:"name"`
 		Public    bool               `json:"public,string"`
 		Key       database.APIKey    `json:"-"`
 		Skylinks  []string           `json:"skylinks"`
@@ -68,6 +70,7 @@ func APIKeyResponseFromAPIKey(ak database.APIKeyRecord) *APIKeyResponse {
 	return &APIKeyResponse{
 		ID:        ak.ID,
 		UserID:    ak.UserID,
+		Name:      ak.Name,
 		Public:    ak.Public,
 		Key:       ak.Key,
 		Skylinks:  ak.Skylinks,
@@ -82,6 +85,7 @@ func APIKeyResponseWithKeyFromAPIKey(ak database.APIKeyRecord) *APIKeyResponseWi
 		APIKeyResponse: APIKeyResponse{
 			ID:        ak.ID,
 			UserID:    ak.UserID,
+			Name:      ak.Name,
 			Public:    ak.Public,
 			Key:       ak.Key,
 			Skylinks:  ak.Skylinks,
@@ -103,7 +107,7 @@ func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	ak, err := api.staticDB.APIKeyCreate(req.Context(), *u, body.Public, body.Skylinks)
+	ak, err := api.staticDB.APIKeyCreate(req.Context(), *u, body.Name, body.Public, body.Skylinks)
 	if errors.Contains(err, database.ErrMaxNumAPIKeysExceeded) {
 		err = errors.AddContext(err, "the maximum number of API keys a user can create is "+strconv.Itoa(database.MaxNumAPIKeysPerUser))
 		api.WriteError(w, err, http.StatusBadRequest)

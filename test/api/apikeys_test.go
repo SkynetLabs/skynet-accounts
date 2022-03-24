@@ -34,13 +34,16 @@ func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Create a new API key.
-	ak1, _, err := at.UserAPIKeysPOST(api.APIKeyPOST{})
+	ak1, _, err := at.UserAPIKeysPOST(api.APIKeyPOST{Name: "one"})
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
 	// Make sure the API key is private.
 	if ak1.Public {
 		t.Fatal("Expected the API key to be private.")
+	}
+	if ak1.Name != "one" {
+		t.Fatal("Unexpected name.")
 	}
 
 	// Create another API key.
@@ -62,6 +65,9 @@ func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	if ak2.ID.Hex() != aks[0].ID.Hex() && ak2.ID.Hex() != aks[1].ID.Hex() {
 		t.Fatalf("Missing key '%s'! Set: %+v", ak2.ID.Hex(), aks)
+	}
+	if aks[0].Name != "one" && aks[1].Name != "one" {
+		t.Fatalf("Expected one of the two keys to be named 'one', got %+v", aks)
 	}
 
 	// Delete an API key.
