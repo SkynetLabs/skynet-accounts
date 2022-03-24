@@ -51,9 +51,9 @@ func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Downloa
 
 // DownloadCreate registers a new download. Marks partial downloads by supplying
 // the `bytes` param. If `bytes` is 0 we assume a full download.
-func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, bytes int64) error {
+func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, bytes int64) (*Download, error) {
 	if skylink.ID.IsZero() {
-		return ErrInvalidSkylink
+		return nil, ErrInvalidSkylink
 	}
 
 	// Check if there exists a download of this skylink by this user, updated
@@ -61,7 +61,7 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 	down, err := db.DownloadRecent(ctx, user.ID, skylink.ID)
 	if err == nil {
 		// We found a recent download of this skylink. Let's update it.
-		return db.DownloadIncrement(ctx, down, bytes)
+		return nil, db.DownloadIncrement(ctx, down, bytes)
 	}
 
 	// We couldn't find a recent download of this skylink, updated within
@@ -73,8 +73,12 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
 		UpdatedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
-	_, err = db.staticDownloads.InsertOne(ctx, down)
-	return err
+	ior, err := db.staticDownloads.InsertOne(ctx, down)
+	if err != nil {
+		return nil, err
+	}
+	down.ID = ior.InsertedID.(primitive.ObjectID)
+	return down, nil
 }
 
 // DownloadsBySkylink fetches a page of downloads of this skylink and the total

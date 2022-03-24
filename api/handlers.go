@@ -1146,7 +1146,7 @@ func (api *API) trackDownloadPOST(u *database.User, w http.ResponseWriter, req *
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
+	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
