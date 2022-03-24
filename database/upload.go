@@ -13,12 +13,12 @@ import (
 
 // Upload ...
 type Upload struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
-	IP        string             `bson:"ip" json:"IP"`
-	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
-	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
-	Unpinned  bool               `bson:"unpinned" json:"-"`
+	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID     primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
+	UploaderIP string             `bson:"uploader_ip" json:"UploaderIP"`
+	SkylinkID  primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
+	Timestamp  time.Time          `bson:"timestamp" json:"timestamp"`
+	Unpinned   bool               `bson:"unpinned" json:"-"`
 }
 
 // UploadResponse is the representation of an upload we send as response to
@@ -51,10 +51,10 @@ func (db *DB) UploadCreate(ctx context.Context, user User, ip string, skylink Sk
 		return nil, errors.New("skylink doesn't exist")
 	}
 	up := Upload{
-		UserID:    user.ID,
-		IP:        ip,
-		SkylinkID: skylink.ID,
-		Timestamp: time.Now().UTC(),
+		UserID:     user.ID,
+		UploaderIP: ip,
+		SkylinkID:  skylink.ID,
+		Timestamp:  time.Now().UTC(),
 	}
 	ior, err := db.staticUploads.InsertOne(ctx, up)
 	if err != nil {
