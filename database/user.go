@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net/mail"
-	"strings"
 	"sync"
 	"time"
 
@@ -504,16 +503,19 @@ func (db *DB) UserPubKeyAdd(ctx context.Context, u User, pk PubKey) (err error) 
 
 // UserPubKeyRemove removes a PubKey from the given user's set.
 func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
-	filter := bson.M{"_id": u.ID}
+	filter := bson.M{
+		"_id":      u.ID,
+		"pub_keys": bson.M{"$ne": nil},
+	}
 	update := bson.M{
 		"$pull": bson.M{"pub_keys": pk},
 	}
 	opts := options.UpdateOptions{
 		Upsert: &False,
 	}
-	_, err := db.staticUsers.UpdateOne(ctx, filter, update, &opts)
-	if err != nil && strings.Contains(err.Error(), "Cannot apply $pull to a non-array value") {
-		return mongo.ErrNoDocuments
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update, &opts)
+	if err == nil && ur.MatchedCount == 0 {
+		err = mongo.ErrNoDocuments
 	}
 	return err
 }

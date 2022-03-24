@@ -14,7 +14,6 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.sia.tech/siad/crypto"
 )
 
@@ -462,7 +461,7 @@ func TestUserPubKey(t *testing.T) {
 	copy(pk1[:], fastrand.Bytes(database.PubKeySize))
 	// Try to remove a pubkey. Expect this to fail.
 	err = db.UserPubKeyRemove(ctx, *u, pk)
-	if err == nil || !errors.Contains(err, mongo.ErrNoDocuments) {
+	if err == nil {
 		t.Fatal(err)
 	}
 	// Add a pubkey.
