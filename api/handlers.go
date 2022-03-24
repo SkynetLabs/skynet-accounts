@@ -33,6 +33,13 @@ const (
 	LimitBodySizeLarge = 4 * skynet.MB
 )
 
+var (
+	// ErrInvalidCredentials is a generic user-facing error, used when the login
+	// flow fails. This error is sent instead of whatever internal error we had
+	// before in order to prevent an attacker from listing our users.
+	ErrInvalidCredentials = errors.New("invalid credentials")
+)
+
 type (
 	// ChallengePublic is the response of GET /login, GET /register,
 	// GET /user/pubkey/register
@@ -145,11 +152,11 @@ func (api *API) loginGET(_ *database.User, w http.ResponseWriter, req *http.Requ
 	}
 	_, err = api.staticDB.UserByPubKey(req.Context(), pk)
 	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusInternalServerError)
 		return
 	}
 	if errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, errors.New("no user with this pubkey"), http.StatusBadRequest)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusBadRequest)
 		return
 	}
 	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeLogin)
@@ -205,7 +212,7 @@ func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Requ
 	}
 	u, err := api.staticDB.UserByPubKey(ctx, pk)
 	if err != nil {
-		api.WriteError(w, err, http.StatusUnauthorized)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
 	api.loginUser(w, u, false)
@@ -217,13 +224,13 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if err != nil {
 		api.staticLogger.Debugf("Error fetching a user with email '%s': %+v\n", email, err)
-		api.WriteError(w, err, http.StatusUnauthorized)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
 	// Check if the password matches.
 	err = hash.Compare(password, []byte(u.PasswordHash))
 	if err != nil {
-		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
 	api.loginUser(w, u, false)
