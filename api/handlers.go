@@ -1272,10 +1272,7 @@ func (api *API) userFromRequest(req *http.Request) (*database.User, jwt2.Token, 
 	}
 	// If there is no API key check for a token.
 	if errors.Contains(err, ErrNoAPIKey) {
-		u, tk, err = api.userAndTokenByRequestToken(req)
-		if err != nil {
-			return nil, nil, err
-		}
+		return api.userAndTokenByRequestToken(req)
 	}
 	return u, tk, err
 }
