@@ -15,7 +15,7 @@ import (
 type Upload struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID     primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
-	UploaderIP string             `bson:"uploader_ip" json:"UploaderIP"`
+	UploaderIP string             `bson:"uploader_ip" json:"uploaderIP"`
 	SkylinkID  primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
 	Timestamp  time.Time          `bson:"timestamp" json:"timestamp"`
 	Unpinned   bool               `bson:"unpinned" json:"-"`
