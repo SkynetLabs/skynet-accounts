@@ -1,12 +1,12 @@
 package database
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"strings"
 	"time"
@@ -29,7 +29,7 @@ const (
 	// ChallengeTypeRegister is the type of the registration challenge.
 	ChallengeTypeRegister = "skynet-portal-register"
 	// ChallengeTypeUpdate is the type of the update challenge which we use when
-	// we change the user's pubKey.
+	// we register a new pubkey for the user.
 	ChallengeTypeUpdate = "skynet-portal-update"
 
 	// PubKeySize defines the length of the public key in bytes.
@@ -83,9 +83,9 @@ type (
 		ExpiresAt   time.Time          `bson:"expires_at"`
 	}
 
-	// challengeResponseRequest defines the format in which the caller will deliver
+	// ChallengeResponseRequest defines the format in which the caller will deliver
 	// its response to a challenge.
-	challengeResponseRequest struct {
+	ChallengeResponseRequest struct {
 		Response  string `json:"response"`
 		Signature string `json:"signature"`
 	}
@@ -214,8 +214,15 @@ func (cr *ChallengeResponse) LoadFromBytes(b []byte) error {
 	if b == nil {
 		return errors.New("invalid input")
 	}
-	var payload challengeResponseRequest
-	err := json.Unmarshal(b, &payload)
+	return cr.LoadFromReader(bytes.NewBuffer(b))
+}
+
+// LoadFromReader loads a ChallengeResponse from the given io.Reader.
+//
+// Typically, this reader will be a request.Body.
+func (cr *ChallengeResponse) LoadFromReader(r io.Reader) error {
+	var payload ChallengeResponseRequest
+	err := json.NewDecoder(r).Decode(&payload)
 	if err != nil {
 		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
 	}
@@ -238,28 +245,16 @@ func (cr *ChallengeResponse) LoadFromBytes(b []byte) error {
 	return nil
 }
 
-// LoadFromReader loads a ChallengeResponse from the given io.Reader.
-//
-// Typically, this reader will be a request.Body.
-func (cr *ChallengeResponse) LoadFromReader(r io.Reader) error {
-	// Parse the request's body.
-	b, err := ioutil.ReadAll(r)
-	if err != nil {
-		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
-	}
-	return cr.LoadFromBytes(b)
-}
-
 // LoadString loads a PubKey from its hex-encoded string form.
 func (pk *PubKey) LoadString(s string) error {
-	bytes, err := hex.DecodeString(s)
+	bb, err := hex.DecodeString(s)
 	if err != nil {
 		return errors.AddContext(err, ErrInvalidPublicKey.Error())
 	}
-	if len(bytes) != PubKeySize {
+	if len(bb) != PubKeySize {
 		return ErrInvalidPublicKey
 	}
-	*pk = bytes[:]
+	*pk = bb[:]
 	return nil
 }
 

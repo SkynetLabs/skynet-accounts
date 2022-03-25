@@ -242,7 +242,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 
 	// Call unauthorized.
 	at.ClearCredentials()
-	_, _, err = at.Put("/user", nil, nil)
+	_, _, err = at.UserPUT("", "", "")
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
 	}
@@ -340,9 +340,9 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	// Delete the user.
 	at.SetCookie(c)
 	defer at.ClearCredentials()
-	r, _, err := at.Delete("/user", nil)
-	if err != nil || r.StatusCode != http.StatusNoContent {
-		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
+	status, err := at.UserDELETE()
+	if err != nil || status != http.StatusNoContent {
+		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, status, err)
 	}
 	// Make sure the use doesn't exist anymore.
 	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
@@ -373,16 +373,16 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try to delete the user without a cookie.
 	at.ClearCredentials()
-	r, _, _ = at.Delete("/user", nil)
-	if r.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("Expected %d, got %d", http.StatusUnauthorized, r.StatusCode)
+	status, _ = at.UserDELETE()
+	if status != http.StatusUnauthorized {
+		t.Fatalf("Expected %d, got %d", http.StatusUnauthorized, status)
 	}
 	// Delete the user.
 	at.SetCookie(c)
 	defer at.ClearCredentials()
-	r, _, err = at.Delete("/user", nil)
-	if err != nil || r.StatusCode != http.StatusNoContent {
-		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, r.StatusCode, err)
+	status, err = at.UserDELETE()
+	if err != nil || status != http.StatusNoContent {
+		t.Fatalf("Expected %d success, got %d '%s'", http.StatusNoContent, status, err)
 	}
 	// Make sure the user doesn't exist anymore.
 	_, err = at.DB.UserByEmail(at.Ctx, u.Email)
@@ -399,9 +399,9 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 			stats.NumUploads, stats.NumDownloads, stats.NumRegReads, stats.NumRegWrites)
 	}
 	// Try to delete the same user again.
-	r, _, _ = at.Delete("/user", nil)
-	if r.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("Expected %d, got %d.", http.StatusUnauthorized, r.StatusCode)
+	status, _ = at.UserDELETE()
+	if status != http.StatusUnauthorized {
+		t.Fatalf("Expected %d, got %d.", http.StatusUnauthorized, status)
 	}
 }
 
@@ -589,13 +589,13 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	}
 	// Try to delete the upload without passing a JWT cookie.
 	at.ClearCredentials()
-	_, b, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
+	_, err = at.UploadsDELETE(skylink.Skylink)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected error %s, got %s. Body: %s", unauthorized, err, string(b))
 	}
 	at.SetCookie(c)
 	// Delete it.
-	_, b, err = at.Delete("/user/uploads/"+skylink.Skylink, nil)
+	_, err = at.UploadsDELETE(skylink.Skylink)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}

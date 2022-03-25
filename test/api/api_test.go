@@ -226,7 +226,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	// Delete the uploaded file, so the user's quota recovers.
 	// This call should invalidate the tier cache.
-	_, _, err = at.Delete("/user/uploads/"+sl.Skylink, nil)
+	_, err = at.UploadsDELETE(sl.Skylink)
 	if err != nil {
 		t.Fatal(err)
 	}
