@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -20,6 +21,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/julienschmidt/httprouter"
+	jwt2 "github.com/lestrrat-go/jwx/jwt"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -1088,7 +1090,7 @@ func (api *API) userRecoverPOST(_ *database.User, w http.ResponseWriter, req *ht
 }
 
 // trackUploadPOST registers a new upload in the system.
-func (api *API) trackUploadPOST(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) trackUploadPOST(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sl := ps.ByName("skylink")
 	if sl == "" {
 		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
@@ -1103,7 +1105,13 @@ func (api *API) trackUploadPOST(u *database.User, w http.ResponseWriter, req *ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.UploadCreate(req.Context(), *u, *skylink)
+	u, _, _ := api.userFromRequest(req)
+	if u == nil {
+		// This will be tracked as an anonymous request.
+		u = &database.AnonUser
+	}
+	ip := validateIP(req.Form.Get("ip"))
+	_, err = api.staticDB.UploadCreate(req.Context(), *u, ip, *skylink)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -1122,7 +1130,9 @@ func (api *API) trackUploadPOST(u *database.User, w http.ResponseWriter, req *ht
 	// administrative details, such as user's quotas check.
 	// Note that this call is not affected by the request's context, so we use
 	// a separate one.
-	go api.checkUserQuotas(context.Background(), u)
+	if u != nil && !u.ID.IsZero() {
+		go api.checkUserQuotas(context.Background(), u)
+	}
 }
 
 // trackDownloadPOST registers a new download in the system.
@@ -1162,7 +1172,7 @@ func (api *API) trackDownloadPOST(u *database.User, w http.ResponseWriter, req *
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
+	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -1251,6 +1261,25 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 	}
 }
 
+// userFromRequest checks the requests for various forms of authentication (API
+// key, cookie, authorization header) and returns user information based on
+// those.
+func (api *API) userFromRequest(req *http.Request) (*database.User, jwt2.Token, error) {
+	// Check for an API key.
+	u, tk, err := api.userAndTokenByAPIKey(req)
+	if err != nil && !errors.Contains(err, ErrNoAPIKey) {
+		return nil, nil, err
+	}
+	// If there is no API key check for a token.
+	if errors.Contains(err, ErrNoAPIKey) {
+		u, tk, err = api.userAndTokenByRequestToken(req)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return u, tk, err
+}
+
 // wellKnownJWKSGET returns our public JWKS, so people can use that to verify
 // the authenticity of the JWT tokens we issue.
 func (api *API) wellKnownJWKSGET(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
@@ -1327,4 +1356,13 @@ func userLimitsGetFromTier(tierID int, quotaExceeded, inBytes bool) *UserLimitsG
 		MaxNumberUploads:  limitsTier.MaxNumberUploads,
 		RegistryDelay:     limitsTier.RegistryDelay,
 	}
+}
+
+// validateIP is a simple pass-through helper that returns valid IPs as they are
+// and returns an empty string for invalid IPs.
+func validateIP(ip string) string {
+	if parsedIP := net.ParseIP(ip); parsedIP != nil {
+		return parsedIP.String()
+	}
+	return ""
 }

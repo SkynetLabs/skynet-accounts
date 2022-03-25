@@ -436,8 +436,10 @@ func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error
 }
 
 // TrackUpload performs a `POST /track/upload/:skylink` request.
-func (at *AccountsTester) TrackUpload(skylink string) (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, nil, nil, nil)
+func (at *AccountsTester) TrackUpload(skylink string, ip string) (int, error) {
+	form := url.Values{}
+	form.Set("ip", ip)
+	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
 	return r.StatusCode, err
 }
 
