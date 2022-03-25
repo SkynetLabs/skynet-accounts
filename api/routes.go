@@ -53,6 +53,7 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/limits", api.noAuth(api.userLimitsGET))
 	api.staticRouter.GET("/user/limits/:skylink", api.noAuth(api.userLimitsSkylinkGET))
 	api.staticRouter.GET("/user/stats", api.withAuth(api.userStatsGET))
+	api.staticRouter.DELETE("/user/pubkey/:pubKey", api.WithDBSession(api.withAuth(api.userPubKeyDELETE)))
 	api.staticRouter.GET("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterGET)))
 	api.staticRouter.POST("/user/pubkey/register", api.WithDBSession(api.withAuth(api.userPubKeyRegisterPOST)))
 	api.staticRouter.GET("/user/uploads", api.withAuth(api.userUploadsGET))

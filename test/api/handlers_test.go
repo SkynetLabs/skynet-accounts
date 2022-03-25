@@ -59,6 +59,7 @@ func TestHandlers(t *testing.T) {
 		{name: "LoginLogout", test: testHandlerLoginPOST},
 		{name: "UserEdit", test: testUserPUT},
 		{name: "UserAddPubKey", test: testUserAddPubKey},
+		{name: "DeletePubKey", test: testUserDeletePubKey},
 		{name: "UserDelete", test: testUserDELETE},
 		{name: "UserLimits", test: testUserLimits},
 		{name: "UserDeleteUploads", test: testUserUploadsDELETE},
