@@ -436,8 +436,10 @@ func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error
 }
 
 // TrackUpload performs a `POST /track/upload/:skylink` request.
-func (at *AccountsTester) TrackUpload(skylink string) (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, nil, nil, nil)
+func (at *AccountsTester) TrackUpload(skylink string, ip string) (int, error) {
+	form := url.Values{}
+	form.Set("ip", ip)
+	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
 	return r.StatusCode, err
 }
 
@@ -475,11 +477,10 @@ func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (ap
 }
 
 // UserLimitsSkylink performs a `GET /user/limits/:skylink` request.
-func (at *AccountsTester) UserLimitsSkylink(sl string, unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
+func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, headers map[string]string) (api.UserLimitsGET, int, error) {
 	queryParams := url.Values{}
-	if unit != "" {
-		queryParams.Set("unit", unit)
-	}
+	queryParams.Set("unit", unit)
+	queryParams.Set("apiKey", apikey)
 	if !database.ValidSkylinkHash(sl) {
 		return api.UserLimitsGET{}, 0, database.ErrInvalidSkylink
 	}
