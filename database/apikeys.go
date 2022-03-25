@@ -61,6 +61,7 @@ type (
 	APIKeyRecord struct {
 		ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 		UserID    primitive.ObjectID `bson:"user_id" json:"-"`
+		Name      string             `bson:"name" json:"name"`
 		Public    bool               `bson:"public,string" json:"public,string"`
 		Key       APIKey             `bson:"key" json:"-"`
 		Skylinks  []string           `bson:"skylinks" json:"skylinks"`
@@ -99,7 +100,7 @@ func (ak APIKey) IsValid() bool {
 // LoadBytes encodes a []byte of size PubKeySize into an API key.
 func (ak *APIKey) LoadBytes(b []byte) error {
 	if len(b) != PubKeySize {
-		return errors.New(fmt.Sprintf("unexpected API key size, %d != %d", len(b), PubKeySize))
+		return fmt.Errorf("unexpected API key size, %d != %d", len(b), PubKeySize)
 	}
 	*ak = APIKey(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
 	return nil
@@ -135,7 +136,7 @@ func (akr APIKeyRecord) CoversSkylink(sl string) bool {
 }
 
 // APIKeyCreate creates a new API key.
-func (db *DB) APIKeyCreate(ctx context.Context, user User, public bool, skylinks []string) (*APIKeyRecord, error) {
+func (db *DB) APIKeyCreate(ctx context.Context, user User, name string, public bool, skylinks []string) (*APIKeyRecord, error) {
 	if user.ID.IsZero() {
 		return nil, errors.New("invalid user")
 	}
@@ -151,6 +152,7 @@ func (db *DB) APIKeyCreate(ctx context.Context, user User, public bool, skylinks
 	}
 	akr := APIKeyRecord{
 		UserID:    user.ID,
+		Name:      name,
 		Public:    public,
 		Key:       NewAPIKey(),
 		Skylinks:  skylinks,
@@ -246,19 +248,17 @@ func (db *DB) APIKeyUpdate(ctx context.Context, user User, akID primitive.Object
 	}
 	filter := bson.M{
 		"_id":     akID,
-		"public":  &True, // you can only update public API keys
+		"public":  true,
 		"user_id": user.ID,
 	}
 	update := bson.M{"$set": bson.M{"skylinks": skylinks}}
-	opts := options.UpdateOptions{
-		Upsert: &False,
-	}
-	ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
+	opts := options.Update().SetUpsert(false)
+	ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		return err
 	}
 	if ur.ModifiedCount == 0 {
-		return errors.New("public API key not found, no keys updated")
+		return mongo.ErrNoDocuments
 	}
 	return nil
 }
@@ -285,15 +285,13 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 		update = bson.M{
 			"$addToSet": bson.M{"skylinks": bson.M{"$each": addSkylinks}},
 		}
-		opts := options.UpdateOptions{
-			Upsert: &False,
-		}
-		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
+		opts := options.Update().SetUpsert(false)
+		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, opts)
 		if err != nil {
 			return err
 		}
 		if ur.ModifiedCount == 0 {
-			return errors.New("public API key not found, no keys updated")
+			return mongo.ErrNoDocuments
 		}
 	}
 	// Then, remove all skylinks that need to be removed.
@@ -301,10 +299,8 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 		update = bson.M{
 			"$pull": bson.M{"skylinks": bson.M{"$in": removeSkylinks}},
 		}
-		opts := options.UpdateOptions{
-			Upsert: &False,
-		}
-		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, &opts)
+		opts := options.Update().SetUpsert(false)
+		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, opts)
 		if err != nil {
 			return err
 		}

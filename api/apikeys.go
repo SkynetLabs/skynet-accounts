@@ -13,8 +13,13 @@ import (
 )
 
 type (
+	// Revive complains about these names stuttering but we like them as they
+	// are, so we'll disable revive for a moment here.
+	//revive:disable
+
 	// APIKeyPOST describes the body of a POST request that creates an API key
 	APIKeyPOST struct {
+		Name     string   `json:"name"`
 		Public   bool     `json:"public,string"`
 		Skylinks []string `json:"skylinks"`
 	}
@@ -32,6 +37,7 @@ type (
 	APIKeyResponse struct {
 		ID        primitive.ObjectID `json:"id"`
 		UserID    primitive.ObjectID `json:"-"`
+		Name      string             `json:"name"`
 		Public    bool               `json:"public,string"`
 		Key       database.APIKey    `json:"-"`
 		Skylinks  []string           `json:"skylinks"`
@@ -44,17 +50,19 @@ type (
 		APIKeyResponse
 		Key database.APIKey `json:"key"`
 	}
+
+	//revive:enable
 )
 
 // Validate checks if the request and its parts are valid.
 func (akp APIKeyPOST) Validate() error {
 	if !akp.Public && len(akp.Skylinks) > 0 {
-		return errors.New("public API keys cannot refer to skylinlks")
+		return errors.New("public API keys cannot refer to skylinks")
 	}
-	errs := make([]error, 0)
+	var errs []error
 	for _, s := range akp.Skylinks {
 		if !database.ValidSkylinkHash(s) {
-			errs = append(errs, errors.New("invalid skylink:"+s))
+			errs = append(errs, errors.New("invalid skylink: "+s))
 		}
 	}
 	if len(errs) > 0 {
@@ -63,11 +71,14 @@ func (akp APIKeyPOST) Validate() error {
 	return nil
 }
 
+//revive:disable
+
 // APIKeyResponseFromAPIKey creates a new APIKeyResponse from the given API key.
 func APIKeyResponseFromAPIKey(ak database.APIKeyRecord) *APIKeyResponse {
 	return &APIKeyResponse{
 		ID:        ak.ID,
 		UserID:    ak.UserID,
+		Name:      ak.Name,
 		Public:    ak.Public,
 		Key:       ak.Key,
 		Skylinks:  ak.Skylinks,
@@ -82,6 +93,7 @@ func APIKeyResponseWithKeyFromAPIKey(ak database.APIKeyRecord) *APIKeyResponseWi
 		APIKeyResponse: APIKeyResponse{
 			ID:        ak.ID,
 			UserID:    ak.UserID,
+			Name:      ak.Name,
 			Public:    ak.Public,
 			Key:       ak.Key,
 			Skylinks:  ak.Skylinks,
@@ -90,6 +102,8 @@ func APIKeyResponseWithKeyFromAPIKey(ak database.APIKeyRecord) *APIKeyResponseWi
 		Key: ak.Key,
 	}
 }
+
+//revive:enable
 
 // userAPIKeyPOST creates a new API key for the user.
 func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
@@ -103,7 +117,7 @@ func (api *API) userAPIKeyPOST(u *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	ak, err := api.staticDB.APIKeyCreate(req.Context(), *u, body.Public, body.Skylinks)
+	ak, err := api.staticDB.APIKeyCreate(req.Context(), *u, body.Name, body.Public, body.Skylinks)
 	if errors.Contains(err, database.ErrMaxNumAPIKeysExceeded) {
 		err = errors.AddContext(err, "the maximum number of API keys a user can create is "+strconv.Itoa(database.MaxNumAPIKeysPerUser))
 		api.WriteError(w, err, http.StatusBadRequest)
@@ -159,7 +173,7 @@ func (api *API) userAPIKeyDELETE(u *database.User, w http.ResponseWriter, req *h
 	}
 	err = api.staticDB.APIKeyDelete(req.Context(), *u, akID)
 	if err == mongo.ErrNoDocuments {
-		api.WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -183,6 +197,10 @@ func (api *API) userAPIKeyPUT(u *database.User, w http.ResponseWriter, req *http
 		return
 	}
 	err = api.staticDB.APIKeyUpdate(req.Context(), *u, akID, body.Skylinks)
+	if errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -206,6 +224,10 @@ func (api *API) userAPIKeyPATCH(u *database.User, w http.ResponseWriter, req *ht
 		return
 	}
 	err = api.staticDB.APIKeyPatch(req.Context(), *u, akID, body.Add, body.Remove)
+	if errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

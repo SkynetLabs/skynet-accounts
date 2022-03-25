@@ -90,7 +90,7 @@ func TestUserLimitsGetFromTier(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		ul := userLimitsGetFromTier(tt.tier, tt.quotaExceeded)
+		ul := userLimitsGetFromTier(tt.tier, tt.quotaExceeded, true)
 		if ul.TierID != tt.expectedTier {
 			t.Errorf("Test '%s': expected tier %d, got %d", tt.name, tt.expectedTier, ul.TierID)
 		}
@@ -121,7 +121,7 @@ func TestUserLimitsGetFromTier(t *testing.T) {
 			}
 		}()
 		// The call that we expect to log a critical.
-		_ = userLimitsGetFromTier(math.MaxInt, false)
+		_ = userLimitsGetFromTier(math.MaxInt, false, true)
 		return
 	}()
 	if err != nil {

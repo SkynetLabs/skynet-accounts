@@ -34,13 +34,16 @@ func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Create a new API key.
-	ak1, _, err := at.UserAPIKeysPOST(api.APIKeyPOST{})
+	ak1, _, err := at.UserAPIKeysPOST(api.APIKeyPOST{Name: "one"})
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
 	// Make sure the API key is private.
 	if ak1.Public {
 		t.Fatal("Expected the API key to be private.")
+	}
+	if ak1.Name != "one" {
+		t.Fatal("Unexpected name.")
 	}
 
 	// Create another API key.
@@ -63,6 +66,9 @@ func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	if ak2.ID.Hex() != aks[0].ID.Hex() && ak2.ID.Hex() != aks[1].ID.Hex() {
 		t.Fatalf("Missing key '%s'! Set: %+v", ak2.ID.Hex(), aks)
 	}
+	if aks[0].Name != "one" && aks[1].Name != "one" {
+		t.Fatalf("Expected one of the two keys to be named 'one', got %+v", aks)
+	}
 
 	// Delete an API key.
 	status, err := at.UserAPIKeysDELETE(ak1.ID)
@@ -81,10 +87,10 @@ func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Missing key '%s'! Set: %+v", ak2.ID.Hex(), aks)
 	}
 
-	// Try to delete the same key again. Expect a Bad Request.
+	// Try to delete the same key again. Expect a 404.
 	status, _ = at.UserAPIKeysDELETE(ak1.ID)
-	if status != http.StatusBadRequest {
-		t.Fatalf("Expected status 400, got %d.", status)
+	if status != http.StatusNotFound {
+		t.Fatalf("Expected status 404, got %d.", status)
 	}
 }
 
@@ -104,7 +110,7 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	uploadSize := int64(fastrand.Intn(int(modules.SectorSize / 2)))
-	_, _, err = test.CreateTestUpload(at.Ctx, at.DB, u, uploadSize)
+	_, _, err = test.CreateTestUpload(at.Ctx, at.DB, *u, uploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,6 +228,11 @@ func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	if len(aks) != 0 {
 		t.Fatalf("Expected no API keys, got %d.", len(aks))
 	}
+	// Delete the same key again. Expect a 404.
+	status, err = at.UserAPIKeysDELETE(akr.ID)
+	if status != http.StatusNotFound {
+		t.Fatal("Expected status 404, got", status)
+	}
 }
 
 // testPublicAPIKeysUsage makes sure that we can use public API keys to make
@@ -242,11 +253,11 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	uploadSize := int64(fastrand.Intn(int(modules.SectorSize / 2)))
-	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u, uploadSize)
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u, uploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sl2, _, err := test.CreateTestUpload(at.Ctx, at.DB, u, uploadSize)
+	sl2, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u, uploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,12 +266,12 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 		Public:   true,
 		Skylinks: []string{sl.Skylink},
 	}
-	akWithKey, _, err := at.UserAPIKeysPOST(apiKeyPOST)
+	pakWithKey, _, err := at.UserAPIKeysPOST(apiKeyPOST)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Stop using the cookie, use the public API key instead.
-	at.SetAPIKey(akWithKey.Key.String())
+	at.SetAPIKey(pakWithKey.Key.String())
 	// Try to fetch the user's stats with the new public API key.
 	// Expect this to fail.
 	_, _, err = at.Get("/user/stats", nil)
@@ -269,7 +280,7 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Get the user's limits for downloading a skylink covered by the public
 	// API key. Expect to get TierFree values.
-	ul, _, err := at.UserLimitsSkylink(sl.Skylink, nil, nil)
+	ul, _, err := at.UserLimitsSkylink(sl.Skylink, "byte", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,11 +289,22 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Get the user's limits for downloading a skylink that is not covered by
 	// the public API key. Expect to get TierAnonymous values.
-	ul, _, err = at.UserLimitsSkylink(sl2.Skylink, nil, nil)
+	ul, _, err = at.UserLimitsSkylink(sl2.Skylink, "byte", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ul.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
 		t.Fatalf("Expected to get download bandwidth of %d, got %d", database.UserLimits[database.TierAnonymous].DownloadBandwidth, ul.DownloadBandwidth)
+	}
+	// Stop using the header, pass the skylink as a query parameter.
+	at.ClearCredentials()
+	// Get the user's limits for downloading a skylink covered by the public
+	// API key. Expect to get TierFree values.
+	ul, _, err = at.UserLimitsSkylink(sl.Skylink, "byte", pakWithKey.Key.String(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ul.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
+		t.Fatalf("Expected to get download bandwidth of %d, got %d", database.UserLimits[database.TierFree].DownloadBandwidth, ul.DownloadBandwidth)
 	}
 }

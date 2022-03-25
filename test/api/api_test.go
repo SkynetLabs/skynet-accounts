@@ -23,8 +23,6 @@ import (
 // TestWithDBSession ensures that database transactions are started, committed,
 // and aborted properly.
 func TestWithDBSession(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName, nil)
@@ -139,8 +137,6 @@ func TestWithDBSession(t *testing.T) {
 
 // TestUserTierCache ensures out tier cache works as expected.
 func TestUserTierCache(t *testing.T) {
-	t.Parallel()
-
 	dbName := test.DBNameForTest(t.Name())
 	at, err := test.NewAccountsTester(dbName)
 	if err != nil {
@@ -179,7 +175,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	at.SetCookie(test.ExtractCookie(r))
 	// Get the user's limit.
-	ul, _, err := at.UserLimits(nil, nil)
+	ul, _, err := at.UserLimits("byte", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,14 +193,14 @@ func TestUserTierCache(t *testing.T) {
 	}
 	// Register a test upload that exceeds the user's allowed storage, so their
 	// QuotaExceeded flag will get raised.
-	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, database.UserLimits[u.Tier].Storage+1)
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, database.UserLimits[u.Tier].Storage+1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Make a specific call to trackUploadPOST in order to trigger the
 	// checkUserQuotas method. This wil register the upload a second time but
 	// that doesn't affect the test.
-	_, err = at.TrackUpload(sl.Skylink)
+	_, err = at.TrackUpload(sl.Skylink, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +210,7 @@ func TestUserTierCache(t *testing.T) {
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// We expect to get tier with name and id matching TierPremium20 but with
 		// speeds matching TierAnonymous.
-		ul, _, err = at.UserLimits(nil, nil)
+		ul, _, err = at.UserLimits("byte", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -240,7 +236,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// We expect to get TierPremium20.
-		ul, _, err = at.UserLimits(nil, nil)
+		ul, _, err = at.UserLimits("byte", nil)
 		if err != nil {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}

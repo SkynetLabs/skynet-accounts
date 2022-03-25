@@ -78,6 +78,7 @@ func NewDatabase(ctx context.Context, dbName string, logger *logrus.Logger) (*da
 func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	ctx := context.Background()
 	logger := logrus.New()
+	logger.Out = ioutil.Discard
 
 	// Initialise the environment.
 	jwt.PortalName = testPortalAddr
@@ -136,8 +137,8 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	}
 	// Wait for the accounts tester to be fully ready.
 	err = build.Retry(50, time.Millisecond, func() error {
-		_, _, err = at.HealthGet()
-		return err
+		_, _, e := at.HealthGet()
+		return e
 	})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to start accounts tester in the given time")
@@ -189,14 +190,14 @@ func (at *AccountsTester) SetToken(t string) {
 // Get executes a GET request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Get(endpoint string, params url.Values) (r *http.Response, body []byte, err error) {
+func (at *AccountsTester) Get(endpoint string, params url.Values) (*http.Response, []byte, error) {
 	return at.request(http.MethodGet, endpoint, params, nil, nil)
 }
 
 // Delete executes a DELETE request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Delete(endpoint string, params url.Values) (r *http.Response, body []byte, err error) {
+func (at *AccountsTester) Delete(endpoint string, params url.Values) (*http.Response, []byte, error) {
 	return at.request(http.MethodDelete, endpoint, params, nil, nil)
 }
 
@@ -204,7 +205,7 @@ func (at *AccountsTester) Delete(endpoint string, params url.Values) (r *http.Re
 //
 // NOTE: The Body of the returned response is already read and closed.
 // TODO Remove the url.Values in favour of a simple map.
-func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams url.Values) (r *http.Response, body []byte, err error) {
+func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
 	if params == nil {
 		params = url.Values{}
 	}
@@ -217,12 +218,12 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 	}
 	bodyBytes, err := json.Marshal(bodyMap)
 	if err != nil {
-		return
+		return &http.Response{}, nil, err
 	}
 	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + params.Encode()
 	req, err := http.NewRequest(http.MethodPost, serviceURL, bytes.NewBuffer(bodyBytes))
 	if err != nil {
-		return nil, nil, err
+		return &http.Response{}, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	return at.executeRequest(req)
@@ -231,10 +232,10 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 // Put executes a PUT request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Put(endpoint string, params url.Values, bodyParams url.Values) (r *http.Response, body []byte, err error) {
+func (at *AccountsTester) Put(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
 	b, err := json.Marshal(bodyParams)
 	if err != nil {
-		return nil, nil, errors.AddContext(err, "failed to marshal the body JSON")
+		return &http.Response{}, nil, errors.AddContext(err, "failed to marshal the body JSON")
 	}
 	return at.request(http.MethodPut, endpoint, params, b, nil)
 }
@@ -242,10 +243,10 @@ func (at *AccountsTester) Put(endpoint string, params url.Values, bodyParams url
 // Patch executes a PATCH request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Patch(endpoint string, params url.Values, bodyParams url.Values) (r *http.Response, body []byte, err error) {
+func (at *AccountsTester) Patch(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
 	b, err := json.Marshal(bodyParams)
 	if err != nil {
-		return nil, nil, errors.AddContext(err, "failed to marshal the body JSON")
+		return &http.Response{}, nil, errors.AddContext(err, "failed to marshal the body JSON")
 	}
 	return at.request(http.MethodPatch, endpoint, params, b, nil)
 }
@@ -253,7 +254,7 @@ func (at *AccountsTester) Patch(endpoint string, params url.Values, bodyParams u
 // CreateUserPost is a helper method that creates a new user.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) CreateUserPost(emailAddr, password string) (r *http.Response, body []byte, err error) {
+func (at *AccountsTester) CreateUserPost(emailAddr, password string) (*http.Response, []byte, error) {
 	params := url.Values{}
 	params.Set("email", emailAddr)
 	params.Set("password", password)
@@ -271,11 +272,11 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Respon
 		"stripeCustomerId": stipeID,
 	})
 	if err != nil {
-		return nil, nil, errors.AddContext(err, "failed to marshal the body JSON")
+		return &http.Response{}, nil, errors.AddContext(err, "failed to marshal the body JSON")
 	}
 	req, err := http.NewRequest(http.MethodPut, serviceURL, bytes.NewBuffer(b))
 	if err != nil {
-		return nil, nil, err
+		return &http.Response{}, nil, err
 	}
 	return at.executeRequest(req)
 }
@@ -291,7 +292,7 @@ func (at *AccountsTester) request(method string, endpoint string, queryParams ur
 	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + queryParams.Encode()
 	req, err := http.NewRequest(method, serviceURL, bytes.NewBuffer(body))
 	if err != nil {
-		return nil, nil, err
+		return &http.Response{}, nil, err
 	}
 	for name, val := range headers {
 		req.Header.Set(name, val)
@@ -305,7 +306,7 @@ func (at *AccountsTester) request(method string, endpoint string, queryParams ur
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []byte, error) {
 	if req == nil {
-		return nil, nil, errors.New("invalid request")
+		return &http.Response{}, nil, errors.New("invalid request")
 	}
 	if at.APIKey != "" {
 		req.Header.Set(api.APIKeyHeader, at.APIKey)
@@ -319,7 +320,7 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 	client := http.Client{}
 	r, err := client.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return &http.Response{}, nil, err
 	}
 	return processResponse(r)
 }
@@ -455,8 +456,10 @@ func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error
 }
 
 // TrackUpload performs a `POST /track/upload/:skylink` request.
-func (at *AccountsTester) TrackUpload(skylink string) (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, nil, nil, nil)
+func (at *AccountsTester) TrackUpload(skylink string, ip string) (int, error) {
+	form := url.Values{}
+	form.Set("ip", ip)
+	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
 	return r.StatusCode, err
 }
 
@@ -473,8 +476,12 @@ func (at *AccountsTester) TrackRegistryWrite() (int, error) {
 }
 
 // UserLimits performs a `GET /user/limits` request.
-func (at *AccountsTester) UserLimits(params url.Values, headers map[string]string) (api.UserLimitsGET, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/limits", params, nil, headers)
+func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
+	queryParams := url.Values{}
+	if unit != "" {
+		queryParams.Set("unit", unit)
+	}
+	r, b, err := at.request(http.MethodGet, "/user/limits", queryParams, nil, headers)
 	if err != nil {
 		return api.UserLimitsGET{}, r.StatusCode, err
 	}
@@ -490,11 +497,14 @@ func (at *AccountsTester) UserLimits(params url.Values, headers map[string]strin
 }
 
 // UserLimitsSkylink performs a `GET /user/limits/:skylink` request.
-func (at *AccountsTester) UserLimitsSkylink(sl string, params url.Values, headers map[string]string) (api.UserLimitsGET, int, error) {
+func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, headers map[string]string) (api.UserLimitsGET, int, error) {
+	queryParams := url.Values{}
+	queryParams.Set("unit", unit)
+	queryParams.Set("apiKey", apikey)
 	if !database.ValidSkylinkHash(sl) {
 		return api.UserLimitsGET{}, 0, database.ErrInvalidSkylink
 	}
-	r, b, err := at.request(http.MethodGet, "/user/limits/"+sl, params, nil, headers)
+	r, b, err := at.request(http.MethodGet, "/user/limits/"+sl, queryParams, nil, headers)
 	if err != nil {
 		return api.UserLimitsGET{}, r.StatusCode, err
 	}

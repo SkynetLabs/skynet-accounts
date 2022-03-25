@@ -12,8 +12,6 @@ import (
 // TestConfiguration ensures we can correctly read and write from/to the
 // configuration DB table.
 func TestConfiguration(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName, nil)

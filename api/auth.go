@@ -45,6 +45,10 @@ func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.To
 	// If we're dealing with a public API key, we need to validate that this
 	// request is a GET for a covered skylink.
 	if akr.Public {
+		// Public API keys can only be used with GET.
+		if req.Method != http.MethodGet {
+			return nil, nil, database.ErrInvalidAPIKey
+		}
 		sl, err := database.ExtractSkylinkHash(req.RequestURI)
 		if err != nil || !akr.CoversSkylink(sl) {
 			return nil, nil, database.ErrInvalidAPIKey
