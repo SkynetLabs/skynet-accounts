@@ -511,10 +511,7 @@ func (db *DB) UserPubKeyAdd(ctx context.Context, u User, pk PubKey) (err error) 
 			},
 		},
 	}
-	opts := options.UpdateOptions{
-		Upsert: &False,
-	}
-	_, err = db.staticUsers.UpdateOne(ctx, filter, update, &opts)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update)
 	return err
 }
 
@@ -527,10 +524,7 @@ func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
 	update := bson.M{
 		"$pull": bson.M{"pub_keys": pk},
 	}
-	opts := options.UpdateOptions{
-		Upsert: &False,
-	}
-	ur, err := db.staticUsers.UpdateOne(ctx, filter, update, &opts)
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
 	if err == nil && ur.MatchedCount == 0 {
 		err = mongo.ErrNoDocuments
 	}
