@@ -262,7 +262,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	// Try to solve the challenge while logged in as a different user.
 	// NOTE: This will consume the challenge and the user will need to request
 	// a new one.
-	r, b, err = at.CreateUserPost(name+"_user3@siasky.net", name+"_pass")
+	r, b, err = at.UserPOST(name+"_user3@siasky.net", name+"_pass")
 	if err != nil || r.StatusCode != http.StatusOK {
 		t.Fatal(r.Status, err, string(b))
 	}

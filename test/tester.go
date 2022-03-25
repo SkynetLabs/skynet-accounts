@@ -251,36 +251,6 @@ func (at *AccountsTester) Patch(endpoint string, params url.Values, bodyParams u
 	return at.request(http.MethodPatch, endpoint, params, b, nil)
 }
 
-// CreateUserPost is a helper method that creates a new user.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) CreateUserPost(emailAddr, password string) (*http.Response, []byte, error) {
-	params := url.Values{}
-	params.Set("email", emailAddr)
-	params.Set("password", password)
-	return at.Post("/user", nil, params)
-}
-
-// UserPUT is a helper.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Response, []byte, error) {
-	serviceURL := testPortalAddr + ":" + testPortalPort + "/user"
-	b, err := json.Marshal(map[string]string{
-		"email":            email,
-		"password":         password,
-		"stripeCustomerId": stipeID,
-	})
-	if err != nil {
-		return &http.Response{}, nil, errors.AddContext(err, "failed to marshal the body JSON")
-	}
-	req, err := http.NewRequest(http.MethodPut, serviceURL, bytes.NewBuffer(b))
-	if err != nil {
-		return &http.Response{}, nil, err
-	}
-	return at.executeRequest(req)
-}
-
 // request is a helper method that puts together and executes an HTTP
 // request. It attaches the current cookie, if one exists.
 //
@@ -325,6 +295,21 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 	return processResponse(r)
 }
 
+// processResponse is a helper method which extracts the body from the response
+// and handles non-OK status codes.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func processResponse(r *http.Response) (*http.Response, []byte, error) {
+	body, err := ioutil.ReadAll(r.Body)
+	_ = r.Body.Close()
+	// For convenience, whenever we have a non-OK status we'll wrap it in an
+	// error.
+	if r.StatusCode < 200 || r.StatusCode > 299 {
+		err = errors.Compose(err, errors.New(r.Status))
+	}
+	return r, body, err
+}
+
 // HealthGet executes a GET /health.
 func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
 	r, b, err := at.request(http.MethodGet, "/health", nil, nil, nil)
@@ -338,6 +323,70 @@ func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
 	}
 	return resp, r.StatusCode, nil
 }
+
+/*** Track helpers ***/
+
+// TrackDownload performs a `POST /track/download/:skylink` request.
+func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error) {
+	form := url.Values{}
+	form.Set("bytes", fmt.Sprint(bytes))
+	r, _, err := at.request(http.MethodPost, "/track/download/"+skylink, form, nil, nil)
+	return r.StatusCode, err
+}
+
+// TrackUpload performs a `POST /track/upload/:skylink` request.
+func (at *AccountsTester) TrackUpload(skylink string, ip string) (int, error) {
+	form := url.Values{}
+	form.Set("ip", ip)
+	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
+	return r.StatusCode, err
+}
+
+// TrackRegistryRead performs a `POST /track/registry/read` request.
+func (at *AccountsTester) TrackRegistryRead() (int, error) {
+	r, _, err := at.request(http.MethodPost, "/track/registry/read", nil, nil, nil)
+	return r.StatusCode, err
+}
+
+// TrackRegistryWrite performs a `POST /track/registry/write` request.
+func (at *AccountsTester) TrackRegistryWrite() (int, error) {
+	r, _, err := at.request(http.MethodPost, "/track/registry/write", nil, nil, nil)
+	return r.StatusCode, err
+}
+
+/*** User helpers ***/
+
+// UserPOST is a helper method that creates a new user.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) UserPOST(emailAddr, password string) (*http.Response, []byte, error) {
+	params := url.Values{}
+	params.Set("email", emailAddr)
+	params.Set("password", password)
+	return at.Post("/user", nil, params)
+}
+
+// UserPUT is a helper method which updates the entire user record.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Response, []byte, error) {
+	serviceURL := testPortalAddr + ":" + testPortalPort + "/user"
+	b, err := json.Marshal(map[string]string{
+		"email":            email,
+		"password":         password,
+		"stripeCustomerId": stipeID,
+	})
+	if err != nil {
+		return &http.Response{}, nil, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	req, err := http.NewRequest(http.MethodPut, serviceURL, bytes.NewBuffer(b))
+	if err != nil {
+		return &http.Response{}, nil, err
+	}
+	return at.executeRequest(req)
+}
+
+/*** User API keys helpers ***/
 
 // UserAPIKeysDELETE performs a `DELETE /user/apikeys/:id` request.
 func (at *AccountsTester) UserAPIKeysDELETE(id primitive.ObjectID) (int, error) {
@@ -416,7 +465,7 @@ func (at *AccountsTester) UserAPIKeysPUT(akID primitive.ObjectID, body api.APIKe
 	return r.StatusCode, nil
 }
 
-// UserAPIKeysPATCH performs a `PATH /user/apikeys` request.
+// UserAPIKeysPATCH performs a `PATCH /user/apikeys` request.
 func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.APIKeyPATCH) (int, error) {
 	bb, err := json.Marshal(body)
 	if err != nil {
@@ -432,48 +481,7 @@ func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.API
 	return r.StatusCode, nil
 }
 
-// processResponse is a helper method which extracts the body from the response
-// and handles non-OK status codes.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func processResponse(r *http.Response) (*http.Response, []byte, error) {
-	body, err := ioutil.ReadAll(r.Body)
-	_ = r.Body.Close()
-	// For convenience, whenever we have a non-OK status we'll wrap it in an
-	// error.
-	if r.StatusCode < 200 || r.StatusCode > 299 {
-		err = errors.Compose(err, errors.New(r.Status))
-	}
-	return r, body, err
-}
-
-// TrackDownload performs a `POST /track/download/:skylink` request.
-func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error) {
-	form := url.Values{}
-	form.Set("bytes", fmt.Sprint(bytes))
-	r, _, err := at.request(http.MethodPost, "/track/download/"+skylink, form, nil, nil)
-	return r.StatusCode, err
-}
-
-// TrackUpload performs a `POST /track/upload/:skylink` request.
-func (at *AccountsTester) TrackUpload(skylink string, ip string) (int, error) {
-	form := url.Values{}
-	form.Set("ip", ip)
-	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
-	return r.StatusCode, err
-}
-
-// TrackRegistryRead performs a `POST /track/registry/read` request.
-func (at *AccountsTester) TrackRegistryRead() (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/registry/read", nil, nil, nil)
-	return r.StatusCode, err
-}
-
-// TrackRegistryWrite performs a `POST /track/registry/write` request.
-func (at *AccountsTester) TrackRegistryWrite() (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/registry/write", nil, nil, nil)
-	return r.StatusCode, err
-}
+/*** User limits helpers ***/
 
 // UserLimits performs a `GET /user/limits` request.
 func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
@@ -515,6 +523,29 @@ func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, head
 	err = json.Unmarshal(b, &resp)
 	if err != nil {
 		return api.UserLimitsGET{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
+}
+
+/*** Various user helpers ***/
+
+// UserStats performs a `GET /user/stats` request.
+func (at *AccountsTester) UserStats(unit string, headers map[string]string) (database.UserStats, int, error) {
+	queryParams := url.Values{}
+	if unit != "" {
+		queryParams.Set("unit", unit)
+	}
+	r, b, err := at.request(http.MethodGet, "/user/stats", queryParams, nil, headers)
+	if err != nil {
+		return database.UserStats{}, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return database.UserStats{}, r.StatusCode, errors.New(string(b))
+	}
+	var resp database.UserStats
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return database.UserStats{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
 	}
 	return resp, r.StatusCode, nil
 }

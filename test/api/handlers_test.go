@@ -110,12 +110,12 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'", badRequest, err)
 	}
 	// Try to create a user with an empty email.
-	_, b, err := at.CreateUserPost("", "password")
+	_, b, err := at.UserPOST("", "password")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try to create a user with an invalid email.
-	_, b, err = at.CreateUserPost("invalid", "password")
+	_, b, err = at.UserPOST("invalid", "password")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
@@ -127,7 +127,7 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s", badRequest, err, string(b))
 	}
 	// Create a user.
-	_, b, err = at.CreateUserPost(emailAddr, password)
+	_, b, err = at.UserPOST(emailAddr, password)
 	if err != nil {
 		t.Fatalf("User creation failed. Error: '%s'. Body: '%s' ", err.Error(), string(b))
 	}
@@ -153,7 +153,7 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Login failed. Error: '%s'. Body: '%s'", err.Error(), string(b))
 	}
 	// try to create a user with an already taken email
-	_, b, err = at.CreateUserPost(emailAddr, "password")
+	_, b, err = at.UserPOST(emailAddr, "password")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
@@ -1002,20 +1002,15 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 
 	// Call userStats without a cookie.
 	at.ClearCredentials()
-	_, b, err := at.Get("/user/stats", nil)
+	_, _, err = at.UserStats("", nil)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
 	}
 	at.SetCookie(c)
 	// Call userStats.
-	_, b, err = at.Get("/user/stats", nil)
+	serverStats, _, err := at.UserStats("", nil)
 	if err != nil {
-		t.Fatal(err, string(b))
-	}
-	var serverStats database.UserStats
-	err = json.Unmarshal(b, &serverStats)
-	if err != nil {
-		t.Fatalf("Failed to unmarshall user stats: %s", err.Error())
+		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(serverStats, expectedStats) {
 		t.Fatalf("Expected\n%+v\ngot\n%+v", expectedStats, serverStats)

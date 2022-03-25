@@ -1,9 +1,7 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
@@ -18,7 +16,7 @@ import (
 // API keys.
 func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
-	r, body, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
+	r, body, err := at.UserPOST(name+"@siasky.net", name+"_pass")
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
@@ -99,7 +97,7 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	// Create a test user.
 	email := name + "@siasky.net"
-	r, _, err := at.CreateUserPost(email, name+"_pass")
+	r, _, err := at.UserPOST(email, name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,17 +119,11 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Stop using the cookie, so we can test the API key.
 	at.ClearCredentials()
-	// Get user stats without a cookie or headers - pass the API key via a query
-	// variable. The main thing we want to see here is whether we get
-	// an `Unauthorized` error or not but we'll validate the stats as well.
-	params := url.Values{}
-	params.Set("apiKey", akWithKey.Key.String())
-	_, body, err := at.Get("/user/stats", params)
-	if err != nil {
-		t.Fatal(err, string(body))
-	}
-	var us database.UserStats
-	err = json.Unmarshal(body, &us)
+	// Get user stats with an API key. The main thing we want to see here is
+	// whether we get an `Unauthorized` error or not but we'll validate the
+	// stats as well.
+	at.SetAPIKey(akWithKey.Key.String())
+	us, _, err := at.UserStats("", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +137,7 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 // API keys.
 func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
-	r, body, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
+	r, body, err := at.UserPOST(name+"@siasky.net", name+"_pass")
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
@@ -242,7 +234,7 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	// Create a test user.
 	email := name + "@siasky.net"
-	r, _, err := at.CreateUserPost(email, name+"_pass")
+	r, _, err := at.UserPOST(email, name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +266,7 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	at.SetAPIKey(pakWithKey.Key.String())
 	// Try to fetch the user's stats with the new public API key.
 	// Expect this to fail.
-	_, _, err = at.Get("/user/stats", nil)
+	_, _, err = at.UserStats("", nil)
 	if err == nil {
 		t.Fatal("Managed to get user stats with a public API key.")
 	}
