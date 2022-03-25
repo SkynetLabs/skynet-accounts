@@ -59,6 +59,7 @@ func TestHandlers(t *testing.T) {
 		{name: "LoginLogout", test: testHandlerLoginPOST},
 		{name: "UserEdit", test: testUserPUT},
 		{name: "UserAddPubKey", test: testUserAddPubKey},
+		{name: "DeletePubKey", test: testUserDeletePubKey},
 		{name: "UserDelete", test: testUserDELETE},
 		{name: "UserLimits", test: testUserLimits},
 		{name: "UserDeleteUploads", test: testUserUploadsDELETE},
@@ -371,11 +372,11 @@ func testUserDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Failed to create a user and log in:", err)
 	}
 	// Create some data for this user.
-	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128)
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = at.DB.DownloadCreate(at.Ctx, *u.User, *sl, 128)
+	_, err = at.DB.DownloadCreate(at.Ctx, *u.User, *sl, 128)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,14 +506,14 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	// anonymous levels. Their tier should remain Free.
 	dbu2 := *u2.User
 	filesize := database.UserLimits[database.TierFree].Storage + 1
-	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, &dbu2, filesize)
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, dbu2, filesize)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Make a specific call to trackUploadPOST in order to trigger the
 	// checkUserQuotas method. This wil register the upload a second time but
 	// that doesn't affect the test.
-	_, err = at.TrackUpload(sl.Skylink)
+	_, err = at.TrackUpload(sl.Skylink, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -588,7 +589,7 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	defer at.ClearCredentials()
 
 	// Create an upload.
-	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, 128%skynet.KB)
+	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128%skynet.KB)
 	// Make sure it shows up for this user.
 	_, b, err := at.Get("/user/uploads", nil)
 	if err != nil {
@@ -915,20 +916,22 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	}
 	expectedStats := database.UserStats{}
 
-	// Call trackUpload without a cookie.
+	// Call trackUpload without a cookie. We expect this to succeed.
+	// While we expect this to succeed, it won't be counted towards the user's
+	// quota, so we don't increment the expected stats.
 	at.ClearCredentials()
-	_, err = at.TrackUpload(skylink.String())
-	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
+	_, err = at.TrackUpload(skylink.String(), "")
+	if err != nil {
+		t.Fatal(err)
 	}
 	at.SetCookie(c)
 	// Call trackUpload with an invalid skylink.
-	_, err = at.TrackUpload("INVALID_SKYLINK")
+	_, err = at.TrackUpload("INVALID_SKYLINK", "")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackUpload with a valid skylink.
-	_, err = at.TrackUpload(skylink.String())
+	_, err = at.TrackUpload(skylink.String(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -938,11 +941,11 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats.BandwidthUploads += skynet.BandwidthUploadCost(0)
 	expectedStats.RawStorageUsed += skynet.RawStorageUsed(0)
 
-	// Call trackDownload without a cookie.
+	// Call trackDownload without a cookie. Expect this to fail.
 	at.ClearCredentials()
 	_, err = at.TrackDownload(skylink.String(), 100)
-	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
+	if err == nil {
+		t.Fatal(err)
 	}
 	at.SetCookie(c)
 	// Call trackDownload with an invalid skylink.
@@ -956,14 +959,14 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
 	}
 	// Call trackDownload with a valid skylink.
-	_, err = at.TrackDownload(skylink.String(), 100)
+	_, err = at.TrackDownload(skylink.String(), 200)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Adjust the expectations.
 	expectedStats.NumDownloads++
-	expectedStats.BandwidthDownloads += skynet.BandwidthDownloadCost(100)
-	expectedStats.TotalDownloadsSize += 100
+	expectedStats.BandwidthDownloads += skynet.BandwidthDownloadCost(200)
+	expectedStats.TotalDownloadsSize += 200
 
 	// Call trackRegistryRead without a cookie.
 	at.ClearCredentials()

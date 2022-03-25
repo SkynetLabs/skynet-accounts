@@ -7,7 +7,6 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
-
 	"gitlab.com/NebulousLabs/fastrand"
 )
 
@@ -31,7 +30,7 @@ func TestUploadsByUser(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u)
 	// Create a skylink record and register an upload for it.
-	sl, _, err := test.CreateTestUpload(ctx, db, u, testUploadSize)
+	sl, _, err := test.CreateTestUpload(ctx, db, *u, testUploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +76,7 @@ func TestUploadsByUser(t *testing.T) {
 	}
 	// Create a second upload for the same skylink. The user's used storage
 	// should stay the same but the upload bandwidth should increase.
-	_, _, err = test.RegisterTestUpload(ctx, db, u, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, *u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
@@ -106,7 +105,7 @@ func TestUploadsByUser(t *testing.T) {
 		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
 	}
 	// Upload the same file again. Uploads go up, storage stays the same.
-	_, _, err = test.RegisterTestUpload(ctx, db, u, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, *u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload after unpinning.", err)
 	}
@@ -164,17 +163,17 @@ func TestUnpinUploads(t *testing.T) {
 		_ = db.UserDelete(ctx, user)
 	}(u2)
 	// Create a skylink record and register an upload for it.
-	sl, _, err := test.CreateTestUpload(ctx, db, u1, testUploadSize)
+	sl, _, err := test.CreateTestUpload(ctx, db, *u1, testUploadSize)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Upload it again for the same user.
-	_, _, err = test.RegisterTestUpload(ctx, db, u1, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, *u1, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
 	// Upload it for the second user.
-	_, _, err = test.RegisterTestUpload(ctx, db, u2, sl)
+	_, _, err = test.RegisterTestUpload(ctx, db, *u2, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
@@ -238,5 +237,43 @@ func TestUnpinUploads(t *testing.T) {
 	if stats.BandwidthUploads != expectedUploadBandwidth {
 		t.Fatalf("Expected upload bandwidth used of %d (%d MB), got %d (%d MB).",
 			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MB)
+	}
+}
+
+// TestUploadCreateAnon ensures that UploadCreate can create anonymous uploads.
+func TestUploadCreateAnon(t *testing.T) {
+	ctx := context.Background()
+	dbName := test.DBNameForTest(t.Name())
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sl := test.RandomSkylink()
+	skylink, err := db.Skylink(ctx, sl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Register an anonymous upload.
+	ip := "1.0.2.233"
+	up, err := db.UploadCreate(ctx, database.AnonUser, ip, *skylink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !up.UserID.IsZero() {
+		t.Fatal("Expected zero user ID.")
+	}
+	if up.UploaderIP != ip {
+		t.Fatalf("Expected UploaderIP '%s', got '%s'", ip, up.UploaderIP)
+	}
+	// Register an anonymous upload without an UploaderIP address.
+	up, err = db.UploadCreate(ctx, database.AnonUser, "", *skylink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !up.UserID.IsZero() {
+		t.Fatal("Expected zero user ID.")
+	}
+	if up.UploaderIP != "" {
+		t.Fatalf("Expected empty UploaderIP, got '%s'", up.UploaderIP)
 	}
 }

@@ -42,6 +42,9 @@ const (
 )
 
 var (
+	// AnonUser is a helper struct that we can use when we don't have a relevant
+	// user, e.g. when an upload is made by an anonymous user.
+	AnonUser = User{}
 	// True is a helper for when we need to pass a *bool to MongoDB.
 	True = true
 	// False is a helper for when we need to pass a *bool to MongoDB.
@@ -124,10 +127,7 @@ type (
 		SubscriptionCancelAtPeriodEnd    bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
 		StripeID                         string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                    bool               `bson:"quota_exceeded" json:"quotaExceeded"`
-		// The currently active (or default) key is going to be the first one in
-		// the list. If we want to activate a new pubkey, we'll just move it to
-		// the first position in the list.
-		PubKeys []PubKey `bson:"pub_keys" json:"-"`
+		PubKeys                          []PubKey           `bson:"pub_keys" json:"-"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
@@ -492,6 +492,52 @@ func (db *DB) UserSave(ctx context.Context, u *User) error {
 		return errors.AddContext(err, "failed to update")
 	}
 	return nil
+}
+
+// UserPubKeyAdd adds a new PubKey to the given user's set.
+func (db *DB) UserPubKeyAdd(ctx context.Context, u User, pk PubKey) (err error) {
+	filter := bson.M{"_id": u.ID}
+	// This update is so complicated because we can't use mutation operations
+	// like $push, $addToSet and so on if the target field is null. That's why
+	// here we check if the field is an array and then merge the key in. If the
+	// field is not an array (i.e. it's null) we set it to an empty array before
+	// performing the merge.
+	update := bson.A{
+		bson.M{
+			"$set": bson.M{
+				"pub_keys": bson.M{
+					"$cond": bson.A{
+						bson.M{"$eq": bson.A{bson.M{"$type": "$pub_keys"}, "array"}},
+						bson.M{"$setUnion": bson.A{"$pub_keys", bson.A{pk}}},
+						bson.A{pk},
+					}},
+			},
+		},
+	}
+	opts := options.UpdateOptions{
+		Upsert: &False,
+	}
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, &opts)
+	return err
+}
+
+// UserPubKeyRemove removes a PubKey from the given user's set.
+func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
+	filter := bson.M{
+		"_id":      u.ID,
+		"pub_keys": bson.M{"$ne": nil},
+	}
+	update := bson.M{
+		"$pull": bson.M{"pub_keys": pk},
+	}
+	opts := options.UpdateOptions{
+		Upsert: &False,
+	}
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update, &opts)
+	if err == nil && ur.MatchedCount == 0 {
+		err = mongo.ErrNoDocuments
+	}
+	return err
 }
 
 // UserSetStripeID changes the user's stripe id in the DB.
