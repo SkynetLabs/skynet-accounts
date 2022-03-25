@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"crypto/subtle"
 	"reflect"
 	"testing"
 	"time"
@@ -466,6 +467,90 @@ func TestUserSetStripeID(t *testing.T) {
 	}
 }
 
+// TestUserPubKey tests UserPubKeyAdd and UserPubKeyRemove.
+func TestUserPubKey(t *testing.T) {
+	ctx := context.Background()
+	dbName := test.DBNameForTest(t.Name())
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Create a test user.
+	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+	pk := database.PubKey(make([]byte, database.PubKeySize))
+	copy(pk[:], fastrand.Bytes(database.PubKeySize))
+	pk1 := database.PubKey(make([]byte, database.PubKeySize))
+	copy(pk1[:], fastrand.Bytes(database.PubKeySize))
+	// Try to remove a pubkey. Expect this to fail.
+	err = db.UserPubKeyRemove(ctx, *u, pk)
+	if err == nil {
+		t.Fatal(err)
+	}
+	// Add a pubkey.
+	err = db.UserPubKeyAdd(ctx, *u, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u1, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u1.PubKeys) == 1 && subtle.ConstantTimeCompare(u1.PubKeys[0][:], pk[:]) != 1 {
+		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u1.PubKeys, pk)
+	}
+	// Add another.
+	err = db.UserPubKeyAdd(ctx, *u, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u2, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u2.PubKeys) == 2 && subtle.ConstantTimeCompare(u1.PubKeys[1][:], pk1[:]) == 1 {
+		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u2.PubKeys, pk1)
+	}
+	// Delete a pubkey.
+	err = db.UserPubKeyRemove(ctx, *u, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u3, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u3.PubKeys) == 1 && subtle.ConstantTimeCompare(u3.PubKeys[0][:], pk1[:]) == 1 {
+		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u3.PubKeys, pk1)
+	}
+	// Make sure UserPubKeyRemove removes all copies of the pubkey from the set.
+	// We don't expect there to be multiple but we still want to make sure.
+	u.PubKeys = make([]database.PubKey, 0)
+	u.PubKeys = append(u.PubKeys, pk)
+	u.PubKeys = append(u.PubKeys, pk)
+	u.PubKeys = append(u.PubKeys, pk)
+	err = db.UserSave(ctx, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.UserPubKeyRemove(ctx, *u, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u4, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u4.PubKeys) > 0 {
+		t.Fatal("Expected zero pubkeys.")
+	}
+}
+
 // TestUserSetTier ensures that UserSetTier works as expected.
 func TestUserSetTier(t *testing.T) {
 	ctx := context.Background()
@@ -520,7 +605,7 @@ func TestUserStats(t *testing.T) {
 	expectedDownloadBandwidth := int64(0)
 
 	// Create a small upload.
-	skylinkSmall, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeSmall)
+	skylinkSmall, _, err := test.CreateTestUpload(ctx, db, *u, testUploadSizeSmall)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -540,7 +625,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Create a big upload.
-	skylinkBig, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeBig)
+	skylinkBig, _, err := test.CreateTestUpload(ctx, db, *u, testUploadSizeBig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -561,7 +646,7 @@ func TestUserStats(t *testing.T) {
 
 	// Register a small download.
 	smallDownload := int64(1 + fastrand.Intn(4*skynet.MiB))
-	err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
+	_, err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
@@ -581,7 +666,7 @@ func TestUserStats(t *testing.T) {
 	}
 	// Register a big download.
 	bigDownload := int64(100*skynet.MiB + fastrand.Intn(4*skynet.MiB))
-	err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
+	_, err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
