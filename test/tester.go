@@ -385,24 +385,41 @@ func (at *AccountsTester) UserPOST(emailAddr, password string) (*http.Response, 
 	return at.Post("/user", nil, params)
 }
 
+// UserLogin logs the user in and returns a response.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) UserLogin(emailAddr, password string) (*http.Response, []byte, error) {
+	params := url.Values{}
+	params.Set("email", emailAddr)
+	params.Set("password", password)
+	return at.Post("/login", nil, params)
+}
+
 // UserPUT is a helper method which updates the entire user record.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Response, []byte, error) {
-	serviceURL := testPortalAddr + ":" + testPortalPort + "/user"
-	b, err := json.Marshal(map[string]string{
+func (at *AccountsTester) UserPUT(email, password, stipeID string) (api.UserGET, int, error) {
+	bb, err := json.Marshal(map[string]string{
 		"email":            email,
 		"password":         password,
 		"stripeCustomerId": stipeID,
 	})
 	if err != nil {
-		return &http.Response{}, nil, errors.AddContext(err, "failed to marshal the body JSON")
+		return api.UserGET{}, http.StatusBadRequest, err
 	}
-	req, err := http.NewRequest(http.MethodPut, serviceURL, bytes.NewBuffer(b))
+	r, b, err := at.request(http.MethodPut, "/user", nil, bb, nil)
 	if err != nil {
-		return &http.Response{}, nil, err
+		return api.UserGET{}, r.StatusCode, err
 	}
-	return at.executeRequest(req)
+	if r.StatusCode != http.StatusOK {
+		return api.UserGET{}, r.StatusCode, errors.New(string(b))
+	}
+	var result api.UserGET
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		return api.UserGET{}, 0, errors.AddContext(err, "failed to parse response")
+	}
+	return result, r.StatusCode, nil
 }
 
 /*** User API keys helpers ***/

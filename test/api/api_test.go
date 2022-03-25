@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
@@ -148,9 +147,9 @@ func TestUserTierCache(t *testing.T) {
 		}
 	}()
 
-	email := test.DBNameForTest(t.Name()) + "@siasky.net"
+	emailAddr := test.DBNameForTest(t.Name()) + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
-	u, err := test.CreateUser(at, email, password)
+	u, err := test.CreateUser(at, emailAddr, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,10 +165,7 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bodyParams := url.Values{}
-	bodyParams.Set("email", email)
-	bodyParams.Set("password", password)
-	r, _, err := at.Post("/login", nil, bodyParams)
+	r, _, err := at.UserLogin(emailAddr, password)
 	if err != nil {
 		t.Fatal(err)
 	}

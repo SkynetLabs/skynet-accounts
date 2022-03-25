@@ -145,10 +145,7 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		}
 	}(u)
 	// Log in with that user in order to make sure it exists.
-	bodyParams = url.Values{}
-	bodyParams.Set("email", emailAddr)
-	bodyParams.Set("password", password)
-	_, b, err = at.Post("/login", nil, bodyParams)
+	_, b, err = at.UserLogin(emailAddr, password)
 	if err != nil {
 		t.Fatalf("Login failed. Error: '%s'. Body: '%s'", err.Error(), string(b))
 	}
@@ -163,11 +160,8 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	emailAddr := test.DBNameForTest(t.Name()) + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
-	bodyParams := url.Values{}
-	bodyParams.Set("email", emailAddr)
-	bodyParams.Set("password", password)
 	// Try logging in with a non-existent user.
-	_, _, err := at.Post("/login", nil, bodyParams)
+	_, _, err := at.UserLogin(emailAddr, password)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
@@ -181,7 +175,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 	// Login with an existing user.
-	r, _, err := at.Post("/login", nil, bodyParams)
+	r, _, err := at.UserLogin(emailAddr, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,10 +220,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected %s, got %s", unauthorized, err)
 	}
 	// Try logging in with a bad password.
-	bodyParams = url.Values{}
-	bodyParams.Set("email", emailAddr)
-	bodyParams.Set("password", "bad password")
-	_, _, err = at.Post("/login", nil, bodyParams)
+	_, _, err = at.UserLogin(emailAddr, "bad password")
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
@@ -249,9 +240,6 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 
-	at.SetCookie(c)
-	defer at.ClearCredentials()
-
 	// Call unauthorized.
 	at.ClearCredentials()
 	_, _, err = at.Put("/user", nil, nil)
@@ -261,12 +249,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	at.SetCookie(c)
 	// Update the user's Stripe ID.
 	stripeID := name + "_stripe_id"
-	_, b, err := at.UserPUT("", "", stripeID)
-	if err != nil {
-		t.Fatal(err, string(b))
-	}
-	var u2 database.User
-	err = json.Unmarshal(b, &u2)
+	u2, status, err := at.UserPUT("", "", stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,16 +257,16 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected the user to have StripeID %s, got %s", stripeID, u2.StripeID)
 	}
 	// Try to update the StripeID again. Expect this to fail.
-	r, b, err := at.UserPUT("", "", stripeID)
-	if err == nil || !strings.Contains(err.Error(), "409 Conflict") || r.StatusCode != http.StatusConflict {
-		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d. Body: '%s'", err, r.StatusCode, string(b))
+	_, status, err = at.UserPUT("", "", stripeID)
+	if err == nil || !strings.Contains(err.Error(), "409 Conflict") || status != http.StatusConflict {
+		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d", err, status)
 	}
 
 	// Update the user's password with an empty one. Expect this to succeed but
 	// not change anything.
-	r, b, _ = at.UserPUT("", "", "")
-	if r.StatusCode != http.StatusBadRequest {
-		t.Fatalf("Expected 400 Bad Request, got %d", r.StatusCode)
+	_, status, _ = at.UserPUT("", "", "")
+	if status != http.StatusBadRequest {
+		t.Fatalf("Expected 400 Bad Request, got %d", status)
 	}
 	// Fetch the user from the DB again and make sure their password hash hasn't
 	// changed.
@@ -295,7 +278,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Expected the user's password to not change but it did.")
 	}
 	pw := hex.EncodeToString(fastrand.Bytes(12))
-	_, b, err = at.UserPUT("", pw, "")
+	_, _, err = at.UserPUT("", pw, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,16 +296,16 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	params.Set("email", u.Email)
 	params.Set("password", pw)
 	// Try logging in with a non-existent user.
-	_, _, err = at.Post("/login", nil, params)
+	_, _, err = at.UserLogin(u.Email, pw)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Update the user's email.
 	emailAddr := name + "_new@siasky.net"
-	r, b, err = at.UserPUT(emailAddr, "", "")
-	if err != nil || r.StatusCode != http.StatusOK {
-		t.Fatal(r.StatusCode, string(b), err)
+	_, status, err = at.UserPUT(emailAddr, "", "")
+	if err != nil || status != http.StatusOK {
+		t.Fatal(status, err)
 	}
 	// Fetch the user from the DB because we want to be sure that their email
 	// is marked as unconfirmed which is not reflected in the JSON
@@ -866,10 +849,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err, string(b))
 	}
 	// Make sure the user's password is now successfully changed.
-	params = url.Values{}
-	params.Set("email", u.Email)
-	params.Set("password", newPassword)
-	_, b, err = at.Post("/login", nil, params)
+	_, b, err = at.UserLogin(u.Email, newPassword)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
@@ -1040,10 +1020,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}()
 
 	// Log in with that user in order to make sure it exists.
-	bodyParams := url.Values{}
-	bodyParams.Set("email", emailAddr)
-	bodyParams.Set("password", password)
-	r, _, err := at.Post("/login", nil, bodyParams)
+	r, _, err := at.UserLogin(emailAddr, password)
 	if err != nil {
 		t.Fatal("Login failed. Error ", err.Error())
 	}
@@ -1068,11 +1045,16 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	at.SetCookie(c)
 	// Change the user's email.
 	newEmail := name + "_new@siasky.net"
-	r, b, err := at.UserPUT(newEmail, "", "")
+	_, _, err = at.UserPUT(newEmail, "", "")
 	if err != nil {
-		t.Fatalf("Failed to update user. Error: %s. Body: %s", err.Error(), string(b))
+		t.Fatalf("Failed to update user. Error: %s", err.Error())
 	}
 	// Grab the new cookie. It has changed because of the user edit.
+	at.ClearCredentials()
+	r, _, err = at.UserLogin(newEmail, password)
+	if err != nil {
+		t.Fatal(err)
+	}
 	at.SetCookie(test.ExtractCookie(r))
 	if at.Cookie == nil {
 		t.Fatalf("Failed to extract cookie from request. Cookies found: %+v", r.Cookies())
