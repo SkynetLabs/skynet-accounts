@@ -356,6 +356,25 @@ func (at *AccountsTester) TrackRegistryWrite() (int, error) {
 
 /*** User helpers ***/
 
+// UserGET performs `GET /user`
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) UserGET() (api.UserGET, int, error) {
+	r, b, err := at.request(http.MethodGet, "/user", nil, nil, nil)
+	if err != nil {
+		return api.UserGET{}, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.UserGET{}, r.StatusCode, errors.New(string(b))
+	}
+	var resp api.UserGET
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return api.UserGET{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
+}
+
 // UserPOST is a helper method that creates a new user.
 //
 // NOTE: The Body of the returned response is already read and closed.

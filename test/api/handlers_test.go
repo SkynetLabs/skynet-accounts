@@ -198,12 +198,12 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Missing or invalid token. Error:", err)
 	}
-	_, b, err := at.Get("/user", nil)
-	if err != nil || !strings.Contains(string(b), emailAddr) {
+	u1, _, err := at.UserGET()
+	if err != nil || u1.Email != emailAddr {
 		t.Fatal("Expected to be able to fetch the user with this cookie.")
 	}
 	// test /logout while we're here.
-	r, b, err = at.Post("/logout", nil, nil)
+	r, b, err := at.Post("/logout", nil, nil)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
@@ -216,7 +216,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Expected the cookie to have expired already.")
 	}
 	// Expect to be unable to get the user with this cookie.
-	_, _, err = at.Get("/user", nil)
+	_, _, err = at.UserGET()
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatal("Expected to be unable to fetch the user with this cookie.")
 	}
@@ -1061,7 +1061,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	// Make sure we can make calls with this token.
 	c := at.Cookie
 	at.SetToken(tk)
-	_, _, err = at.Get("/user", nil)
+	_, _, err = at.UserGET()
 	if err != nil {
 		t.Fatal("Failed to fetch user data with token:", err.Error())
 	}
@@ -1077,16 +1077,11 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	if at.Cookie == nil {
 		t.Fatalf("Failed to extract cookie from request. Cookies found: %+v", r.Cookies())
 	}
-	_, b, err = at.Get("/user", nil)
+	u2, _, err := at.UserGET()
 	if err != nil {
 		t.Fatal("Failed to fetch the updated user:", err.Error())
 	}
 	// Make sure the email is updated.
-	u2 := database.User{}
-	err = json.Unmarshal(b, &u2)
-	if err != nil {
-		t.Fatal("Failed to unmarshal user:", err.Error())
-	}
 	if u2.Email != newEmail {
 		t.Fatalf("Email mismatch. Expected %s, got %s", newEmail, u2.Email)
 	}
@@ -1097,8 +1092,8 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	// Grab the new cookie.
 	at.SetCookie(test.ExtractCookie(r))
 	// Try to get the user, expect a 401.
-	_, b, err = at.Get("/user", nil)
+	_, _, err = at.UserGET()
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected to get %s, got %s. Body: %s", unauthorized, err, string(b))
+		t.Fatalf("Expected to get %s, got %s.", unauthorized, err)
 	}
 }

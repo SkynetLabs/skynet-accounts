@@ -166,14 +166,9 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	}
 	// Make sure we have a valid cookie returned and that it's for the same user.
 	at.SetCookie(test.ExtractCookie(r))
-	_, b, err = at.Get("/user", nil)
+	u, _, err := at.UserGET()
 	if err != nil {
-		t.Fatalf("Failed to fetch user with the given cookie: '%s', error '%s'", string(b), err)
-	}
-	var u database.User
-	err = json.Unmarshal(b, &u)
-	if err != nil {
-		t.Fatal("Failed to parse user:", err)
+		t.Fatal(err)
 	}
 	if u.Email != bodyParams.Get("email") {
 		t.Fatalf("Expected user with email %s, got %s", bodyParams.Get("email"), u.Email)

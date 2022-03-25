@@ -141,7 +141,7 @@ func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 
 	sl1 := "AQAh2vxStoSJ_M9tWcTgqebUWerCAbpMfn9xxa9E29UOuw"
 	sl2 := "AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw"
