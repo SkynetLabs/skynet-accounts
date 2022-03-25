@@ -21,7 +21,7 @@ func TestUserTierCache(t *testing.T) {
 	if ok || tier != database.TierAnonymous {
 		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", database.TierAnonymous, false, tier, ok)
 	}
-	// Set the use in the cache.
+	// Set the user in the cache.
 	cache.Set(u.Sub, u)
 	// Check again.
 	tier, qe, ok := cache.Get(u.Sub)

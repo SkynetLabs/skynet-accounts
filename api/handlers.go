@@ -731,6 +731,34 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 	api.loginUser(w, u, true)
 }
 
+// userPubKeyDELETE removes a given pubkey from the list of pubkeys associated
+// with this user. It does not require a challenge-response because the used
+// does not need to prove the key is theirs.
+func (api *API) userPubKeyDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	ctx := req.Context()
+	var pk database.PubKey
+	err := pk.LoadString(ps.ByName("pubKey"))
+	if err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+	if !u.HasKey(pk) {
+		// This pubkey does not belong to this user.
+		api.WriteError(w, errors.New("the given pubkey is not associated with this user"), http.StatusBadRequest)
+		return
+	}
+	err = api.staticDB.UserPubKeyRemove(ctx, *u, pk)
+	if errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	api.WriteSuccess(w)
+}
+
 // userPubKeyRegisterGET generates an update challenge for the caller.
 func (api *API) userPubKeyRegisterGET(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	ctx := req.Context()
@@ -814,8 +842,12 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 		api.WriteError(w, errors.New("user's sub doesn't match update sub"), http.StatusBadRequest)
 		return
 	}
-	u.PubKeys = append(u.PubKeys, pk)
-	err = api.staticDB.UserSave(ctx, u)
+	err = api.staticDB.UserPubKeyAdd(ctx, *u, pk)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	updatedUser, err := api.staticDB.UserByID(ctx, u.ID)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -825,7 +857,7 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.loginUser(w, u, true)
+	api.loginUser(w, updatedUser, true)
 }
 
 // userUploadsGET returns all uploads made by the current user.
