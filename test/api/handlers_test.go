@@ -941,12 +941,10 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats.BandwidthUploads += skynet.BandwidthUploadCost(0)
 	expectedStats.RawStorageUsed += skynet.RawStorageUsed(0)
 
-	// Call trackDownload without a cookie. Expect this to succeed.
-	// While we expect this to succeed, it won't be counted towards the user's
-	// quota, so we don't increment the expected stats.
+	// Call trackDownload without a cookie. Expect this to fail.
 	at.ClearCredentials()
 	_, err = at.TrackDownload(skylink.String(), 100)
-	if err != nil {
+	if err == nil {
 		t.Fatal(err)
 	}
 	at.SetCookie(c)
