@@ -42,6 +42,9 @@ const (
 )
 
 var (
+	// AnonUser is a helper struct that we can use when we don't have a relevant
+	// user, e.g. when an upload is made by an anonymous user.
+	AnonUser = User{}
 	// True is a helper for when we need to pass a *bool to MongoDB.
 	True = true
 	// False is a helper for when we need to pass a *bool to MongoDB.

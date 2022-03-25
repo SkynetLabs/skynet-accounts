@@ -193,14 +193,14 @@ func TestUserTierCache(t *testing.T) {
 	}
 	// Register a test upload that exceeds the user's allowed storage, so their
 	// QuotaExceeded flag will get raised.
-	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, u.User, database.UserLimits[u.Tier].Storage+1)
+	sl, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, database.UserLimits[u.Tier].Storage+1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Make a specific call to trackUploadPOST in order to trigger the
 	// checkUserQuotas method. This wil register the upload a second time but
 	// that doesn't affect the test.
-	_, err = at.TrackUpload(sl.Skylink)
+	_, err = at.TrackUpload(sl.Skylink, "")
 	if err != nil {
 		t.Fatal(err)
 	}

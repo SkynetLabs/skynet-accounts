@@ -13,11 +13,12 @@ import (
 
 // Upload ...
 type Upload struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
-	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
-	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
-	Unpinned  bool               `bson:"unpinned" json:"-"`
+	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID     primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
+	UploaderIP string             `bson:"uploader_ip" json:"uploaderIP"`
+	SkylinkID  primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
+	Timestamp  time.Time          `bson:"timestamp" json:"timestamp"`
+	Unpinned   bool               `bson:"unpinned" json:"-"`
 }
 
 // UploadResponse is the representation of an upload we send as response to
@@ -45,17 +46,15 @@ func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, e
 
 // UploadCreate registers a new upload and counts it towards the user's used
 // storage.
-func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Upload, error) {
-	if user.ID.IsZero() {
-		return nil, errors.New("invalid user")
-	}
+func (db *DB) UploadCreate(ctx context.Context, user User, ip string, skylink Skylink) (*Upload, error) {
 	if skylink.ID.IsZero() {
 		return nil, errors.New("skylink doesn't exist")
 	}
 	up := Upload{
-		UserID:    user.ID,
-		SkylinkID: skylink.ID,
-		Timestamp: time.Now().UTC(),
+		UserID:     user.ID,
+		UploaderIP: ip,
+		SkylinkID:  skylink.ID,
+		Timestamp:  time.Now().UTC(),
 	}
 	ior, err := db.staticUploads.InsertOne(ctx, up)
 	if err != nil {
