@@ -285,7 +285,7 @@ func processResponse(r *http.Response) (*http.Response, []byte, error) {
 func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
 	r, b, err := at.request(http.MethodGet, "/health", nil, nil, nil)
 	if err != nil {
-		return api.HealthGET{}, r.StatusCode, err
+		return api.HealthGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	var resp api.HealthGET
 	err = json.Unmarshal(b, &resp)
@@ -295,43 +295,91 @@ func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
 	return resp, r.StatusCode, nil
 }
 
+/*** Registration helpers ***/
+
+// RegisterGET performs `GET /register`
+func (at *AccountsTester) RegisterGET(pk database.PubKey) (api.ChallengePublic, int, error) {
+	query := url.Values{}
+	if pk != nil {
+		query.Set("pubKey", hex.EncodeToString(pk[:]))
+	}
+	r, b, err := at.request(http.MethodGet, "/register", query, nil, nil)
+	if err != nil {
+		return api.ChallengePublic{}, r.StatusCode, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.ChallengePublic{}, r.StatusCode, errors.New(string(b))
+	}
+	var resp api.ChallengePublic
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return api.ChallengePublic{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
+}
+
+// RegisterPOST performs `POST /register`
+func (at *AccountsTester) RegisterPOST(response, signature []byte, email string) (api.UserGET, int, error) {
+	// bb, err := json.Marshal(database.ChallengeResponse{
+	// 	Response:  response,
+	// 	Signature: signature,
+	// })
+	bodyParams := url.Values{}
+	bodyParams.Set("response", hex.EncodeToString(response))
+	bodyParams.Set("signature", hex.EncodeToString(signature))
+	bodyParams.Set("email", email)
+	r, b, err := at.Post("/register", nil, bodyParams)
+	if err != nil {
+		return api.UserGET{}, r.StatusCode, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.UserGET{}, r.StatusCode, errors.New(string(b))
+	}
+	var result api.UserGET
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		return api.UserGET{}, 0, errors.AddContext(err, "failed to parse response")
+	}
+	return result, r.StatusCode, nil
+}
+
 /*** Track helpers ***/
 
 // TrackDownload performs a `POST /track/download/:skylink` request.
 func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error) {
 	form := url.Values{}
 	form.Set("bytes", fmt.Sprint(bytes))
-	r, _, err := at.request(http.MethodPost, "/track/download/"+skylink, form, nil, nil)
-	return r.StatusCode, err
+	r, b, err := at.request(http.MethodPost, "/track/download/"+skylink, form, nil, nil)
+	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
 // TrackUpload performs a `POST /track/upload/:skylink` request.
 func (at *AccountsTester) TrackUpload(skylink string, ip string) (int, error) {
 	form := url.Values{}
 	form.Set("ip", ip)
-	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
-	return r.StatusCode, err
+	r, b, err := at.request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
+	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
 // TrackRegistryRead performs a `POST /track/registry/read` request.
 func (at *AccountsTester) TrackRegistryRead() (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/registry/read", nil, nil, nil)
-	return r.StatusCode, err
+	r, b, err := at.request(http.MethodPost, "/track/registry/read", nil, nil, nil)
+	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
 // TrackRegistryWrite performs a `POST /track/registry/write` request.
 func (at *AccountsTester) TrackRegistryWrite() (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/registry/write", nil, nil, nil)
-	return r.StatusCode, err
+	r, b, err := at.request(http.MethodPost, "/track/registry/write", nil, nil, nil)
+	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
 /*** User helpers ***/
 
 // UserDELETE performs `DELETE /user`
 func (at *AccountsTester) UserDELETE() (int, error) {
-	r, _, err := at.request(http.MethodDelete, "/user", nil, nil, nil)
+	r, b, err := at.request(http.MethodDelete, "/user", nil, nil, nil)
 	if err != nil {
-		return r.StatusCode, err
+		return r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusNoContent {
 		return r.StatusCode, errors.New("unexpected status code")
@@ -345,7 +393,7 @@ func (at *AccountsTester) UserDELETE() (int, error) {
 func (at *AccountsTester) UserGET() (api.UserGET, int, error) {
 	r, b, err := at.request(http.MethodGet, "/user", nil, nil, nil)
 	if err != nil {
-		return api.UserGET{}, r.StatusCode, err
+		return api.UserGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return api.UserGET{}, r.StatusCode, errors.New(string(b))
@@ -358,14 +406,44 @@ func (at *AccountsTester) UserGET() (api.UserGET, int, error) {
 	return resp, r.StatusCode, nil
 }
 
-// UserLogin logs the user in and returns a response.
+// UserLoginCredentialsPOST logs the user in and returns a response.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) UserLogin(emailAddr, password string) (*http.Response, []byte, error) {
+func (at *AccountsTester) UserLoginCredentialsPOST(emailAddr, password string) (*http.Response, []byte, error) {
 	params := url.Values{}
 	params.Set("email", emailAddr)
 	params.Set("password", password)
 	return at.Post("/login", nil, params)
+}
+
+// UserLoginPubKeyGET performs `GET /login`
+func (at *AccountsTester) UserLoginPubKeyGET(pk database.PubKey) (api.ChallengePublic, int, error) {
+	params := url.Values{}
+	if pk != nil {
+		params.Set("pubKey", hex.EncodeToString(pk[:]))
+	}
+	r, b, err := at.request(http.MethodGet, "/login", params, nil, nil)
+	if err != nil {
+		return api.ChallengePublic{}, r.StatusCode, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.ChallengePublic{}, r.StatusCode, errors.New(string(b))
+	}
+	var resp api.ChallengePublic
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return api.ChallengePublic{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
+}
+
+// UserLoginPubKeyPOST performs `POST /login`
+func (at *AccountsTester) UserLoginPubKeyPOST(response, signature []byte, emailStr string) (*http.Response, []byte, error) {
+	bodyParams := url.Values{}
+	bodyParams.Set("response", hex.EncodeToString(response))
+	bodyParams.Set("signature", hex.EncodeToString(signature))
+	bodyParams.Set("email", emailStr)
+	return at.Post("/login", nil, bodyParams)
 }
 
 // UserPOST is a helper method that creates a new user.
@@ -392,7 +470,7 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (api.UserGET,
 	}
 	r, b, err := at.request(http.MethodPut, "/user", nil, bb, nil)
 	if err != nil {
-		return api.UserGET{}, r.StatusCode, err
+		return api.UserGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return api.UserGET{}, r.StatusCode, errors.New(string(b))
@@ -409,15 +487,15 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (api.UserGET,
 
 // UserAPIKeysDELETE performs a `DELETE /user/apikeys/:id` request.
 func (at *AccountsTester) UserAPIKeysDELETE(id primitive.ObjectID) (int, error) {
-	r, _, err := at.request(http.MethodDelete, "/user/apikeys/"+id.Hex(), nil, nil, nil)
-	return r.StatusCode, err
+	r, b, err := at.request(http.MethodDelete, "/user/apikeys/"+id.Hex(), nil, nil, nil)
+	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
 // UserAPIKeysGET performs a `GET /user/apikeys/:id` request.
 func (at *AccountsTester) UserAPIKeysGET(id primitive.ObjectID) (api.APIKeyResponse, int, error) {
 	r, b, err := at.request(http.MethodGet, "/user/apikeys/"+id.Hex(), nil, nil, nil)
 	if err != nil {
-		return api.APIKeyResponse{}, r.StatusCode, err
+		return api.APIKeyResponse{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return api.APIKeyResponse{}, r.StatusCode, errors.New(string(b))
@@ -434,7 +512,7 @@ func (at *AccountsTester) UserAPIKeysGET(id primitive.ObjectID) (api.APIKeyRespo
 func (at *AccountsTester) UserAPIKeysLIST() ([]api.APIKeyResponse, int, error) {
 	r, b, err := at.request(http.MethodGet, "/user/apikeys", nil, nil, nil)
 	if err != nil {
-		return nil, r.StatusCode, err
+		return nil, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return nil, r.StatusCode, errors.New(string(b))
@@ -455,7 +533,7 @@ func (at *AccountsTester) UserAPIKeysPOST(body api.APIKeyPOST) (api.APIKeyRespon
 	}
 	r, b, err := at.request(http.MethodPost, "/user/apikeys", nil, bb, nil)
 	if err != nil {
-		return api.APIKeyResponseWithKey{}, r.StatusCode, err
+		return api.APIKeyResponseWithKey{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return api.APIKeyResponseWithKey{}, r.StatusCode, errors.New(string(b))
@@ -476,7 +554,7 @@ func (at *AccountsTester) UserAPIKeysPUT(akID primitive.ObjectID, body api.APIKe
 	}
 	r, b, err := at.request(http.MethodPut, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
 	if err != nil {
-		return r.StatusCode, err
+		return r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusNoContent {
 		return r.StatusCode, errors.New(string(b))
@@ -492,7 +570,7 @@ func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.API
 	}
 	r, b, err := at.request(http.MethodPatch, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
 	if err != nil {
-		return r.StatusCode, err
+		return r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusNoContent {
 		return r.StatusCode, errors.New(string(b))
@@ -510,7 +588,7 @@ func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (ap
 	}
 	r, b, err := at.request(http.MethodGet, "/user/limits", queryParams, nil, headers)
 	if err != nil {
-		return api.UserLimitsGET{}, r.StatusCode, err
+		return api.UserLimitsGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return api.UserLimitsGET{}, r.StatusCode, errors.New(string(b))
@@ -533,7 +611,7 @@ func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, head
 	}
 	r, b, err := at.request(http.MethodGet, "/user/limits/"+sl, queryParams, nil, headers)
 	if err != nil {
-		return api.UserLimitsGET{}, r.StatusCode, err
+		return api.UserLimitsGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return api.UserLimitsGET{}, r.StatusCode, errors.New(string(b))
@@ -550,9 +628,9 @@ func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, head
 
 // UserPubkeyDELETE performs `DELETE /user/pubkey/:pubKey`
 func (at *AccountsTester) UserPubkeyDELETE(pk database.PubKey) (int, error) {
-	r, _, err := at.request(http.MethodDelete, "/user/pubkey/"+hex.EncodeToString(pk[:]), nil, nil, nil)
+	r, b, err := at.request(http.MethodDelete, "/user/pubkey/"+hex.EncodeToString(pk[:]), nil, nil, nil)
 	if err != nil {
-		return r.StatusCode, err
+		return r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusNoContent {
 		return r.StatusCode, errors.New("unexpected status code")
@@ -566,7 +644,7 @@ func (at *AccountsTester) UserPubkeyRegisterGET(pubKey string) (api.ChallengePub
 	query.Add("pubKey", pubKey)
 	r, b, err := at.request(http.MethodGet, "/user/pubkey/register", query, nil, nil)
 	if err != nil {
-		return api.ChallengePublic{}, r.StatusCode, err
+		return api.ChallengePublic{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return api.ChallengePublic{}, r.StatusCode, errors.New(string(b))
@@ -591,7 +669,7 @@ func (at *AccountsTester) UserPubkeyRegisterPOST(response, signature []byte) (ap
 	}
 	r, b, err := at.request(http.MethodPost, "/user/pubkey/register", nil, bb, nil)
 	if err != nil {
-		return api.UserGET{}, r.StatusCode, err
+		return api.UserGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return api.UserGET{}, r.StatusCode, errors.New(string(b))
@@ -608,9 +686,9 @@ func (at *AccountsTester) UserPubkeyRegisterPOST(response, signature []byte) (ap
 
 // UploadsDELETE performs `DELETE /user/uploads/:skylink`
 func (at *AccountsTester) UploadsDELETE(skylink string) (int, error) {
-	r, _, err := at.request(http.MethodDelete, "/user/uploads/"+skylink, nil, nil, nil)
+	r, b, err := at.request(http.MethodDelete, "/user/uploads/"+skylink, nil, nil, nil)
 	if err != nil {
-		return r.StatusCode, err
+		return r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusNoContent {
 		return r.StatusCode, errors.New("unexpected status code")
@@ -628,7 +706,7 @@ func (at *AccountsTester) UserStats(unit string, headers map[string]string) (dat
 	}
 	r, b, err := at.request(http.MethodGet, "/user/stats", queryParams, nil, headers)
 	if err != nil {
-		return database.UserStats{}, r.StatusCode, err
+		return database.UserStats{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
 	if r.StatusCode != http.StatusOK {
 		return database.UserStats{}, r.StatusCode, errors.New(string(b))

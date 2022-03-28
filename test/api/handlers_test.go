@@ -145,7 +145,7 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		}
 	}(u)
 	// Log in with that user in order to make sure it exists.
-	_, b, err = at.UserLogin(emailAddr, password)
+	_, b, err = at.UserLoginCredentialsPOST(emailAddr, password)
 	if err != nil {
 		t.Fatalf("Login failed. Error: '%s'. Body: '%s'", err.Error(), string(b))
 	}
@@ -161,7 +161,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	emailAddr := test.DBNameForTest(t.Name()) + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	// Try logging in with a non-existent user.
-	_, _, err := at.UserLogin(emailAddr, password)
+	_, _, err := at.UserLoginCredentialsPOST(emailAddr, password)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
@@ -175,7 +175,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 	// Login with an existing user.
-	r, _, err := at.UserLogin(emailAddr, password)
+	r, _, err := at.UserLoginCredentialsPOST(emailAddr, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected %s, got %s", unauthorized, err)
 	}
 	// Try logging in with a bad password.
-	_, _, err = at.UserLogin(emailAddr, "bad password")
+	_, _, err = at.UserLoginCredentialsPOST(emailAddr, "bad password")
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
@@ -296,7 +296,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	params.Set("email", u.Email)
 	params.Set("password", pw)
 	// Try logging in with a non-existent user.
-	_, _, err = at.UserLogin(u.Email, pw)
+	_, _, err = at.UserLoginCredentialsPOST(u.Email, pw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -849,7 +849,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err, string(b))
 	}
 	// Make sure the user's password is now successfully changed.
-	_, b, err = at.UserLogin(u.Email, newPassword)
+	_, b, err = at.UserLoginCredentialsPOST(u.Email, newPassword)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
@@ -1020,7 +1020,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}()
 
 	// Log in with that user in order to make sure it exists.
-	r, _, err := at.UserLogin(emailAddr, password)
+	r, _, err := at.UserLoginCredentialsPOST(emailAddr, password)
 	if err != nil {
 		t.Fatal("Login failed. Error ", err.Error())
 	}
@@ -1051,7 +1051,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	// Grab the new cookie. It has changed because of the user edit.
 	at.ClearCredentials()
-	r, _, err = at.UserLogin(newEmail, password)
+	r, _, err = at.UserLoginCredentialsPOST(newEmail, password)
 	if err != nil {
 		t.Fatal(err)
 	}

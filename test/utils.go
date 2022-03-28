@@ -105,7 +105,7 @@ func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, e
 		return nil, nil, err
 	}
 	// Log in with that user in order to make sure it exists.
-	r, _, err := at.UserLogin(email, password)
+	r, _, err := at.UserLoginCredentialsPOST(email, password)
 	if err != nil {
 		return nil, nil, err
 	}
