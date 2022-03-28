@@ -96,21 +96,21 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Request a challenge without a pubkey.
-	_, status, err = at.UserLoginPubKeyGET(nil)
+	_, status, err = at.LoginPubKeyGET(nil)
 	if status != http.StatusBadRequest || err == nil || !strings.Contains(err.Error(), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
 			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), status, err)
 	}
 
 	// Request a challenge with an invalid pubkey.
-	ch, status, err = at.UserLoginPubKeyGET(fastrand.Bytes(10)[:])
+	ch, status, err = at.LoginPubKeyGET(fastrand.Bytes(10)[:])
 	if status != http.StatusBadRequest || err == nil || !strings.Contains(err.Error(), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
 			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), status, err)
 	}
 
 	// Request a challenge with a valid pubkey.
-	ch, status, err = at.UserLoginPubKeyGET(pk[:])
+	ch, status, err = at.LoginPubKeyGET(pk[:])
 	chBytes, err = hex.DecodeString(ch.Challenge)
 	if err != nil {
 		t.Fatal("Invalid challenge:", err)
@@ -120,7 +120,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	response = append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(database.PortalName)...)...)
 	sig = ed25519.Sign(sk[:], response)
 	emailStr = name + "@siasky.net"
-	r, b, err := at.UserLoginPubKeyPOST(response, sig, emailStr)
+	r, b, err := at.LoginPubKeyPOST(response, sig, emailStr)
 	if err != nil {
 		t.Fatalf("Failed to login. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
 	}

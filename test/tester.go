@@ -188,17 +188,10 @@ func (at *AccountsTester) SetToken(t string) {
 	at.Token = t
 }
 
-// Get executes a GET request against the test service.
+// post executes a POST request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Get(endpoint string, params url.Values) (*http.Response, []byte, error) {
-	return at.request(http.MethodGet, endpoint, params, nil, nil)
-}
-
-// Post executes a POST request against the test service.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
+func (at *AccountsTester) post(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
 	if params == nil {
 		params = url.Values{}
 	}
@@ -295,6 +288,53 @@ func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
 	return resp, r.StatusCode, nil
 }
 
+/*** Login and logout helpers ***/
+
+// LoginCredentialsPOST logs the user in and returns a response.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) LoginCredentialsPOST(emailAddr, password string) (*http.Response, []byte, error) {
+	params := url.Values{}
+	params.Set("email", emailAddr)
+	params.Set("password", password)
+	return at.post("/login", nil, params)
+}
+
+// LoginPubKeyGET performs `GET /login`
+func (at *AccountsTester) LoginPubKeyGET(pk database.PubKey) (api.ChallengePublic, int, error) {
+	params := url.Values{}
+	if pk != nil {
+		params.Set("pubKey", hex.EncodeToString(pk[:]))
+	}
+	r, b, err := at.request(http.MethodGet, "/login", params, nil, nil)
+	if err != nil {
+		return api.ChallengePublic{}, r.StatusCode, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.ChallengePublic{}, r.StatusCode, errors.New(string(b))
+	}
+	var resp api.ChallengePublic
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return api.ChallengePublic{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
+}
+
+// LoginPubKeyPOST performs `POST /login`
+func (at *AccountsTester) LoginPubKeyPOST(response, signature []byte, emailStr string) (*http.Response, []byte, error) {
+	bodyParams := url.Values{}
+	bodyParams.Set("response", hex.EncodeToString(response))
+	bodyParams.Set("signature", hex.EncodeToString(signature))
+	bodyParams.Set("email", emailStr)
+	return at.post("/login", nil, bodyParams)
+}
+
+// LogoutPOST performs `POST /logout`
+func (at *AccountsTester) LogoutPOST() (*http.Response, []byte, error) {
+	return at.post("/logout", nil, nil)
+}
+
 /*** Registration helpers ***/
 
 // RegisterGET performs `GET /register`
@@ -328,7 +368,7 @@ func (at *AccountsTester) RegisterPOST(response, signature []byte, email string)
 	bodyParams.Set("response", hex.EncodeToString(response))
 	bodyParams.Set("signature", hex.EncodeToString(signature))
 	bodyParams.Set("email", email)
-	r, b, err := at.Post("/register", nil, bodyParams)
+	r, b, err := at.post("/register", nil, bodyParams)
 	if err != nil {
 		return api.UserGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -406,44 +446,12 @@ func (at *AccountsTester) UserGET() (api.UserGET, int, error) {
 	return resp, r.StatusCode, nil
 }
 
-// UserLoginCredentialsPOST logs the user in and returns a response.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) UserLoginCredentialsPOST(emailAddr, password string) (*http.Response, []byte, error) {
-	params := url.Values{}
-	params.Set("email", emailAddr)
-	params.Set("password", password)
-	return at.Post("/login", nil, params)
-}
-
-// UserLoginPubKeyGET performs `GET /login`
-func (at *AccountsTester) UserLoginPubKeyGET(pk database.PubKey) (api.ChallengePublic, int, error) {
-	params := url.Values{}
-	if pk != nil {
-		params.Set("pubKey", hex.EncodeToString(pk[:]))
-	}
-	r, b, err := at.request(http.MethodGet, "/login", params, nil, nil)
-	if err != nil {
-		return api.ChallengePublic{}, r.StatusCode, errors.AddContext(err, string(b))
-	}
-	if r.StatusCode != http.StatusOK {
-		return api.ChallengePublic{}, r.StatusCode, errors.New(string(b))
-	}
-	var resp api.ChallengePublic
-	err = json.Unmarshal(b, &resp)
-	if err != nil {
-		return api.ChallengePublic{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
-	}
-	return resp, r.StatusCode, nil
-}
-
-// UserLoginPubKeyPOST performs `POST /login`
-func (at *AccountsTester) UserLoginPubKeyPOST(response, signature []byte, emailStr string) (*http.Response, []byte, error) {
-	bodyParams := url.Values{}
-	bodyParams.Set("response", hex.EncodeToString(response))
-	bodyParams.Set("signature", hex.EncodeToString(signature))
-	bodyParams.Set("email", emailStr)
-	return at.Post("/login", nil, bodyParams)
+// UserConfirmGET performs `GET /user/confirm`
+func (at *AccountsTester) UserConfirmGET(confirmationToken string) (int, error) {
+	qp := url.Values{}
+	qp.Set("token", confirmationToken)
+	r, b, err := at.request(http.MethodGet, "/user/confirm", qp, nil, nil)
+	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
 // UserPOST is a helper method that creates a new user.
@@ -453,7 +461,7 @@ func (at *AccountsTester) UserPOST(emailAddr, password string) (*http.Response, 
 	params := url.Values{}
 	params.Set("email", emailAddr)
 	params.Set("password", password)
-	return at.Post("/user", nil, params)
+	return at.post("/user", nil, params)
 }
 
 // UserPUT is a helper method which updates the entire user record.
@@ -479,6 +487,28 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (api.UserGET,
 	err = json.Unmarshal(b, &result)
 	if err != nil {
 		return api.UserGET{}, 0, errors.AddContext(err, "failed to parse response")
+	}
+	return result, r.StatusCode, nil
+}
+
+// UserReconfirmPOST performs `POST /user/reconfirm`
+func (at *AccountsTester) UserReconfirmPOST() (*http.Response, []byte, error) {
+	return at.post("/user/reconfirm", nil, nil)
+}
+
+// UserUploadsGET performs `GET /user/uploads`
+func (at *AccountsTester) UserUploadsGET() (api.UploadsGET, int, error) {
+	r, b, err := at.request(http.MethodGet, "/user/uploads", nil, nil, nil)
+	if err != nil {
+		return api.UploadsGET{}, r.StatusCode, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.UploadsGET{}, r.StatusCode, errors.New(string(b))
+	}
+	var result api.UploadsGET
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		return api.UploadsGET{}, 0, errors.AddContext(err, "failed to parse response")
 	}
 	return result, r.StatusCode, nil
 }
@@ -680,6 +710,38 @@ func (at *AccountsTester) UserPubkeyRegisterPOST(response, signature []byte) (ap
 		return api.UserGET{}, 0, errors.AddContext(err, "failed to parse response")
 	}
 	return result, r.StatusCode, nil
+}
+
+/*** User recovery helpers ***/
+
+// UserRecoverPOST performs `POST /user/recover`
+func (at *AccountsTester) UserRecoverPOST(tk, pw, confirmPW string) (int, error) {
+	body := url.Values{}
+	body.Set("token", tk)
+	body.Set("password", pw)
+	body.Set("confirmPassword", confirmPW)
+	r, b, err := at.post("/user/recover", nil, body)
+	if err != nil {
+		return r.StatusCode, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode != http.StatusNoContent {
+		return r.StatusCode, errors.New("unexpected status code")
+	}
+	return r.StatusCode, nil
+}
+
+// UserRecoverRequestPOST performs `POST /user/recover/request`
+func (at *AccountsTester) UserRecoverRequestPOST(email string) (int, error) {
+	body := url.Values{}
+	body.Set("email", email)
+	r, b, err := at.post("/user/recover/request", nil, body)
+	if err != nil {
+		return r.StatusCode, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode != http.StatusNoContent {
+		return r.StatusCode, errors.New("unexpected status code")
+	}
+	return r.StatusCode, nil
 }
 
 /*** Uploads and downloads helpers ***/

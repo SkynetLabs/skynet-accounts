@@ -165,7 +165,7 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, _, err := at.UserLoginCredentialsPOST(emailAddr, password)
+	r, _, err := at.LoginCredentialsPOST(emailAddr, password)
 	if err != nil {
 		t.Fatal(err)
 	}
