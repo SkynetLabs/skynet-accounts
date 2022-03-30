@@ -33,11 +33,7 @@ func (api *API) userAndTokenByRequestToken(req *http.Request) (*database.User, j
 // It then returns the user who owns it and a token for that user.
 // It first checks the headers and then the query.
 // This method accesses the database.
-func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.Token, error) {
-	ak, err := apiKeyFromRequest(req)
-	if err != nil {
-		return nil, nil, err
-	}
+func (api *API) userAndTokenByAPIKey(req *http.Request, ak database.APIKey) (*database.User, jwt2.Token, error) {
 	akr, err := api.staticDB.APIKeyByKey(req.Context(), ak.String())
 	if err != nil {
 		return nil, nil, err
@@ -62,16 +58,11 @@ func (api *API) userAndTokenByAPIKey(req *http.Request) (*database.User, jwt2.To
 	return u, t, err
 }
 
-// apiKeyFromRequest extracts the API key from the request and returns it.
-// This function does not differentiate between APIKey and APIKey.
-// It first checks the headers and then the query.
+// apiKeyFromRequest extracts the API key from the request headers and returns
+// it.
 func apiKeyFromRequest(r *http.Request) (*database.APIKey, error) {
 	// Check the headers for an API key.
 	akStr := r.Header.Get(APIKeyHeader)
-	// If there is no API key in the headers, try the query.
-	if akStr == "" {
-		akStr = r.FormValue("apiKey")
-	}
 	if akStr == "" {
 		return nil, ErrNoAPIKey
 	}

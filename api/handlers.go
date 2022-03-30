@@ -1112,7 +1112,7 @@ func (api *API) trackUploadPOST(_ *database.User, w http.ResponseWriter, req *ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, _, _ := api.userFromRequest(req)
+	u, _, _ := api.userFromRequest(req, true)
 	if u == nil {
 		// This will be tracked as an anonymous request.
 		u = &database.AnonUser
@@ -1271,20 +1271,21 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 // userFromRequest checks the requests for various forms of authentication (API
 // key, cookie, authorization header) and returns user information based on
 // those.
-func (api *API) userFromRequest(req *http.Request) (*database.User, jwt2.Token, error) {
+func (api *API) userFromRequest(req *http.Request, allowsAPIKey bool) (*database.User, jwt2.Token, error) {
+	// Check for a token.
+	u, tk, err := api.userAndTokenByRequestToken(req)
+	if err == nil {
+		return u, tk, nil
+	}
 	// Check for an API key.
-	u, tk, err := api.userAndTokenByAPIKey(req)
-	if err != nil && !errors.Contains(err, ErrNoAPIKey) {
+	ak, err := apiKeyFromRequest(req)
+	if err != nil {
 		return nil, nil, err
 	}
-	// If there is no API key check for a token.
-	if errors.Contains(err, ErrNoAPIKey) {
-		u, tk, err = api.userAndTokenByRequestToken(req)
-		if err != nil {
-			return nil, nil, err
-		}
+	if !allowsAPIKey {
+		return nil, nil, ErrAPIKeyNotAllowed
 	}
-	return u, tk, err
+	return api.userAndTokenByAPIKey(req, *ak)
 }
 
 // wellKnownJWKSGET returns our public JWKS, so people can use that to verify

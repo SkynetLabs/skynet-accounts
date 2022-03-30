@@ -188,7 +188,7 @@ func (at *AccountsTester) SetToken(t string) {
 	at.Token = t
 }
 
-// post executes a POST request against the test service.
+// post executes a POST Request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) post(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
@@ -215,11 +215,11 @@ func (at *AccountsTester) post(endpoint string, params url.Values, bodyParams ur
 	return at.executeRequest(req)
 }
 
-// request is a helper method that puts together and executes an HTTP
-// request. It attaches the current cookie, if one exists.
+// Request is a helper method that puts together and executes an HTTP
+// Request. It attaches the current cookie, if one exists.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, body []byte, headers map[string]string) (*http.Response, []byte, error) {
+func (at *AccountsTester) Request(method string, endpoint string, queryParams url.Values, body []byte, headers map[string]string) (*http.Response, []byte, error) {
 	if queryParams == nil {
 		queryParams = url.Values{}
 	}
@@ -234,13 +234,13 @@ func (at *AccountsTester) request(method string, endpoint string, queryParams ur
 	return at.executeRequest(req)
 }
 
-// executeRequest is a helper method which executes a test request and processes
+// executeRequest is a helper method which executes a test Request and processes
 // the response by extracting the body from it and handling non-OK status codes.
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []byte, error) {
 	if req == nil {
-		return &http.Response{}, nil, errors.New("invalid request")
+		return &http.Response{}, nil, errors.New("invalid Request")
 	}
 	if at.APIKey != "" {
 		req.Header.Set(api.APIKeyHeader, at.APIKey)
@@ -276,7 +276,7 @@ func processResponse(r *http.Response) (*http.Response, []byte, error) {
 
 // HealthGet executes a GET /health.
 func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
-	r, b, err := at.request(http.MethodGet, "/health", nil, nil, nil)
+	r, b, err := at.Request(http.MethodGet, "/health", nil, nil, nil)
 	if err != nil {
 		return api.HealthGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -306,7 +306,7 @@ func (at *AccountsTester) LoginPubKeyGET(pk database.PubKey) (api.ChallengePubli
 	if pk != nil {
 		params.Set("pubKey", hex.EncodeToString(pk[:]))
 	}
-	r, b, err := at.request(http.MethodGet, "/login", params, nil, nil)
+	r, b, err := at.Request(http.MethodGet, "/login", params, nil, nil)
 	if err != nil {
 		return api.ChallengePublic{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -343,7 +343,7 @@ func (at *AccountsTester) RegisterGET(pk database.PubKey) (api.ChallengePublic, 
 	if pk != nil {
 		query.Set("pubKey", hex.EncodeToString(pk[:]))
 	}
-	r, b, err := at.request(http.MethodGet, "/register", query, nil, nil)
+	r, b, err := at.Request(http.MethodGet, "/register", query, nil, nil)
 	if err != nil {
 		return api.ChallengePublic{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -385,31 +385,31 @@ func (at *AccountsTester) RegisterPOST(response, signature []byte, email string)
 
 /*** Track helpers ***/
 
-// TrackDownload performs a `POST /track/download/:skylink` request.
+// TrackDownload performs a `POST /track/download/:skylink` Request.
 func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error) {
 	form := url.Values{}
 	form.Set("bytes", fmt.Sprint(bytes))
-	r, b, err := at.request(http.MethodPost, "/track/download/"+skylink, form, nil, nil)
+	r, b, err := at.Request(http.MethodPost, "/track/download/"+skylink, form, nil, nil)
 	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
-// TrackUpload performs a `POST /track/upload/:skylink` request.
+// TrackUpload performs a `POST /track/upload/:skylink` Request.
 func (at *AccountsTester) TrackUpload(skylink string, ip string) (int, error) {
 	form := url.Values{}
 	form.Set("ip", ip)
-	r, b, err := at.request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
+	r, b, err := at.Request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil)
 	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
-// TrackRegistryRead performs a `POST /track/registry/read` request.
+// TrackRegistryRead performs a `POST /track/registry/read` Request.
 func (at *AccountsTester) TrackRegistryRead() (int, error) {
-	r, b, err := at.request(http.MethodPost, "/track/registry/read", nil, nil, nil)
+	r, b, err := at.Request(http.MethodPost, "/track/registry/read", nil, nil, nil)
 	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
-// TrackRegistryWrite performs a `POST /track/registry/write` request.
+// TrackRegistryWrite performs a `POST /track/registry/write` Request.
 func (at *AccountsTester) TrackRegistryWrite() (int, error) {
-	r, b, err := at.request(http.MethodPost, "/track/registry/write", nil, nil, nil)
+	r, b, err := at.Request(http.MethodPost, "/track/registry/write", nil, nil, nil)
 	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
@@ -417,7 +417,7 @@ func (at *AccountsTester) TrackRegistryWrite() (int, error) {
 
 // UserDELETE performs `DELETE /user`
 func (at *AccountsTester) UserDELETE() (int, error) {
-	r, b, err := at.request(http.MethodDelete, "/user", nil, nil, nil)
+	r, b, err := at.Request(http.MethodDelete, "/user", nil, nil, nil)
 	if err != nil {
 		return r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -431,7 +431,7 @@ func (at *AccountsTester) UserDELETE() (int, error) {
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) UserGET() (api.UserGET, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user", nil, nil, nil)
+	r, b, err := at.Request(http.MethodGet, "/user", nil, nil, nil)
 	if err != nil {
 		return api.UserGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -450,7 +450,7 @@ func (at *AccountsTester) UserGET() (api.UserGET, int, error) {
 func (at *AccountsTester) UserConfirmGET(confirmationToken string) (int, error) {
 	qp := url.Values{}
 	qp.Set("token", confirmationToken)
-	r, b, err := at.request(http.MethodGet, "/user/confirm", qp, nil, nil)
+	r, b, err := at.Request(http.MethodGet, "/user/confirm", qp, nil, nil)
 	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
@@ -476,7 +476,7 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (api.UserGET,
 	if err != nil {
 		return api.UserGET{}, http.StatusBadRequest, err
 	}
-	r, b, err := at.request(http.MethodPut, "/user", nil, bb, nil)
+	r, b, err := at.Request(http.MethodPut, "/user", nil, bb, nil)
 	if err != nil {
 		return api.UserGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -498,7 +498,7 @@ func (at *AccountsTester) UserReconfirmPOST() (*http.Response, []byte, error) {
 
 // UserUploadsGET performs `GET /user/uploads`
 func (at *AccountsTester) UserUploadsGET() (api.UploadsGET, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/uploads", nil, nil, nil)
+	r, b, err := at.Request(http.MethodGet, "/user/uploads", nil, nil, nil)
 	if err != nil {
 		return api.UploadsGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -515,15 +515,15 @@ func (at *AccountsTester) UserUploadsGET() (api.UploadsGET, int, error) {
 
 /*** User API keys helpers ***/
 
-// UserAPIKeysDELETE performs a `DELETE /user/apikeys/:id` request.
+// UserAPIKeysDELETE performs a `DELETE /user/apikeys/:id` Request.
 func (at *AccountsTester) UserAPIKeysDELETE(id primitive.ObjectID) (int, error) {
-	r, b, err := at.request(http.MethodDelete, "/user/apikeys/"+id.Hex(), nil, nil, nil)
+	r, b, err := at.Request(http.MethodDelete, "/user/apikeys/"+id.Hex(), nil, nil, nil)
 	return r.StatusCode, errors.AddContext(err, string(b))
 }
 
-// UserAPIKeysGET performs a `GET /user/apikeys/:id` request.
+// UserAPIKeysGET performs a `GET /user/apikeys/:id` Request.
 func (at *AccountsTester) UserAPIKeysGET(id primitive.ObjectID) (api.APIKeyResponse, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/apikeys/"+id.Hex(), nil, nil, nil)
+	r, b, err := at.Request(http.MethodGet, "/user/apikeys/"+id.Hex(), nil, nil, nil)
 	if err != nil {
 		return api.APIKeyResponse{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -538,9 +538,9 @@ func (at *AccountsTester) UserAPIKeysGET(id primitive.ObjectID) (api.APIKeyRespo
 	return result, r.StatusCode, nil
 }
 
-// UserAPIKeysLIST performs a `GET /user/apikeys` request.
+// UserAPIKeysLIST performs a `GET /user/apikeys` Request.
 func (at *AccountsTester) UserAPIKeysLIST() ([]api.APIKeyResponse, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/apikeys", nil, nil, nil)
+	r, b, err := at.Request(http.MethodGet, "/user/apikeys", nil, nil, nil)
 	if err != nil {
 		return nil, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -555,13 +555,13 @@ func (at *AccountsTester) UserAPIKeysLIST() ([]api.APIKeyResponse, int, error) {
 	return result, r.StatusCode, nil
 }
 
-// UserAPIKeysPOST performs a `POST /user/apikeys` request.
+// UserAPIKeysPOST performs a `POST /user/apikeys` Request.
 func (at *AccountsTester) UserAPIKeysPOST(body api.APIKeyPOST) (api.APIKeyResponseWithKey, int, error) {
 	bb, err := json.Marshal(body)
 	if err != nil {
 		return api.APIKeyResponseWithKey{}, http.StatusBadRequest, err
 	}
-	r, b, err := at.request(http.MethodPost, "/user/apikeys", nil, bb, nil)
+	r, b, err := at.Request(http.MethodPost, "/user/apikeys", nil, bb, nil)
 	if err != nil {
 		return api.APIKeyResponseWithKey{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -576,13 +576,13 @@ func (at *AccountsTester) UserAPIKeysPOST(body api.APIKeyPOST) (api.APIKeyRespon
 	return result, r.StatusCode, nil
 }
 
-// UserAPIKeysPUT performs a `PUT /user/apikeys` request.
+// UserAPIKeysPUT performs a `PUT /user/apikeys` Request.
 func (at *AccountsTester) UserAPIKeysPUT(akID primitive.ObjectID, body api.APIKeyPUT) (int, error) {
 	bb, err := json.Marshal(body)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
-	r, b, err := at.request(http.MethodPut, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
+	r, b, err := at.Request(http.MethodPut, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
 	if err != nil {
 		return r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -592,13 +592,13 @@ func (at *AccountsTester) UserAPIKeysPUT(akID primitive.ObjectID, body api.APIKe
 	return r.StatusCode, nil
 }
 
-// UserAPIKeysPATCH performs a `PATCH /user/apikeys` request.
+// UserAPIKeysPATCH performs a `PATCH /user/apikeys` Request.
 func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.APIKeyPATCH) (int, error) {
 	bb, err := json.Marshal(body)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
-	r, b, err := at.request(http.MethodPatch, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
+	r, b, err := at.Request(http.MethodPatch, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
 	if err != nil {
 		return r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -610,13 +610,13 @@ func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.API
 
 /*** User limits helpers ***/
 
-// UserLimits performs a `GET /user/limits` request.
+// UserLimits performs a `GET /user/limits` Request.
 func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
 	queryParams := url.Values{}
 	if unit != "" {
 		queryParams.Set("unit", unit)
 	}
-	r, b, err := at.request(http.MethodGet, "/user/limits", queryParams, nil, headers)
+	r, b, err := at.Request(http.MethodGet, "/user/limits", queryParams, nil, headers)
 	if err != nil {
 		return api.UserLimitsGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -631,7 +631,7 @@ func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (ap
 	return resp, r.StatusCode, nil
 }
 
-// UserLimitsSkylink performs a `GET /user/limits/:skylink` request.
+// UserLimitsSkylink performs a `GET /user/limits/:skylink` Request.
 func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, headers map[string]string) (api.UserLimitsGET, int, error) {
 	queryParams := url.Values{}
 	queryParams.Set("unit", unit)
@@ -639,7 +639,7 @@ func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, head
 	if !database.ValidSkylinkHash(sl) {
 		return api.UserLimitsGET{}, 0, database.ErrInvalidSkylink
 	}
-	r, b, err := at.request(http.MethodGet, "/user/limits/"+sl, queryParams, nil, headers)
+	r, b, err := at.Request(http.MethodGet, "/user/limits/"+sl, queryParams, nil, headers)
 	if err != nil {
 		return api.UserLimitsGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -658,7 +658,7 @@ func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, head
 
 // UserPubkeyDELETE performs `DELETE /user/pubkey/:pubKey`
 func (at *AccountsTester) UserPubkeyDELETE(pk database.PubKey) (int, error) {
-	r, b, err := at.request(http.MethodDelete, "/user/pubkey/"+hex.EncodeToString(pk[:]), nil, nil, nil)
+	r, b, err := at.Request(http.MethodDelete, "/user/pubkey/"+hex.EncodeToString(pk[:]), nil, nil, nil)
 	if err != nil {
 		return r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -668,11 +668,11 @@ func (at *AccountsTester) UserPubkeyDELETE(pk database.PubKey) (int, error) {
 	return r.StatusCode, nil
 }
 
-// UserPubkeyRegisterGET performs a `GET /user/pubkey/register` request.
+// UserPubkeyRegisterGET performs a `GET /user/pubkey/register` Request.
 func (at *AccountsTester) UserPubkeyRegisterGET(pubKey string) (api.ChallengePublic, int, error) {
 	query := url.Values{}
 	query.Add("pubKey", pubKey)
-	r, b, err := at.request(http.MethodGet, "/user/pubkey/register", query, nil, nil)
+	r, b, err := at.Request(http.MethodGet, "/user/pubkey/register", query, nil, nil)
 	if err != nil {
 		return api.ChallengePublic{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -687,7 +687,7 @@ func (at *AccountsTester) UserPubkeyRegisterGET(pubKey string) (api.ChallengePub
 	return result, r.StatusCode, nil
 }
 
-// UserPubkeyRegisterPOST performs a `POST /user/pubkey/register` request.
+// UserPubkeyRegisterPOST performs a `POST /user/pubkey/register` Request.
 func (at *AccountsTester) UserPubkeyRegisterPOST(response, signature []byte) (api.UserGET, int, error) {
 	body := database.ChallengeResponseRequest{
 		Response:  hex.EncodeToString(response),
@@ -697,7 +697,7 @@ func (at *AccountsTester) UserPubkeyRegisterPOST(response, signature []byte) (ap
 	if err != nil {
 		return api.UserGET{}, http.StatusBadRequest, err
 	}
-	r, b, err := at.request(http.MethodPost, "/user/pubkey/register", nil, bb, nil)
+	r, b, err := at.Request(http.MethodPost, "/user/pubkey/register", nil, bb, nil)
 	if err != nil {
 		return api.UserGET{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -730,11 +730,11 @@ func (at *AccountsTester) UserRecoverPOST(tk, pw, confirmPW string) (int, error)
 	return r.StatusCode, nil
 }
 
-// UserRecoverRequestPOST performs `POST /user/recover/request`
+// UserRecoverRequestPOST performs `POST /user/recover/Request`
 func (at *AccountsTester) UserRecoverRequestPOST(email string) (int, error) {
 	body := url.Values{}
 	body.Set("email", email)
-	r, b, err := at.post("/user/recover/request", nil, body)
+	r, b, err := at.post("/user/recover/Request", nil, body)
 	if err != nil {
 		return r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -748,7 +748,7 @@ func (at *AccountsTester) UserRecoverRequestPOST(email string) (int, error) {
 
 // UploadsDELETE performs `DELETE /user/uploads/:skylink`
 func (at *AccountsTester) UploadsDELETE(skylink string) (int, error) {
-	r, b, err := at.request(http.MethodDelete, "/user/uploads/"+skylink, nil, nil, nil)
+	r, b, err := at.Request(http.MethodDelete, "/user/uploads/"+skylink, nil, nil, nil)
 	if err != nil {
 		return r.StatusCode, errors.AddContext(err, string(b))
 	}
@@ -760,13 +760,13 @@ func (at *AccountsTester) UploadsDELETE(skylink string) (int, error) {
 
 /*** Various user helpers ***/
 
-// UserStats performs a `GET /user/stats` request.
+// UserStats performs a `GET /user/stats` Request.
 func (at *AccountsTester) UserStats(unit string, headers map[string]string) (database.UserStats, int, error) {
 	queryParams := url.Values{}
 	if unit != "" {
 		queryParams.Set("unit", unit)
 	}
-	r, b, err := at.request(http.MethodGet, "/user/stats", queryParams, nil, headers)
+	r, b, err := at.Request(http.MethodGet, "/user/stats", queryParams, nil, headers)
 	if err != nil {
 		return database.UserStats{}, r.StatusCode, errors.AddContext(err, string(b))
 	}
