@@ -1,19 +1,19 @@
 package skynet
 
 const (
-	// KB kilobyte
-	KB = 1000
-	// MB megabyte
-	MB = 1000 * KB
-	// GB gigabyte
-	GB = 1000 * MB
-	// TB terabyte
-	TB = 1000 * GB
+	// KiB kilobyte
+	KiB = 1024
+	// MiB megabyte
+	MiB = 1024 * KiB
+	// GiB gigabyte
+	GiB = 1024 * MiB
+	// TiB terabyte
+	TiB = 1024 * GiB
 
 	// SizeBaseSector is the size of a base sector.
-	SizeBaseSector = 4 * MB
+	SizeBaseSector = 4 * MiB
 	// SizeChunk is the size of a chunk.
-	SizeChunk = 40 * MB
+	SizeChunk = 40 * MiB
 
 	// RedundancyBaseSector describes the base sector redundancy the portal is
 	// using. This is not freely configurable because we need database
@@ -25,27 +25,27 @@ const (
 	RedundancyChunk = 3
 
 	// CostBandwidthRegistryWrite the bandwidth cost of a single registry write
-	CostBandwidthRegistryWrite = 5 * MB
+	CostBandwidthRegistryWrite = 5 * MiB
 	// CostBandwidthRegistryRead the bandwidth cost of a single registry read
-	CostBandwidthRegistryRead = MB
+	CostBandwidthRegistryRead = MiB
 
 	// CostBandwidthUploadBase is the baseline bandwidth price for each upload.
 	// This is the cost of uploading the base sector.
-	CostBandwidthUploadBase = 40 * MB
+	CostBandwidthUploadBase = 40 * MiB
 	// CostBandwidthUploadIncrement is the bandwidth price per 40MB uploaded
 	// data, beyond the base sector (beyond the first 4MB). Rounded up.
-	CostBandwidthUploadIncrement = 120 * MB
+	CostBandwidthUploadIncrement = 120 * MiB
 	// CostBandwidthDownloadBase is the baseline bandwidth price for each Download.
-	CostBandwidthDownloadBase = 200 * KB
+	CostBandwidthDownloadBase = 200 * KiB
 	// CostBandwidthDownloadIncrement is the bandwidth price per 64B. Rounded up.
 	CostBandwidthDownloadIncrement = 64
 
 	// CostStorageUploadBase is the baseline storage price for each upload.
 	// This is the cost of uploading the base sector.
-	CostStorageUploadBase = 4 * MB
+	CostStorageUploadBase = 4 * MiB
 	// CostStorageUploadIncrement is the storage price for each 40MB beyond
 	// the base sector (beyond the first 4MB). Rounded up.
-	CostStorageUploadIncrement = 40 * MB
+	CostStorageUploadIncrement = 40 * MiB
 )
 
 // BandwidthUploadCost calculates the bandwidth cost of an upload with the given

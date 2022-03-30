@@ -29,10 +29,17 @@ import (
 const (
 	// LimitBodySizeSmall defines a size limit for requests that we don't expect
 	// to contain a lot of data.
-	LimitBodySizeSmall = 4 * skynet.KB
+	LimitBodySizeSmall = 4 * skynet.KiB
 	// LimitBodySizeLarge defines a size limit for requests that we expect to
 	// contain a lot of data.
-	LimitBodySizeLarge = 4 * skynet.MB
+	LimitBodySizeLarge = 4 * skynet.MiB
+)
+
+var (
+	// ErrInvalidCredentials is a generic user-facing error, used when the login
+	// flow fails. This error is sent instead of whatever internal error we had
+	// before in order to prevent an attacker from listing our users.
+	ErrInvalidCredentials = errors.New("invalid credentials")
 )
 
 type (
@@ -147,11 +154,11 @@ func (api *API) loginGET(_ *database.User, w http.ResponseWriter, req *http.Requ
 	}
 	_, err = api.staticDB.UserByPubKey(req.Context(), pk)
 	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusInternalServerError)
 		return
 	}
 	if errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, errors.New("no user with this pubkey"), http.StatusBadRequest)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusBadRequest)
 		return
 	}
 	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeLogin)
@@ -207,7 +214,7 @@ func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Requ
 	}
 	u, err := api.staticDB.UserByPubKey(ctx, pk)
 	if err != nil {
-		api.WriteError(w, err, http.StatusUnauthorized)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
 	api.loginUser(w, u, false)
@@ -219,13 +226,13 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if err != nil {
 		api.staticLogger.Debugf("Error fetching a user with email '%s': %+v\n", email, err)
-		api.WriteError(w, err, http.StatusUnauthorized)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
 	// Check if the password matches.
 	err = hash.Compare(password, []byte(u.PasswordHash))
 	if err != nil {
-		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
 	api.loginUser(w, u, false)
@@ -1105,7 +1112,7 @@ func (api *API) trackUploadPOST(_ *database.User, w http.ResponseWriter, req *ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	u, _, _ := api.userFromRequest(req)
+	u, _, _ := api.userFromRequest(req, true)
 	if u == nil {
 		// This will be tracked as an anonymous request.
 		u = &database.AnonUser
@@ -1264,15 +1271,23 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 // userFromRequest checks the requests for various forms of authentication (API
 // key, cookie, authorization header) and returns user information based on
 // those.
-func (api *API) userFromRequest(req *http.Request) (*database.User, jwt2.Token, error) {
+func (api *API) userFromRequest(req *http.Request, allowsAPIKey bool) (*database.User, jwt2.Token, error) {
+	// Check for a token.
+	u, tk, err := api.userAndTokenByRequestToken(req)
+	if err == nil {
+		return u, tk, nil
+	}
 	// Check for an API key.
-	u, tk, err := api.userAndTokenByAPIKey(req)
-	if err != nil && !errors.Contains(err, ErrNoAPIKey) {
+	ak, err := apiKeyFromRequest(req)
+	if err != nil {
 		return nil, nil, err
 	}
-	// If there is no API key check for a token.
-	if errors.Contains(err, ErrNoAPIKey) {
-		return api.userAndTokenByRequestToken(req)
+	if !allowsAPIKey {
+		return nil, nil, ErrAPIKeyNotAllowed
+	}
+	u, tk, err = api.userAndTokenByAPIKey(req, *ak)
+	if err != nil {
+		return nil, nil, err
 	}
 	return u, tk, err
 }
