@@ -1353,15 +1353,15 @@ func userLimitsGetFromTier(tierID int, quotaExceeded, inBytes bool) *UserLimitsG
 		bpsMul = 1
 	}
 	return &UserLimitsGET{
-		TierID:   tierID,
-		TierName: t.TierName,
-		Storage:  t.Storage,
+		TierID:           tierID,
+		TierName:         t.TierName,
+		Storage:          t.Storage,
+		MaxUploadSize:    t.MaxUploadSize,
+		MaxNumberUploads: t.MaxNumberUploads,
 		// If the user exceeds their quota, there will be brought down to
 		// anonymous levels.
 		UploadBandwidth:   limitsTier.UploadBandwidth * bpsMul,
 		DownloadBandwidth: limitsTier.DownloadBandwidth * bpsMul,
-		MaxUploadSize:     limitsTier.MaxUploadSize,
-		MaxNumberUploads:  limitsTier.MaxNumberUploads,
 		RegistryDelay:     limitsTier.RegistryDelay,
 	}
 }
