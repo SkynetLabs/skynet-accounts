@@ -1,14 +1,12 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
-	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
-	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/modules"
@@ -124,20 +122,12 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	// Get user stats without a cookie or headers - pass the API key via a query
 	// variable. The main thing we want to see here is whether we get
 	// an `Unauthorized` error or not but we'll validate the stats as well.
-	params := url.Values{}
-	params.Set("apiKey", akWithKey.Key.String())
-	_, body, err := at.Get("/user/stats", params)
-	if err != nil {
-		t.Fatal(err, string(body))
+	h := map[string]string{
+		api.APIKeyHeader: akWithKey.Key.String(),
 	}
-	var us database.UserStats
-	err = json.Unmarshal(body, &us)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if us.TotalUploadsSize != uploadSize || us.NumUploads != 1 || us.BandwidthUploads != skynet.BandwidthUploadCost(uploadSize) {
-		t.Fatalf("Unexpected user stats. Expected TotalUploadSize %d (got %d), NumUploads 1 (got %d), BandwidthUploads %d (got %d).",
-			uploadSize, us.TotalDownloadsSize, us.NumUploads, skynet.BandwidthUploadCost(uploadSize), us.BandwidthUploads)
+	ulg, _, err := at.UserLimits("", h)
+	if ulg.TierID != database.TierFree {
+		t.Fatal("Unexpected user tier.")
 	}
 }
 
@@ -298,13 +288,80 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Stop using the header, pass the skylink as a query parameter.
 	at.ClearCredentials()
-	// Get the user's limits for downloading a skylink covered by the public
-	// API key. Expect to get TierFree values.
+	// Get the user's limits without providing an API key.
+	// Expect to get TierAnonymous values.
 	ul, _, err = at.UserLimitsSkylink(sl.Skylink, "byte", pakWithKey.Key.String(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ul.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
-		t.Fatalf("Expected to get download bandwidth of %d, got %d", database.UserLimits[database.TierFree].DownloadBandwidth, ul.DownloadBandwidth)
+	if ul.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
+		t.Fatalf("Expected to get download bandwidth of %d, got %d", database.UserLimits[database.TierAnonymous].DownloadBandwidth, ul.DownloadBandwidth)
+	}
+}
+
+// testPublicAPIKeysUsage makes sure that we can use public API keys to make
+// GET requests to covered skylinks and that we cannot use them for other
+// requests.
+func testAPIKeysAcceptance(t *testing.T, at *test.AccountsTester) {
+	name := test.DBNameForTest(t.Name())
+	// Create a test user.
+	r, _, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at.SetCookie(test.ExtractCookie(r))
+	// Create a new private API key.
+	pakWithKey, _, err := at.UserAPIKeysPOST(api.APIKeyPOST{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Stop using the cookie, use the public API key instead.
+	at.SetAPIKey(pakWithKey.Key.String())
+
+	// Call all routes that shouldn't accept API keys and make sure they return
+	// the right error.
+	tests := []struct {
+		verb     string
+		endpoint string
+	}{
+		{verb: http.MethodPost, endpoint: "/logout"},
+		{verb: http.MethodGet, endpoint: "/user"},
+		{verb: http.MethodPut, endpoint: "/user"},
+		{verb: http.MethodDelete, endpoint: "/user"},
+		{verb: http.MethodGet, endpoint: "/user/stats"},
+		{verb: http.MethodDelete, endpoint: "/user/pubkey/somePubKey"},
+		{verb: http.MethodGet, endpoint: "/user/pubkey/register"},
+		{verb: http.MethodPost, endpoint: "/user/pubkey/register"},
+		{verb: http.MethodGet, endpoint: "/user/uploads"},
+		{verb: http.MethodDelete, endpoint: "/user/uploads/someSkylink"},
+		{verb: http.MethodGet, endpoint: "/user/downloads"},
+		{verb: http.MethodPost, endpoint: "/user/apikeys"},
+		{verb: http.MethodGet, endpoint: "/user/apikeys"},
+		{verb: http.MethodGet, endpoint: "/user/apikeys/someId"},
+		{verb: http.MethodPut, endpoint: "/user/apikeys/someId"},
+		{verb: http.MethodPatch, endpoint: "/user/apikeys/someId"},
+		{verb: http.MethodDelete, endpoint: "/user/apikeys/someId"},
+		{verb: http.MethodPost, endpoint: "/user/reconfirm"},
+	}
+
+	var b []byte
+	for _, tt := range tests {
+		switch tt.verb {
+		case http.MethodGet:
+			r, b, err = at.Get(tt.endpoint, nil)
+		case http.MethodPost:
+			r, b, err = at.Post(tt.endpoint, nil, nil)
+		case http.MethodPut:
+			r, b, err = at.Put(tt.endpoint, nil, nil)
+		case http.MethodPatch:
+			r, b, err = at.Patch(tt.endpoint, nil, nil)
+		case http.MethodDelete:
+			r, b, err = at.Delete(tt.endpoint, nil)
+		default:
+			t.Fatalf("Invalid verb: %+v", tt)
+		}
+		if err == nil || r.StatusCode != http.StatusUnauthorized || !strings.Contains(string(b), api.ErrAPIKeyNotAllowed.Error()) {
+			t.Fatalf("Expected error '%s' with status %d, got '%s' with status %d. Endpoint %s %s", api.ErrAPIKeyNotAllowed, http.StatusUnauthorized, err, r.StatusCode, tt.verb, tt.endpoint)
+		}
 	}
 }
