@@ -741,7 +741,7 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 }
 
 // userPubKeyDELETE removes a given pubkey from the list of pubkeys associated
-// with this user. It does not require a challenge-response because the used
+// with this user. It does not require a challenge-response because the user
 // does not need to prove the key is theirs.
 func (api *API) userPubKeyDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	ctx := req.Context()
@@ -1285,7 +1285,11 @@ func (api *API) userFromRequest(req *http.Request, allowsAPIKey bool) (*database
 	if !allowsAPIKey {
 		return nil, nil, ErrAPIKeyNotAllowed
 	}
-	return api.userAndTokenByAPIKey(req, *ak)
+	u, tk, err = api.userAndTokenByAPIKey(req, *ak)
+	if err != nil {
+		return nil, nil, err
+	}
+	return u, tk, err
 }
 
 // wellKnownJWKSGET returns our public JWKS, so people can use that to verify
