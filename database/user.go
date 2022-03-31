@@ -34,20 +34,25 @@ const (
 	// TierMaxReserved is a guard value that helps us validate tier values.
 	TierMaxReserved
 
-	// mbpsToBytesPerSecond is a multiplier to get from megabits per second to
-	// bytes per second.
-	mbpsToBytesPerSecond = 1024 * 1024 / 8
-
-	// filesAllowedPerTB defines a limit of number of uploaded files we impose
-	// on users. While we define it per TB, we impose it based on their entire
+	// filesAllowedPerTiB defines a limit of number of uploaded files we impose
+	// on users. While we define it per TiB, we impose it based on their entire
 	// quota, so an Extreme user will be able to upload up to 400_000 files
 	// before being hit with a speed limit.
-	filesAllowedPerTB = 25_000
+	filesAllowedPerTiB = 25_000
+
+	// mbpsToBytesPerSecond is a multiplier to get from mebibits per second to
+	// bytes per second.
+	mbpsToBytesPerSecond = 1024 * 1024 / 8
 )
 
 var (
+	// AnonUser is a helper struct that we can use when we don't have a relevant
+	// user, e.g. when an upload is made by an anonymous user.
+	AnonUser = User{}
 	// True is a helper for when we need to pass a *bool to MongoDB.
 	True = true
+	// False is a helper for when we need to pass a *bool to MongoDB.
+	False = false
 	// UserLimits defines the speed limits for each tier.
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
@@ -67,7 +72,7 @@ var (
 			UploadBandwidth:   10 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
 			MaxUploadSize:     100 * skynet.GiB,
-			MaxNumberUploads:  0.1 * filesAllowedPerTB,
+			MaxNumberUploads:  0.1 * filesAllowedPerTiB,
 			RegistryDelay:     125,
 			Storage:           100 * skynet.GiB,
 		},
@@ -76,7 +81,7 @@ var (
 			UploadBandwidth:   20 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 80 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.TiB,
-			MaxNumberUploads:  1 * filesAllowedPerTB,
+			MaxNumberUploads:  1 * filesAllowedPerTiB,
 			RegistryDelay:     0,
 			Storage:           1 * skynet.TiB,
 		},
@@ -85,7 +90,7 @@ var (
 			UploadBandwidth:   40 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 160 * mbpsToBytesPerSecond,
 			MaxUploadSize:     4 * skynet.TiB,
-			MaxNumberUploads:  4 * filesAllowedPerTB,
+			MaxNumberUploads:  4 * filesAllowedPerTiB,
 			RegistryDelay:     0,
 			Storage:           4 * skynet.TiB,
 		},
@@ -94,7 +99,7 @@ var (
 			UploadBandwidth:   80 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 320 * mbpsToBytesPerSecond,
 			MaxUploadSize:     10 * skynet.TiB,
-			MaxNumberUploads:  20 * filesAllowedPerTB,
+			MaxNumberUploads:  20 * filesAllowedPerTiB,
 			RegistryDelay:     0,
 			Storage:           20 * skynet.TiB,
 		},
@@ -126,10 +131,7 @@ type (
 		SubscriptionCancelAtPeriodEnd    bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
 		StripeID                         string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                    bool               `bson:"quota_exceeded" json:"quotaExceeded"`
-		// The currently active (or default) key is going to be the first one in
-		// the list. If we want to activate a new pubkey, we'll just move it to
-		// the first position in the list.
-		PubKeys []PubKey `bson:"pub_keys" json:"-"`
+		PubKeys                          []PubKey           `bson:"pub_keys" json:"-"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
@@ -157,20 +159,6 @@ type (
 		Storage           int64  `json:"-"`
 	}
 )
-
-// UserByAPIKey returns the user who owns the given API key.
-func (db *DB) UserByAPIKey(ctx context.Context, ak APIKey) (*User, error) {
-	sr := db.staticAPIKeys.FindOne(ctx, bson.M{"key": ak})
-	if sr.Err() != nil {
-		return nil, sr.Err()
-	}
-	var apiKey APIKeyRecord
-	err := sr.Decode(&apiKey)
-	if err != nil {
-		return nil, err
-	}
-	return db.UserByID(ctx, apiKey.UserID)
-}
 
 // UserByEmail returns the user with the given username.
 func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
@@ -363,6 +351,29 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	return u, nil
 }
 
+// UserCreateEmailConfirmation creates a new email confirmation record for this
+// user.
+func (db *DB) UserCreateEmailConfirmation(ctx context.Context, uID primitive.ObjectID) (string, error) {
+	exp := time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond)
+	tk, err := lib.GenerateUUID()
+	if err != nil {
+		return "", err
+	}
+	filter := bson.M{"_id": uID}
+	update := bson.M{
+		"$set": bson.M{
+			"email_confirmation_token":            tk,
+			"email_confirmation_token_expiration": exp,
+		},
+	}
+	opts := options.Update().SetUpsert(false)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return "", err
+	}
+	return tk, nil
+}
+
 // UserCreatePK creates a new user with a pubkey in the DB.
 //
 // The `pass` and `sub` fields are optional.
@@ -479,14 +490,52 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 // UserSave saves the user to the DB.
 func (db *DB) UserSave(ctx context.Context, u *User) error {
 	filter := bson.M{"_id": u.ID}
-	opts := &options.ReplaceOptions{
-		Upsert: &True,
-	}
+	opts := options.Replace().SetUpsert(true)
 	_, err := db.staticUsers.ReplaceOne(ctx, filter, u, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
 	}
 	return nil
+}
+
+// UserPubKeyAdd adds a new PubKey to the given user's set.
+func (db *DB) UserPubKeyAdd(ctx context.Context, u User, pk PubKey) (err error) {
+	filter := bson.M{"_id": u.ID}
+	// This update is so complicated because we can't use mutation operations
+	// like $push, $addToSet and so on if the target field is null. That's why
+	// here we check if the field is an array and then merge the key in. If the
+	// field is not an array (i.e. it's null) we set it to an empty array before
+	// performing the merge.
+	update := bson.A{
+		bson.M{
+			"$set": bson.M{
+				"pub_keys": bson.M{
+					"$cond": bson.A{
+						bson.M{"$eq": bson.A{bson.M{"$type": "$pub_keys"}, "array"}},
+						bson.M{"$setUnion": bson.A{"$pub_keys", bson.A{pk}}},
+						bson.A{pk},
+					}},
+			},
+		},
+	}
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update)
+	return err
+}
+
+// UserPubKeyRemove removes a PubKey from the given user's set.
+func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
+	filter := bson.M{
+		"_id":      u.ID,
+		"pub_keys": bson.M{"$ne": nil},
+	}
+	update := bson.M{
+		"$pull": bson.M{"pub_keys": pk},
+	}
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
+	if err == nil && ur.MatchedCount == 0 {
+		err = mongo.ErrNoDocuments
+	}
+	return err
 }
 
 // UserSetStripeID changes the user's stripe id in the DB.
