@@ -886,22 +886,43 @@ func (u User) HasKey(pk PubKey) bool {
 
 // monthStart returns the start of the user's subscription month.
 // Users get their bandwidth quota reset at the start of the month.
+//
+// NOTE: This function ignores the time (hour and minutes) of the sub expiration
+// - all quotas reset at midnight UTC.
 func monthStart(subscribedUntil time.Time) time.Time {
-	now := time.Now().UTC()
-	// Check how many days are left until the end of the user's subscription
-	// month. Then calculate when the last subscription month started. We don't
-	// care if the user is no longer subscribed and their sub expired 3 months
-	// ago, all we care about here is the day of the month on which that
-	// happened because that is the day from which we count their statistics for
-	// the month. If they were never subscribed we use Jan 1st 1970 for
-	// SubscribedUntil.
-	daysDelta := subscribedUntil.Day() - now.Day()
-	monthsDelta := 0
-	if daysDelta > 0 {
-		// The end of sub day is after the current date, so the start of month
-		// is in the previous month.
-		monthsDelta = -1
+	return monthStartWithTime(subscribedUntil, time.Now().UTC())
+}
+
+// monthStartWithTime returns the start of the user's subscription month in
+// relation to the given `now` value. This function exists only for testing
+// purposes.
+// Users get their bandwidth quota reset at the start of the month.
+//
+// NOTE: This function ignores the time (hour and minutes) of the sub expiration
+// - all quotas reset at midnight UTC.
+func monthStartWithTime(subscribedUntil time.Time, current time.Time) time.Time {
+	// Normalize the day of month. Subs ending on 31st should end on the last
+	// day of the month when the month doesn't have 31 days.
+	dayOfMonth := normalizeDayOfMonth(current.Month(), subscribedUntil.Day(), current)
+	// If we're past the reset day this month, use the current day of the month.
+	if current.Day() >= dayOfMonth {
+		return time.Date(current.Year(), current.Month(), dayOfMonth, 0, 0, 0, 0, time.UTC)
 	}
-	d := now.AddDate(0, monthsDelta, daysDelta)
-	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+	// If we haven't reached the reset day this month, use last month's day.
+	dayOfMonth = normalizeDayOfMonth(current.Month()-1, subscribedUntil.Day(), current)
+	return time.Date(current.Year(), current.Month()-1, dayOfMonth, 0, 0, 0, 0, time.UTC)
+}
+
+// normalizeDayOfMonth checks whether the current month has the given day and if
+// it doesn't, it returns the last day the current month has.
+//
+// Example:
+// In February normalizeDayOfMonth(31) will return 28 or 29.
+func normalizeDayOfMonth(month time.Month, day int, current time.Time) int {
+	t := time.Date(current.Year(), month, day, 0, 0, 0, 0, time.UTC)
+	if t.Month() > month {
+		// This month doesn't have this day. Return the last day of the month.
+		t = time.Date(current.Year(), month+1, 0, 0, 0, 0, 0, time.UTC)
+	}
+	return t.Day()
 }
