@@ -1148,22 +1148,12 @@ func (api *API) trackDownloadPOST(_ *database.User, w http.ResponseWriter, _ *ht
 }
 
 // trackRegistryReadPOST registers a new registry read in the system.
-func (api *API) trackRegistryReadPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	_, err := api.staticDB.RegistryReadCreate(req.Context(), *u)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+func (api *API) trackRegistryReadPOST(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	api.WriteSuccess(w)
 }
 
 // trackRegistryWritePOST registers a new registry write in the system.
-func (api *API) trackRegistryWritePOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	_, err := api.staticDB.RegistryWriteCreate(req.Context(), *u)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+func (api *API) trackRegistryWritePOST(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	api.WriteSuccess(w)
 }
 
