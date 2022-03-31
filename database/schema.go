@@ -21,6 +21,10 @@ var (
 				Keys:    bson.D{{"skylink", 1}},
 				Options: options.Index().SetName("skylink_unique").SetUnique(true),
 			},
+			{
+				Keys:    bson.D{{"name", "text"}},
+				Options: options.Index().SetName("skylink_name"),
+			},
 		},
 		collUploads: {
 			{

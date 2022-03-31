@@ -245,10 +245,19 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 // and then fetch $limit of them, allowing us to paginate. It will then
 // join with the `skylinks` collection in order to fetch some additional
 // data about each download.
-func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
-	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
-	skipStage := bson.D{{"$skip", offset}}
-	limitStage := bson.D{{"$limit", pageSize}}
+func generateUploadsPipeline(matchStage bson.D, opts FindSkylinksOptions) mongo.Pipeline {
+	var sortDirection = -1 // desc
+	if opts.OrderAsc {
+		sortDirection = 1 // asc
+	}
+	var sortStage bson.D
+	if opts.OrderByField == "textScore" {
+		sortStage = bson.D{{"$sort", bson.D{{"score", bson.D{{"$meta", "textScore"}}}}}}
+	} else {
+		sortStage = bson.D{{"$sort", bson.D{{opts.OrderByField, sortDirection}}}}
+	}
+	skipStage := bson.D{{"$skip", opts.Offset}}
+	limitStage := bson.D{{"$limit", opts.PageSize}}
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
@@ -266,7 +275,9 @@ func generateUploadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipe
 			}},
 		}},
 	}
-	projectStage := bson.D{{"$project", bson.D{{"fromSkylinks", 0}}}}
+	projectStage := bson.D{{"$project", bson.D{
+		{"fromSkylinks", 0},
+	}}}
 	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
 }
 
@@ -303,6 +314,8 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 		{"user_id", 1},
 		{"skylink_id", 1},
 		{"created_at", 1},
+		// TODO Does this break when we don't have text search?
+		{"score", bson.D{{"$meta", "textScore"}}},
 		{"size", bson.D{
 			{"$cond", bson.A{
 				bson.D{{"$gt", bson.A{"$bytes", 0}}}, // if

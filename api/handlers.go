@@ -881,7 +881,19 @@ func (api *API) userUploadsGET(u *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
-	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, offset, pageSize)
+	// Default to descending order unless the `order` param specifically
+	// requires ascending.
+	orderAsc := strings.ToLower(req.FormValue("order")) == "asc"
+	// TODO This might need some custom mapping of column names to record fields.
+	orderBy := req.FormValue("orderBy")
+	opts := database.FindSkylinksOptions{
+		SearchTerms:  req.FormValue("search"),
+		OrderByField: orderBy,
+		OrderAsc:     orderAsc,
+		Offset:       offset,
+		PageSize:     pageSize,
+	}
+	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, opts)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return

@@ -62,6 +62,7 @@ func TestHandlers(t *testing.T) {
 		{name: "DeletePubKey", test: testUserDeletePubKey},
 		{name: "UserDelete", test: testUserDELETE},
 		{name: "UserLimits", test: testUserLimits},
+		{name: "UserGetUploads", test: testUserUploadsGET},
 		{name: "UserDeleteUploads", test: testUserUploadsDELETE},
 		{name: "UserConfirmReconfirmEmail", test: testUserConfirmReconfirmEmailGET},
 		{name: "UserAccountRecovery", test: testUserAccountRecovery},
@@ -574,6 +575,78 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 }
 
+// testUserUploadsGET tests the GET /user/uploads endpoint.
+// TODO Update this to use the new tester helpers.
+func testUserUploadsGET(t *testing.T, at *test.AccountsTester) {
+	u, c, err := test.CreateUserAndLogin(at, t.Name())
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer func() {
+		if err = u.Delete(at.Ctx); err != nil {
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
+		}
+	}()
+
+	at.SetCookie(c)
+	defer at.ClearCredentials()
+
+	/*
+		TODO
+		 - create two skylinks (different sizes)
+		 - make sure they appear in the right order when there are no options
+		 - order them by size in both directions
+		 - order them by name in both directions (the name is "test skylink <skylink>")
+		 - order them by creation date in both directions
+		 - use text search to find them
+	*/
+
+	// Create an upload.
+	sl1, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128%skynet.KiB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make sure it shows up for this user.
+	_, b, err := at.Get("/user/uploads", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ups api.UploadsGET
+	err = json.Unmarshal(b, &ups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We expect to have a single upload, and we expect it to be of this sl1.
+	if len(ups.Items) != 1 || ups.Items[0].Skylink != sl1.Skylink {
+		t.Fatalf("Expected to have a single upload of %s, got %+v", sl1.Skylink, ups)
+	}
+	// Try to delete the upload without passing a JWT cookie.
+	at.ClearCredentials()
+	_, b, err = at.Delete("/user/uploads/"+sl1.Skylink, nil)
+	if err == nil || !strings.Contains(err.Error(), unauthorized) {
+		t.Fatalf("Expected error %s, got %s. Body: %s", unauthorized, err, string(b))
+	}
+	at.SetCookie(c)
+	// Delete it.
+	_, b, err = at.Delete("/user/uploads/"+sl1.Skylink, nil)
+	if err != nil {
+		t.Fatal(err, string(b))
+	}
+	// Make sure it's gone.
+	_, b, err = at.Get("/user/uploads", nil)
+	if err != nil {
+		t.Fatal(err, string(b))
+	}
+	err = json.Unmarshal(b, &ups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We expect to have no uploads.
+	if len(ups.Items) != 0 {
+		t.Fatalf("Expected to have a no uploads, got %+v", ups)
+	}
+}
+
 // testUserUploadsDELETE tests the DELETE /user/uploads/:skylink endpoint.
 func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	u, c, err := test.CreateUserAndLogin(at, t.Name())
@@ -591,6 +664,9 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 
 	// Create an upload.
 	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128%skynet.KiB)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Make sure it shows up for this user.
 	_, b, err := at.Get("/user/uploads", nil)
 	if err != nil {

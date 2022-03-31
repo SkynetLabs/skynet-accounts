@@ -32,6 +32,28 @@ type UploadResponse struct {
 	Timestamp  time.Time `bson:"timestamp" json:"uploadedOn"`
 }
 
+// UnpinUploads unpins all uploads of this skylink by this user. Returns
+// the number of unpinned uploads.
+func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int64, error) {
+	if skylink.ID.IsZero() {
+		return 0, ErrInvalidSkylink
+	}
+	if user.ID.IsZero() {
+		return 0, errors.New("invalid user")
+	}
+	filter := bson.D{
+		{"skylink_id", skylink.ID},
+		{"user_id", user.ID},
+		{"unpinned", false},
+	}
+	update := bson.M{"$set": bson.M{"unpinned": true}}
+	ur, err := db.staticUploads.UpdateMany(ctx, filter, update)
+	if err != nil {
+		return 0, err
+	}
+	return ur.ModifiedCount, nil
+}
+
 // UploadByID fetches a single upload from the DB.
 func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, error) {
 	var d Upload
@@ -77,63 +99,66 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pag
 		{"skylink_id", skylink.ID},
 		{"unpinned", false},
 	}}}
-	return db.uploadsBy(ctx, matchStage, offset, pageSize)
-}
-
-// UnpinUploads unpins all uploads of this skylink by this user. Returns
-// the number of unpinned uploads.
-func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int64, error) {
-	if skylink.ID.IsZero() {
-		return 0, ErrInvalidSkylink
+	opts := FindSkylinksOptions{
+		Offset:   offset,
+		PageSize: pageSize,
 	}
-	if user.ID.IsZero() {
-		return 0, errors.New("invalid user")
-	}
-	filter := bson.D{
-		{"skylink_id", skylink.ID},
-		{"user_id", user.ID},
-		{"unpinned", false},
-	}
-	update := bson.M{"$set": bson.M{"unpinned": true}}
-	ur, err := db.staticUploads.UpdateMany(ctx, filter, update)
-	if err != nil {
-		return 0, err
-	}
-	return ur.ModifiedCount, nil
+	return db.uploadsBy(ctx, matchStage, opts)
 }
 
 // UploadsByUser fetches a page of uploads by this user and the total number of
 // such uploads.
-func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int) ([]UploadResponse, int, error) {
+func (db *DB) UploadsByUser(ctx context.Context, user User, opts FindSkylinksOptions) ([]UploadResponse, int, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
 	}
-	if err := validateOffsetPageSize(offset, pageSize); err != nil {
-		return nil, 0, err
+	var matchStage bson.D
+	if len(opts.SearchTerms) == 0 {
+		matchStage = bson.D{{"$match", bson.D{
+			{"user_id", user.ID},
+			{"unpinned", false},
+		}}}
+		// If the client didn't specifically select ordering, we'll order by
+		// timestamp in descending order.
+		if opts.OrderByField == "" {
+			opts.OrderByField = "timestamp"
+			opts.OrderAsc = false
+		}
+	} else {
+		matchStage = bson.D{{"$match", bson.D{
+			{"$text", bson.D{
+				{"$search", opts.SearchTerms},
+			}},
+			{"user_id", user.ID},
+			{"unpinned", false},
+		}}}
+		// If the client didn't specifically select ordering, we'll order by
+		// the most relevant result.
+		if opts.OrderByField == "" {
+			opts.OrderByField = "textScore"
+			opts.OrderAsc = false
+		}
 	}
-	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", user.ID},
-		{"unpinned", false},
-	}}}
-	return db.uploadsBy(ctx, matchStage, offset, pageSize)
+	// db.getCollection('skylinks').find({ $text: { $search: "lines logo" } }, { score: { $meta: "textScore" } }).sort( { score: { $meta: "textScore" } } )
+	return db.uploadsBy(ctx, matchStage, opts)
 }
 
 // uploadsBy fetches a page of uploads, filtered by an arbitrary match criteria.
 // It also reports the total number of records in the list.
-func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]UploadResponse, int, error) {
-	if err := validateOffsetPageSize(offset, pageSize); err != nil {
+func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, opts FindSkylinksOptions) ([]UploadResponse, int, error) {
+	if err := validateOffsetPageSize(opts.Offset, opts.PageSize); err != nil {
 		return nil, 0, err
 	}
 	cnt, err := db.count(ctx, db.staticUploads, matchStage)
 	if err != nil || cnt == 0 {
 		return []UploadResponse{}, 0, err
 	}
-	c, err := db.staticUploads.Aggregate(ctx, generateUploadsPipeline(matchStage, offset, pageSize))
+	c, err := db.staticUploads.Aggregate(ctx, generateUploadsPipeline(matchStage, opts))
 	if err != nil {
 		return nil, 0, err
 	}
 
-	uploads := make([]UploadResponse, pageSize)
+	uploads := make([]UploadResponse, opts.PageSize)
 	err = c.All(ctx, &uploads)
 	if err != nil {
 		return nil, 0, err

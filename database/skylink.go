@@ -22,12 +22,27 @@ var (
 	validateSkylinkHashRE = regexp.MustCompile("(^[a-z0-9]{55}$)|(^[a-zA-Z0-9-_]{46}$)")
 )
 
-// Skylink represents a skylink object in the DB.
-type Skylink struct {
-	ID      primitive.ObjectID `bson:"_id,omitempty" json:"-"`
-	Skylink string             `bson:"skylink" json:"skylink"`
-	Size    int64              `bson:"size" json:"size"`
-}
+type (
+	// FindSkylinksOptions instructs a function that is looking for skylinks
+	// what to look for (search terms) and how to order the results. If ordering
+	// is not configured, the most relevant (in terms of full text search score)
+	// results will be shown first. If there are also no search terms, the
+	// results will be ordered by creation timestamp.
+	FindSkylinksOptions struct {
+		SearchTerms  string
+		OrderByField string
+		OrderAsc     bool
+		Offset       int
+		PageSize     int
+	}
+
+	// Skylink represents a skylink object in the DB.
+	Skylink struct {
+		ID      primitive.ObjectID `bson:"_id,omitempty" json:"-"`
+		Skylink string             `bson:"skylink" json:"skylink"`
+		Size    int64              `bson:"size" json:"size"`
+	}
+)
 
 // Skylink gets the DB object for the given skylink.
 // If it doesn't exist it creates it.
