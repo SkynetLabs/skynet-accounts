@@ -244,11 +244,13 @@ func (at *AccountsTester) CreateUserPost(emailAddr, password string) (*http.Resp
 // UserPUT is a helper.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Response, []byte, error) {
+func (at *AccountsTester) UserPUT(email, name, password, profilePic, stipeID string) (*http.Response, []byte, error) {
 	serviceURL := testPortalAddr + ":" + testPortalPort + "/user"
 	b, err := json.Marshal(map[string]string{
 		"email":            email,
+		"name":             name,
 		"password":         password,
+		"profilePic":       profilePic,
 		"stripeCustomerId": stipeID,
 	})
 	if err != nil {

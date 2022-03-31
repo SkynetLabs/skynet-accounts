@@ -122,9 +122,11 @@ type (
 	// userUpdatePUT defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
 	userUpdatePUT struct {
-		Email    string `json:"email,omitempty"`
-		Password string `json:"password,omitempty"`
-		StripeID string `json:"stripeCustomerId,omitempty"`
+		Email      string `json:"email,omitempty"`
+		Name       string `json:"name,omitempty"`
+		Password   string `json:"password,omitempty"`
+		ProfilePic string `json:"profilePic,omitempty"`
+		StripeID   string `json:"stripeCustomerId,omitempty"`
 	}
 )
 
@@ -722,6 +724,14 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 			return
 		}
 		changedEmail = true
+	}
+
+	if payload.Name != "" {
+		u.Name = payload.Name
+	}
+
+	if payload.ProfilePic != "" {
+		u.ProfilePic = payload.ProfilePic
 	}
 
 	// Save the changes.
