@@ -19,9 +19,9 @@ type (
 
 	// APIKeyPOST describes the body of a POST request that creates an API key
 	APIKeyPOST struct {
-		Name     string   `json:"name"`
-		Public   bool     `json:"public,string"`
-		Skylinks []string `json:"skylinks"`
+		Name     string   `json:"name,omitempty"`
+		Public   bool     `json:"public,string,omitempty"`
+		Skylinks []string `json:"skylinks,omitempty"`
 	}
 	// APIKeyPUT describes the request body for updating an API key
 	APIKeyPUT struct {
