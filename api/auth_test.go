@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/subtle"
+	"encoding/base32"
 	"encoding/base64"
 	"net/http"
 	"testing"
@@ -27,29 +28,15 @@ func TestAPIKeyFromRequest(t *testing.T) {
 		t.Fatalf("Expected '%s', got '%s'.", ErrNoAPIKey, err)
 	}
 
-	// API key from request form.
-	token := randomAPIKeyString()
-	req.Form.Add("apiKey", token)
-	tk, err := apiKeyFromRequest(req)
+	// API key from headers.
+	akStr := randomAPIKeyString()
+	req.Header.Set(APIKeyHeader, akStr)
+	ak, err := apiKeyFromRequest(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(tk) != token {
-		t.Fatalf("Expected '%s', got '%s'.", token, tk)
-	}
-
-	// API key from headers. Expect this to take precedence over request form.
-	token2 := randomAPIKeyString()
-	req.Header.Set(APIKeyHeader, token2)
-	tk, err = apiKeyFromRequest(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(tk) == token {
-		t.Fatal("Form token took precedence over headers token.")
-	}
-	if string(tk) != token2 {
-		t.Fatalf("Expected '%s', got '%s'.", token2, tk)
+	if ak.String() != akStr {
+		t.Fatalf("Expected '%s', got '%s'.", akStr, ak)
 	}
 }
 
@@ -147,5 +134,5 @@ func TestTokenFromRequest(t *testing.T) {
 
 // randomAPIKeyString is a helper.
 func randomAPIKeyString() string {
-	return base64.URLEncoding.EncodeToString(fastrand.Bytes(database.PubKeySize))
+	return base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(fastrand.Bytes(database.PubKeySize))
 }

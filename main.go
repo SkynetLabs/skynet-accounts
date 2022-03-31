@@ -53,12 +53,12 @@ const (
 	envServerDomain = "SERVER_DOMAIN"
 	// envStripeAPIKey hold the name of the environment variable for Stripe's
 	// API key. It's only required when integrating with Stripe.
-	envStripeAPIKey = "STRIPE_API_KEY"
+	envStripeAPIKey = "STRIPE_API_KEY" // #nosec
 	// envMaxNumAPIKeysPerUser hold the name of the environment variable which
 	// sets the limit for number of API keys a single user can create. If a user
 	// reaches that limit they can always delete some API keys in order to make
 	// space for new ones.
-	envMaxNumAPIKeysPerUser = "ACCOUNTS_MAX_NUM_API_KEYS_PER_USER"
+	envMaxNumAPIKeysPerUser = "ACCOUNTS_MAX_NUM_API_KEYS_PER_USER" // #nosec
 )
 
 type (
@@ -140,7 +140,7 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 		config.ServerLockID = config.PortalName
 		logger.Warningf(`Environment variable %s is missing! This server's identity`+
 			` is set to the default '%s' value. That is OK only if this server is running on its own`+
-			` and it's not sharing its DB with other nodes.\n`, envServerDomain, config.ServerLockID)
+			` and it's not sharing its DB with other nodes.`, envServerDomain, config.ServerLockID)
 	}
 
 	if sk := os.Getenv(envStripeAPIKey); sk != "" {
@@ -149,6 +149,8 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 	}
 	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
 		config.JWKSFile = jwks
+	} else {
+		config.JWKSFile = jwt.AccountsJWKSFile
 	}
 	// Parse the optional env var that controls the TTL of the JWTs we generate.
 	if jwtTTLStr := os.Getenv(envJWTTTL); jwtTTLStr != "" {

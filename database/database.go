@@ -127,30 +127,29 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to connect to DB")
 	}
-	database := c.Database(dbName)
+	db := c.Database(dbName)
 	if logger == nil {
 		logger = &logrus.Logger{}
 	}
-	err = ensureDBSchema(ctx, database, logger)
+	err = ensureDBSchema(ctx, db, Schema, logger)
 	if err != nil {
 		return nil, err
 	}
-	db := &DB{
-		staticDB:                     database,
-		staticUsers:                  database.Collection(collUsers),
-		staticSkylinks:               database.Collection(collSkylinks),
-		staticUploads:                database.Collection(collUploads),
-		staticDownloads:              database.Collection(collDownloads),
-		staticRegistryReads:          database.Collection(collRegistryReads),
-		staticRegistryWrites:         database.Collection(collRegistryWrites),
-		staticEmails:                 database.Collection(collEmails),
-		staticChallenges:             database.Collection(collChallenges),
-		staticUnconfirmedUserUpdates: database.Collection(collUnconfirmedUserUpdates),
-		staticConfiguration:          database.Collection(collConfiguration),
-		staticAPIKeys:                database.Collection(collAPIKeys),
+	return &DB{
+		staticDB:                     db,
+		staticUsers:                  db.Collection(collUsers),
+		staticSkylinks:               db.Collection(collSkylinks),
+		staticUploads:                db.Collection(collUploads),
+		staticDownloads:              db.Collection(collDownloads),
+		staticRegistryReads:          db.Collection(collRegistryReads),
+		staticRegistryWrites:         db.Collection(collRegistryWrites),
+		staticEmails:                 db.Collection(collEmails),
+		staticChallenges:             db.Collection(collChallenges),
+		staticUnconfirmedUserUpdates: db.Collection(collUnconfirmedUserUpdates),
+		staticConfiguration:          db.Collection(collConfiguration),
+		staticAPIKeys:                db.Collection(collAPIKeys),
 		staticLogger:                 logger,
-	}
-	return db, nil
+	}, nil
 }
 
 // Disconnect closes the connection to the database in an orderly fashion.
@@ -188,114 +187,7 @@ func connectionString(creds DBCredentials) string {
 // creates them if needed.
 // See https://docs.mongodb.com/manual/indexes/
 // See https://docs.mongodb.com/manual/core/index-unique/
-func ensureDBSchema(ctx context.Context, db *mongo.Database, log *logrus.Logger) error {
-	// schema defines a mapping between a collection name and the indexes that
-	// must exist for that collection.
-	schema := map[string][]mongo.IndexModel{
-		collUsers: {
-			{
-				Keys:    bson.D{{"sub", 1}},
-				Options: options.Index().SetName("sub_unique").SetUnique(true),
-			},
-		},
-		collSkylinks: {
-			{
-				Keys:    bson.D{{"skylink", 1}},
-				Options: options.Index().SetName("skylink_unique").SetUnique(true),
-			},
-		},
-		collUploads: {
-			{
-				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("user_id"),
-			},
-			{
-				Keys:    bson.D{{"skylink_id", 1}},
-				Options: options.Index().SetName("skylink_id"),
-			},
-		},
-		collDownloads: {
-			{
-				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("user_id"),
-			},
-			{
-				Keys:    bson.D{{"skylink_id", 1}},
-				Options: options.Index().SetName("skylink_id"),
-			},
-		},
-		collRegistryReads: {
-			{
-				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("user_id"),
-			},
-		},
-		collRegistryWrites: {
-			{
-				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("user_id"),
-			},
-		},
-		collEmails: {
-			{
-				Keys:    bson.D{{"failed_attempts", 1}},
-				Options: options.Index().SetName("failed_attempts"),
-			},
-			{
-				Keys:    bson.D{{"locked_by", 1}},
-				Options: options.Index().SetName("locked_by"),
-			},
-			{
-				Keys:    bson.D{{"sent_at", 1}},
-				Options: options.Index().SetName("sent_at"),
-			},
-			{
-				Keys:    bson.D{{"sent_by", 1}},
-				Options: options.Index().SetName("sent_by"),
-			},
-		},
-		collChallenges: {
-			{
-				Keys:    bson.D{{"challenge", 1}},
-				Options: options.Index().SetName("challenge"),
-			},
-			{
-				Keys:    bson.D{{"type", 1}},
-				Options: options.Index().SetName("type"),
-			},
-			{
-				Keys:    bson.D{{"expires_at", 1}},
-				Options: options.Index().SetName("expires_at"),
-			},
-		},
-		collUnconfirmedUserUpdates: {
-			{
-				Keys:    bson.D{{"challenge_id", 1}},
-				Options: options.Index().SetName("challenge_id"),
-			},
-			{
-				Keys:    bson.D{{"expires_at", 1}},
-				Options: options.Index().SetName("expires_at"),
-			},
-		},
-		collConfiguration: {
-			{
-				Keys:    bson.D{{"key", 1}},
-				Options: options.Index().SetName("key_unique").SetUnique(true),
-			},
-		},
-		collAPIKeys: {
-			{
-				Keys:    bson.D{{"key", 1}},
-				Options: options.Index().SetName("key_unique").SetUnique(true),
-			},
-			{
-				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("user_id"),
-			},
-		},
-	}
-
+func ensureDBSchema(ctx context.Context, db *mongo.Database, schema map[string][]mongo.IndexModel, log *logrus.Logger) error {
 	for collName, models := range schema {
 		coll, err := ensureCollection(ctx, db, collName)
 		if err != nil {

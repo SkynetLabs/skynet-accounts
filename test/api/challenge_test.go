@@ -165,7 +165,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Failed to login. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
 	}
 	// Make sure we have a valid cookie returned and that it's for the same user.
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 	_, b, err = at.Get("/user", nil)
 	if err != nil {
 		t.Fatalf("Failed to fetch user with the given cookie: '%s', error '%s'", string(b), err)
@@ -192,8 +192,8 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
-	at.Cookie = c
-	defer func() { at.Cookie = nil }()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
 
 	// Request a challenge without a pubkey.
 	r, b, _ := at.Get("/user/pubkey/register", nil)
@@ -248,7 +248,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Try to solve it without being logged in.
-	at.Cookie = nil
+	at.ClearCredentials()
 	response := append(chBytes, append([]byte(database.ChallengeTypeUpdate), []byte(database.PortalName)...)...)
 	bodyParams := url.Values{}
 	bodyParams.Set("response", hex.EncodeToString(response))
@@ -266,7 +266,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	if err != nil || r.StatusCode != http.StatusOK {
 		t.Fatal(r.Status, err, string(b))
 	}
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 	r, b, _ = at.Post("/user/pubkey/register", nil, bodyParams)
 	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "user's sub doesn't match update sub") {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
@@ -274,7 +274,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Request a new challenge with the original test user.
-	at.Cookie = c
+	at.SetCookie(c)
 	queryParams = url.Values{}
 	queryParams.Set("pubKey", hex.EncodeToString(pk[:]))
 	r, b, err = at.Get("/user/pubkey/register", queryParams)
@@ -307,5 +307,95 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	}
 	if subtle.ConstantTimeCompare(u3.PubKeys[0], pk[:]) != 1 {
 		t.Fatalf("Expected pubKey '%s', got '%s',", hex.EncodeToString(pk[:]), hex.EncodeToString(u3.PubKeys[0]))
+	}
+}
+
+// testUserDeletePubKey ensures that users can delete pubkeys from their
+// accounts.
+func testUserDeletePubKey(t *testing.T, at *test.AccountsTester) {
+	name := test.DBNameForTest(t.Name())
+	u, c, err := test.CreateUserAndLogin(at, name)
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer func() {
+		if err = u.Delete(at.Ctx); err != nil {
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
+		}
+	}()
+	at.SetCookie(c)
+	defer at.ClearCredentials()
+
+	sk, pk := crypto.GenerateKeyPair()
+	var ch database.Challenge
+
+	// Request a new challenge.
+	queryParams := url.Values{}
+	queryParams.Set("pubKey", hex.EncodeToString(pk[:]))
+	r, b, err := at.Get("/user/pubkey/register", queryParams)
+	err = json.Unmarshal(b, &ch)
+	if err != nil || r.StatusCode != http.StatusOK {
+		t.Fatal("Failed to get a challenge:", err, r.Status, string(b))
+	}
+	chBytes, err := hex.DecodeString(ch.Challenge)
+	if err != nil {
+		t.Fatal("Invalid challenge:", err)
+	}
+	// Solve the challenge.
+	response := append(chBytes, append([]byte(database.ChallengeTypeUpdate), []byte(database.PortalName)...)...)
+	bodyParams := url.Values{}
+	bodyParams.Set("response", hex.EncodeToString(response))
+	bodyParams.Set("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
+	r, b, err = at.Post("/user/pubkey/register", nil, bodyParams)
+	if err != nil {
+		t.Fatalf("Failed to confirm the update. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	}
+	// Make sure the user's pubKey is properly set.
+	u1, err := at.DB.UserBySub(at.Ctx, u.Sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u1.PubKeys) != 1 {
+		t.Fatal("Expected one pubkey assigned, got none.")
+	}
+	if subtle.ConstantTimeCompare(u1.PubKeys[0], pk[:]) != 1 {
+		t.Fatalf("Expected pubKey '%s', got '%s',", hex.EncodeToString(pk[:]), hex.EncodeToString(u1.PubKeys[0]))
+	}
+
+	// Call DELETE without a cookie.
+	at.ClearCredentials()
+	r, b, err = at.Delete("/user/pubkey/"+hex.EncodeToString(pk[:]), nil)
+	if err == nil || r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected to fail with 401. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	}
+	at.SetCookie(c)
+	// Call DELETE with an invalid key.
+	r, b, err = at.Delete("/user/pubkey/INVALID_KEY", nil)
+	if err == nil || r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("Expected to fail with 400. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	}
+	_, pk1 := crypto.GenerateKeyPair()
+	// Call DELETE with a key that doesn't belong to this user.
+	r, b, err = at.Delete("/user/pubkey/"+hex.EncodeToString(pk1[:]), nil)
+	if err == nil || r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("Expected to fail with 400. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	}
+	// Call DELETE with correct parameters.
+	r, b, err = at.Delete("/user/pubkey/"+hex.EncodeToString(pk[:]), nil)
+	if err != nil || r.StatusCode != http.StatusNoContent {
+		t.Fatalf("Expected to succeed. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	}
+	// Verify that the key was deleted.
+	u2, err := at.DB.UserBySub(at.Ctx, u.Sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u2.PubKeys) > 0 {
+		t.Fatal("Expected no public keys, got", len(u2.PubKeys))
+	}
+	// Call DELETE with the already deleted key.
+	r, b, err = at.Delete("/user/pubkey/"+hex.EncodeToString(pk[:]), nil)
+	if err == nil || r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("Expected to fail with 400. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
 	}
 }
