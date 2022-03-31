@@ -887,6 +887,14 @@ func (u User) HasKey(pk PubKey) bool {
 // monthStart returns the start of the user's subscription month.
 // Users get their bandwidth quota reset at the start of the month.
 //
+// This function follows the behaviour of Stripe:
+// If a month doesn’t have the anchor day, the subscription will be billed on
+// the last day of the month. For example, a subscription starting on 31 January
+// bills on 28 February (or 29 February in a leap year), then 31 March, 30
+// April, and so on.
+//
+// See: https://stripe.com/docs/billing/subscriptions/billing-cycle
+//
 // NOTE: This function ignores the time (hour and minutes) of the sub expiration
 // - all quotas reset at midnight UTC.
 func monthStart(subscribedUntil time.Time) time.Time {
@@ -895,11 +903,7 @@ func monthStart(subscribedUntil time.Time) time.Time {
 
 // monthStartWithTime returns the start of the user's subscription month in
 // relation to the given `now` value. This function exists only for testing
-// purposes.
-// Users get their bandwidth quota reset at the start of the month.
-//
-// NOTE: This function ignores the time (hour and minutes) of the sub expiration
-// - all quotas reset at midnight UTC.
+// purposes and implements the desired behaviour of monthStart.
 func monthStartWithTime(subscribedUntil time.Time, current time.Time) time.Time {
 	// Normalize the day of month. Subs ending on 31st should end on the last
 	// day of the month when the month doesn't have 31 days.
