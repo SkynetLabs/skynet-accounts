@@ -45,7 +45,10 @@ func TestUserByEmail(t *testing.T) {
 		t.Fatalf("Unexpected result %+v\n", u)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	// Ensure that once the user exists, we'll fetch it correctly.
 	u2, err := db.UserByEmail(ctx, email)
@@ -56,9 +59,6 @@ func TestUserByEmail(t *testing.T) {
 	if u2 == nil || u2.ID != u.ID {
 		t.Fatalf("Expected %+v, got %+v\n", u, u2)
 	}
-	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
-	}(u2)
 }
 
 // TestUserByID ensures UserByID works as expected.
@@ -86,7 +86,10 @@ func TestUserByID(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 
 	// Test finding an existent user. This should pass.
@@ -174,7 +177,10 @@ func TestUserByStripeID(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	err = db.UserSetStripeID(ctx, u, stripeID)
 	if err != nil {
@@ -189,9 +195,6 @@ func TestUserByStripeID(t *testing.T) {
 	if u2 == nil || u2.ID != u.ID {
 		t.Fatalf("Expected %+v, got %+v\n", u, u2)
 	}
-	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
-	}(u2)
 }
 
 // TestUserBySub ensures UserBySub works as expected.
@@ -220,7 +223,10 @@ func TestUserBySub(t *testing.T) {
 		t.Fatalf("Unexpected result %+v\n", u)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	// Ensure that once the user exists, we'll fetch it correctly.
 	u2, err := db.UserBySub(ctx, sub)
@@ -231,9 +237,6 @@ func TestUserBySub(t *testing.T) {
 	if u2 == nil || u2.ID != u.ID {
 		t.Fatalf("Expected %+v, got %+v\n", u, u2)
 	}
-	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
-	}(u2)
 }
 
 // TestUserConfirmEmail ensures that email confirmation works as expected,
@@ -299,7 +302,10 @@ func TestUserCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	// Make sure the user is there.
 	fu, err := db.UserByID(ctx, u.ID)
@@ -337,7 +343,10 @@ func TestUserCreateEmailConfirmation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	tk, err := db.UserCreateEmailConfirmation(ctx, u.ID)
 	if err != nil {
@@ -367,9 +376,6 @@ func TestUserDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
-	}(u)
 	// Make sure the user is there.
 	fu, err := db.UserByID(ctx, u.ID)
 	if err != nil {
@@ -452,7 +458,10 @@ func TestUserSetStripeID(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	err = db.UserSetStripeID(ctx, u, stripeID)
 	if err != nil {
@@ -565,7 +574,10 @@ func TestUserSetTier(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	err = db.UserSetTier(ctx, u, database.TierPremium80)
 	if err != nil {
@@ -596,7 +608,10 @@ func TestUserStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 
 	testUploadSizeSmall := int64(1 + fastrand.Intn(4*skynet.MiB-1))

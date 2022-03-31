@@ -208,7 +208,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	// Expect to be unable to get the user with this cookie.
 	_, _, err = at.UserGET()
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatal("Expected to be unable to fetch the user with this cookie.")
+		t.Fatal("Expected to be unable to fetch the user with this cookie. Error:", err)
 	}
 	// Try logging out again. This should fail with a 401.
 	_, _, err = at.LogoutPOST()
@@ -876,7 +876,7 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	at.ClearCredentials()
 	_, err = at.TrackDownload(skylink.String(), 100)
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Expects anonymous download to fail.")
 	}
 	at.SetCookie(c)
 	// Call trackDownload with an invalid skylink.
