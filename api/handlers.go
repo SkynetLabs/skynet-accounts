@@ -1117,7 +1117,7 @@ func (api *API) trackUploadPOST(_ *database.User, w http.ResponseWriter, req *ht
 		// This will be tracked as an anonymous request.
 		u = &database.AnonUser
 	}
-	ip := validateIP(req.Form.Get("ip"))
+	ip := validateIP(req.FormValue("ip"))
 	_, err = api.staticDB.UploadCreate(req.Context(), *u, ip, *skylink)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)

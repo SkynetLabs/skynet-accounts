@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/skynet"
-
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -78,6 +77,23 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pag
 		{"unpinned", false},
 	}}}
 	return db.uploadsBy(ctx, matchStage, offset, pageSize)
+}
+
+// UploadsBySkylinkID returns all uploads of the given skylink.
+func (db *DB) UploadsBySkylinkID(ctx context.Context, slID primitive.ObjectID) ([]Upload, error) {
+	if slID.IsZero() {
+		return nil, ErrInvalidSkylink
+	}
+	c, err := db.staticUploads.Find(ctx, bson.M{"skylink_id": slID})
+	if err != nil {
+		return nil, err
+	}
+	uploads := make([]Upload, 0)
+	err = c.All(ctx, &uploads)
+	if err != nil {
+		return nil, err
+	}
+	return uploads, nil
 }
 
 // UnpinUploads unpins all uploads of this skylink by this user. Returns
