@@ -78,6 +78,6 @@ func TestUserTierCache(t *testing.T) {
 		t.Fatal("Expected the entry to exist.")
 	}
 	if tier != u.Tier {
-		t.Fatalf("Expected tier %+v, got %+v", u.Tier, tier)
+		t.Fatalf("Expected tier %d, got %d", u.Tier, tier)
 	}
 }

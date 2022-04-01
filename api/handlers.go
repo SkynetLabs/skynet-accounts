@@ -225,7 +225,7 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 	// Fetch the user with that email, if they exist.
 	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if err != nil {
-		api.staticLogger.Debugf("Error fetching a user with email '%s': %+v\n", email, err)
+		api.staticLogger.Debugf("Error fetching a user with email '%s': %v\n", email, err)
 		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
@@ -274,7 +274,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 	// Generate a JWT.
 	tk, err := jwt.TokenForUser(u.Email, u.Sub)
 	if err != nil {
-		api.staticLogger.Debugf("Error creating a token for user: %+v\n", err)
+		api.staticLogger.Debugf("Error creating a token for user: %v", err)
 		err = errors.AddContext(err, "failed to create a token for user")
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
