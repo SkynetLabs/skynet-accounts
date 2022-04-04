@@ -49,15 +49,13 @@ func (api *API) uploadInfoGET(_ *database.User, w http.ResponseWriter, req *http
 		api.WriteError(w, errors.AddContext(err, "failed to get uploads"), http.StatusInternalServerError)
 		return
 	}
-	// Get a set of all users that created these uploads.
-	uploaderSet := make(map[primitive.ObjectID]interface{})
-	for _, up := range ups {
-		uploaderSet[up.UserID] = struct{}{}
-	}
-	// Fet those users' data.
+	// Get the user data of all uploaders.
 	uploaders := make(map[primitive.ObjectID]database.User)
-	for upID := range uploaderSet {
-		u, err := api.staticDB.UserByID(ctx, upID)
+	for _, up := range ups {
+		if _, exist := uploaders[up.UserID]; exist {
+			continue
+		}
+		u, err := api.staticDB.UserByID(ctx, up.UserID)
 		if errors.Contains(err, database.ErrUserNotFound) {
 			continue
 		}
@@ -68,10 +66,10 @@ func (api *API) uploadInfoGET(_ *database.User, w http.ResponseWriter, req *http
 		uploaders[u.ID] = *u
 	}
 	// Create the final list of hydrated uploads.
-	upsHydrated := make([]UploadInfo, len(ups))
+	upInfos := make([]UploadInfo, len(ups))
 	for i, up := range ups {
 		u := uploaders[up.UserID]
-		upsHydrated[i] = UploadInfo{
+		upInfos[i] = UploadInfo{
 			Skylink:    skylink,
 			UploaderIP: up.UploaderIP,
 			UploadedAt: up.Timestamp,
@@ -83,5 +81,5 @@ func (api *API) uploadInfoGET(_ *database.User, w http.ResponseWriter, req *http
 			},
 		}
 	}
-	api.WriteJSON(w, upsHydrated)
+	api.WriteJSON(w, upInfos)
 }

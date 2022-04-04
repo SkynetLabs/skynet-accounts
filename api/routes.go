@@ -82,7 +82,7 @@ func (api *API) buildHTTPRoutes() {
 
 	api.staticRouter.GET("/.well-known/jwks.json", api.noAuth(api.wellKnownJWKSGET))
 
-	// Internal endpoint. NEVER EXPOSE THESE!
+	// Internal endpoint. Never expose these!
 	api.staticRouter.GET("/uploadinfo/:skylink", api.noAuth(api.uploadInfoGET))
 }
 
