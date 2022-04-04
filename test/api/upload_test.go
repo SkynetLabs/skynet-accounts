@@ -34,6 +34,7 @@ func testUploadInfo(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	at.ClearCredentials()
 
 	// Create a skylink.
 	sl, err := at.DB.Skylink(at.Ctx, test.RandomSkylink())
@@ -77,10 +78,10 @@ func testUploadInfo(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected 200OK and one upload, got %d and %d uploads.", sc, len(ups))
 	}
 	if ups[0].Skylink != sl.Skylink {
-		t.Fatal("Unexpected skylink.")
+		t.Fatalf("Expected skylink '%s', got '%s'.", sl.Skylink, ups[0].Skylink)
 	}
 	if !ups[0].UserID.IsZero() {
-		t.Fatal("Unexpected uploader.")
+		t.Fatalf("Unexpected uploader: %+v", ups)
 	}
 	if ups[0].UploaderIP != ip {
 		t.Fatalf("Expected uploader IP '%s', got '%s'", ip, ups[0].UploaderIP)
