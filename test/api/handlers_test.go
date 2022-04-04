@@ -294,14 +294,49 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Unexpected name:", uName.Name)
 	}
 
-	// Update the user's profile picture link.
-	link := "this is an image link"
+	// Update the user's profile picture link with an invalid link.
+	r, b, err = at.UserPUT("", "", "", "this is an image link", "")
+	// TODO This will become "invalid profile picture link" after we refactor
+	// 	tester
+	if err == nil || !strings.Contains(err.Error(), "400 Bad Request") {
+		t.Fatalf("Expected '400 Bad Request', got '%v'", err)
+	}
+	// Update the user's profile picture link with a valid link.
+	link := "https://skynetpro.net/CAAfpFBBK6wsb7r9lSOth7TR1M_EPt816y1i_aVR84DuqA"
 	r, b, err = at.UserPUT("", "", "", link, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Verify the change.
 	uPic, err := at.DB.UserByID(at.Ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uPic.ProfilePic != link {
+		t.Fatal("Unexpected name:", uPic.ProfilePic)
+	}
+	// Update the user's profile picture link with a skylink.
+	link = "CAAfpFBBK6wsb7r9lSOth7TR1M_EPt816y1i_aVR84DuqA"
+	r, b, err = at.UserPUT("", "", "", link, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify the change.
+	uPic, err = at.DB.UserByID(at.Ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uPic.ProfilePic != link {
+		t.Fatal("Unexpected name:", uPic.ProfilePic)
+	}
+	// Update the user's profile picture link with a valid link.
+	link = "1001v92g84lqob3fnbupa8tdguqd3l6fogvdudfb5lhfr9ahue0eta0"
+	r, b, err = at.UserPUT("", "", "", link, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify the change.
+	uPic, err = at.DB.UserByID(at.Ctx, u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
