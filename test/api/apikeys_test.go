@@ -16,7 +16,7 @@ import (
 // API keys.
 func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
-	r, body, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
+	r, body, err := at.UserPOST(name+"@siasky.net", name+"_pass")
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
@@ -97,7 +97,7 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	// Create a test user.
 	email := name + "@siasky.net"
-	r, _, err := at.CreateUserPost(email, name+"_pass")
+	r, _, err := at.UserPOST(email, name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,9 +119,9 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	}
 	// Stop using the cookie, so we can test the API key.
 	at.ClearCredentials()
-	// Get user stats without a cookie or headers - pass the API key via a query
+	// Get user limits without a cookie or headers - pass the API key via a query
 	// variable. The main thing we want to see here is whether we get
-	// an `Unauthorized` error or not but we'll validate the stats as well.
+	// an `Unauthorized` error or not but we'll validate the limits as well.
 	h := map[string]string{
 		api.APIKeyHeader: akWithKey.Key.String(),
 	}
@@ -135,11 +135,11 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 // API keys.
 func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
-	r, body, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
+	r, body, err := at.UserPOST(name+"@siasky.net", name+"_pass")
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
-	at.Cookie = test.ExtractCookie(r)
+	at.SetCookie(test.ExtractCookie(r))
 
 	sl1 := "AQAh2vxStoSJ_M9tWcTgqebUWerCAbpMfn9xxa9E29UOuw"
 	sl2 := "AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw"
@@ -232,7 +232,7 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	// Create a test user.
 	email := name + "@siasky.net"
-	r, _, err := at.CreateUserPost(email, name+"_pass")
+	r, _, err := at.UserPOST(email, name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	at.SetAPIKey(pakWithKey.Key.String())
 	// Try to fetch the user's stats with the new public API key.
 	// Expect this to fail.
-	_, _, err = at.Get("/user/stats", nil)
+	_, _, err = at.UserStats("", nil)
 	if err == nil {
 		t.Fatal("Managed to get user stats with a public API key.")
 	}
@@ -305,7 +305,7 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 func testAPIKeysAcceptance(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	// Create a test user.
-	r, _, err := at.CreateUserPost(name+"@siasky.net", name+"_pass")
+	r, _, err := at.UserPOST(name+"@siasky.net", name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,24 +344,10 @@ func testAPIKeysAcceptance(t *testing.T, at *test.AccountsTester) {
 		{verb: http.MethodPost, endpoint: "/user/reconfirm"},
 	}
 
-	var b []byte
 	for _, tt := range tests {
-		switch tt.verb {
-		case http.MethodGet:
-			r, b, err = at.Get(tt.endpoint, nil)
-		case http.MethodPost:
-			r, b, err = at.Post(tt.endpoint, nil, nil)
-		case http.MethodPut:
-			r, b, err = at.Put(tt.endpoint, nil, nil)
-		case http.MethodPatch:
-			r, b, err = at.Patch(tt.endpoint, nil, nil)
-		case http.MethodDelete:
-			r, b, err = at.Delete(tt.endpoint, nil)
-		default:
-			t.Fatalf("Invalid verb: %+v", tt)
-		}
-		if err == nil || r.StatusCode != http.StatusUnauthorized || !strings.Contains(string(b), api.ErrAPIKeyNotAllowed.Error()) {
-			t.Fatalf("Expected error '%s' with status %d, got '%s' with status %d. Endpoint %s %s", api.ErrAPIKeyNotAllowed, http.StatusUnauthorized, err, r.StatusCode, tt.verb, tt.endpoint)
+		r, err = at.Request(tt.verb, tt.endpoint, nil, nil, nil, nil)
+		if err == nil || r.StatusCode != http.StatusUnauthorized || !strings.Contains(err.Error(), api.ErrAPIKeyNotAllowed.Error()) {
+			t.Errorf("Expected error '%s' with status %d, got '%s' with status %d. Endpoint %s %s", api.ErrAPIKeyNotAllowed, http.StatusUnauthorized, err, r.StatusCode, tt.verb, tt.endpoint)
 		}
 	}
 }

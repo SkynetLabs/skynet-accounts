@@ -15,7 +15,7 @@ import (
 func TestUploadsByUser(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestUploadsByUser(t *testing.T) {
 func TestUnpinUploads(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
