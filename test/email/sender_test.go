@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"github.com/sirupsen/logrus"
@@ -24,7 +23,7 @@ func TestSender(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +90,7 @@ func TestContendingSenders(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	logger := logrus.New()
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), logger)
+	db, err := test.NewDatabase(ctx, dbName, logger)
 	if err != nil {
 		t.Fatal(err)
 	}

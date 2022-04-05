@@ -3,9 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -24,73 +22,51 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 	sk, pk := crypto.GenerateKeyPair()
 
 	// Request a challenge without a pubkey.
-	r, b, _ := at.Get("/register", nil)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
+	_, status, err := at.RegisterGET(nil)
+	if status != http.StatusBadRequest || err == nil || !strings.Contains(err.Error(), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), status, err)
 	}
 
 	// Request a challenge with an invalid pubkey.
-	queryParams := url.Values{}
-	queryParams.Set("pubKey", hex.EncodeToString(fastrand.Bytes(10)))
-	r, b, _ = at.Get("/register", nil)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
+	_, status, err = at.RegisterGET(fastrand.Bytes(10)[:])
+	if status != http.StatusBadRequest || err == nil || !strings.Contains(err.Error(), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), status, err)
 	}
 
-	params := url.Values{}
-	params.Set("pubKey", hex.EncodeToString(pk[:]))
-
 	// Request a challenge with a valid pubkey.
-	_, b, err := at.Get("/register", params)
-	var chBytes []byte
-	{
-		var ch database.Challenge
-		err = json.Unmarshal(b, &ch)
-		if err != nil {
-			t.Fatal("Failed to get a challenge:", err)
-		}
-		chBytes, err = hex.DecodeString(ch.Challenge)
-		if err != nil {
-			t.Fatal("Invalid challenge:", err)
-		}
+	ch, status, err := at.RegisterGET(pk[:])
+	chBytes, err := hex.DecodeString(ch.Challenge)
+	if err != nil {
+		t.Fatal("Invalid challenge:", err)
 	}
 
 	// Solve the challenge.
 	response := append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
-	bodyParams := url.Values{}
-	bodyParams.Set("response", hex.EncodeToString(response))
-	bodyParams.Set("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
-	bodyParams.Set("email", name+"@siasky.net")
-	r, b, err = at.Post("/register", nil, bodyParams)
+	sig := ed25519.Sign(sk[:], response)
+	emailStr := name + "@siasky.net"
+	u, status, err := at.RegisterPOST(response, sig, emailStr)
 	if err != nil {
-		t.Fatalf("Failed to register. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+		t.Fatalf("Failed to register. Status %d, error '%s'", status, err)
 	}
-	var u database.User
-	err = json.Unmarshal(b, &u)
-	if err != nil {
-		t.Fatal("Failed to unmarshal returned user:", err)
-	}
-	if u.Email != bodyParams.Get("email") {
-		t.Fatalf("Expected email '%s', got '%s'.", bodyParams.Get("email"), u.Email)
+	if u.Email != emailStr {
+		t.Fatalf("Expected email '%s', got '%s'.", emailStr, u.Email)
 	}
 	// Make sure the user exists in the database.
 	u1, err := at.DB.UserByPubKey(at.Ctx, pk[:])
 	if err != nil {
 		t.Fatal("Failed to fetch user from DB:", err)
 	}
-	if u1.Email != bodyParams.Get("email") {
-		t.Fatalf("Expected user with email '%s', got '%s'.", bodyParams.Get("email"), u1.Email)
+	if u1.Email != emailStr {
+		t.Fatalf("Expected user with email '%s', got '%s'.", emailStr, u1.Email)
 	}
 
 	// Try to request another registration challenge with the same pubkey.
-	queryParams = url.Values{}
-	queryParams.Set("pubKey", hex.EncodeToString(pk[:]))
-	r, b, _ = at.Get("/register", queryParams)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "pubkey already registered") {
+	_, status, err = at.RegisterGET(pk[:])
+	if status != http.StatusBadRequest || err == nil || !strings.Contains(err.Error(), "pubkey already registered") {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, "pubkey already registered", r.StatusCode, string(b))
+			http.StatusBadRequest, "pubkey already registered", status, err)
 	}
 }
 
@@ -103,11 +79,7 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 
 	// Register a user via challenge-response, so we have a test user with a
 	// pubkey that we can login with.
-	queryParams := url.Values{}
-	queryParams.Set("pubKey", pk.String())
-	_, b, err := at.Get("/register", queryParams)
-	var ch database.Challenge
-	err = json.Unmarshal(b, &ch)
+	ch, _, err := at.RegisterGET(pk)
 	if err != nil {
 		t.Fatal("Failed to get a challenge:", err)
 	}
@@ -116,39 +88,29 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Invalid challenge:", err)
 	}
 	response := append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
-	bodyParams := url.Values{}
-	bodyParams.Set("response", hex.EncodeToString(response))
-	bodyParams.Set("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
-	bodyParams.Set("email", name+"@siasky.net")
-	r, b, err := at.Post("/register", nil, bodyParams)
+	sig := ed25519.Sign(sk[:], response)
+	emailStr := name + "@siasky.net"
+	u, status, err := at.RegisterPOST(response, sig, emailStr)
 	if err != nil {
-		t.Fatalf("Failed to validate the response. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+		t.Fatalf("Failed to validate the response. Status %d, error '%s'", status, err)
 	}
 
 	// Request a challenge without a pubkey.
-	r, b, _ = at.Get("/login", nil)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
+	_, status, err = at.LoginPubKeyGET(nil)
+	if status != http.StatusBadRequest || err == nil || !strings.Contains(err.Error(), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), status, err)
 	}
 
 	// Request a challenge with an invalid pubkey.
-	queryParams = url.Values{}
-	queryParams.Set("pubKey", hex.EncodeToString(fastrand.Bytes(10)))
-	r, b, _ = at.Get("/login", queryParams)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
+	ch, status, err = at.LoginPubKeyGET(fastrand.Bytes(10)[:])
+	if status != http.StatusBadRequest || err == nil || !strings.Contains(err.Error(), database.ErrInvalidPublicKey.Error()) {
 		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
+			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), status, err)
 	}
 
 	// Request a challenge with a valid pubkey.
-	queryParams = url.Values{}
-	queryParams.Set("pubKey", pk.String())
-	_, b, err = at.Get("/login", queryParams)
-	err = json.Unmarshal(b, &ch)
-	if err != nil {
-		t.Fatal("Failed to get a challenge:", err)
-	}
+	ch, status, err = at.LoginPubKeyGET(pk[:])
 	chBytes, err = hex.DecodeString(ch.Challenge)
 	if err != nil {
 		t.Fatal("Invalid challenge:", err)
@@ -156,27 +118,20 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 
 	// Solve the challenge.
 	response = append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(database.PortalName)...)...)
-	bodyParams = url.Values{}
-	bodyParams.Set("response", hex.EncodeToString(response))
-	bodyParams.Set("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
-	bodyParams.Set("email", name+"@siasky.net")
-	r, b, err = at.Post("/login", nil, bodyParams)
+	sig = ed25519.Sign(sk[:], response)
+	emailStr = name + "@siasky.net"
+	r, b, err := at.LoginPubKeyPOST(response, sig, emailStr)
 	if err != nil {
 		t.Fatalf("Failed to login. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
 	}
 	// Make sure we have a valid cookie returned and that it's for the same user.
 	at.SetCookie(test.ExtractCookie(r))
-	_, b, err = at.Get("/user", nil)
+	u, _, err = at.UserGET()
 	if err != nil {
-		t.Fatalf("Failed to fetch user with the given cookie: '%s', error '%s'", string(b), err)
+		t.Fatal(err)
 	}
-	var u database.User
-	err = json.Unmarshal(b, &u)
-	if err != nil {
-		t.Fatal("Failed to parse user:", err)
-	}
-	if u.Email != bodyParams.Get("email") {
-		t.Fatalf("Expected user with email %s, got %s", bodyParams.Get("email"), u.Email)
+	if u.Email != emailStr {
+		t.Fatalf("Expected user with email %s, got %s", emailStr, u.Email)
 	}
 }
 
@@ -196,19 +151,15 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	defer at.ClearCredentials()
 
 	// Request a challenge without a pubkey.
-	r, b, _ := at.Get("/user/pubkey/register", nil)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
-		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
+	_, status, _ := at.UserPubkeyRegisterGET("")
+	if status != http.StatusBadRequest {
+		t.Fatalf("Expected %d, got %d", http.StatusBadRequest, status)
 	}
 
 	// Request a challenge with an invalid pubkey.
-	queryParams := url.Values{}
-	queryParams.Set("pubKey", hex.EncodeToString(fastrand.Bytes(10)))
-	r, b, _ = at.Get("/user/pubkey/register", queryParams)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), database.ErrInvalidPublicKey.Error()) {
-		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, database.ErrInvalidPublicKey.Error(), r.StatusCode, string(b))
+	_, status, _ = at.UserPubkeyRegisterGET(string(fastrand.Bytes(10)))
+	if status != http.StatusBadRequest {
+		t.Fatalf("Expected %d, got %d", http.StatusBadRequest, status)
 	}
 
 	// Request a challenge with a pubKey that belongs to another user.
@@ -217,70 +168,51 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	queryParams = url.Values{}
-	queryParams.Set("pubKey", hex.EncodeToString(pk2[:]))
-	r, b, _ = at.Get("/user/pubkey/register", queryParams)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "pubkey already registered") {
-		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, "pubkey already registered", r.StatusCode, string(b))
+	_, status, err = at.UserPubkeyRegisterGET(string(pk2[:]))
+	if status != http.StatusBadRequest {
+		t.Fatalf("Expected %d, got %d", http.StatusBadRequest, status)
 	}
 
 	// Request a challenge for setting the user's pubKey.
 	sk, pk := crypto.GenerateKeyPair()
-	queryParams = url.Values{}
-	queryParams.Set("pubKey", hex.EncodeToString(pk[:]))
-	r, b, err = at.Get("/user/pubkey/register", queryParams)
-	var ch database.Challenge
-	err = json.Unmarshal(b, &ch)
-	if err != nil || r.StatusCode != http.StatusOK {
-		t.Fatalf("Failed to get a challenge. Status '%s', body '%s', error '%s'", r.Status, string(b), err)
-	}
+	ch, status, err := at.UserPubkeyRegisterGET(hex.EncodeToString(pk[:]))
 	chBytes, err := hex.DecodeString(ch.Challenge)
 	if err != nil {
 		t.Fatal("Invalid challenge:", err)
 	}
 
 	// Try to solve it without passing the solution.
-	r, b, _ = at.Post("/user/pubkey/register", nil, nil)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "missing or invalid challenge response") {
-		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, "missing or invalid challenge response", r.StatusCode, string(b))
+	_, status, err = at.UserPubkeyRegisterPOST(nil, nil)
+	if status != http.StatusBadRequest {
+		t.Fatalf("Expected %d, got %d", http.StatusBadRequest, status)
 	}
 
 	// Try to solve it without being logged in.
 	at.ClearCredentials()
 	response := append(chBytes, append([]byte(database.ChallengeTypeUpdate), []byte(database.PortalName)...)...)
-	bodyParams := url.Values{}
-	bodyParams.Set("response", hex.EncodeToString(response))
-	bodyParams.Set("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
-	r, b, _ = at.Post("/user/pubkey/register", nil, bodyParams)
-	if r.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("Expected %d , got %d '%s', error '%s'",
-			http.StatusUnauthorized, r.StatusCode, string(b), err)
+	_, status, err = at.UserPubkeyRegisterPOST(response, ed25519.Sign(sk[:], response))
+	if status != http.StatusUnauthorized {
+		t.Fatalf("Expected %d , got %d, error '%s'", http.StatusUnauthorized, status, err)
 	}
 
 	// Try to solve the challenge while logged in as a different user.
 	// NOTE: This will consume the challenge and the user will need to request
 	// a new one.
-	r, b, err = at.CreateUserPost(name+"_user3@siasky.net", name+"_pass")
+	r, bb, err := at.UserPOST(name+"_user3@siasky.net", name+"_pass")
 	if err != nil || r.StatusCode != http.StatusOK {
-		t.Fatal(r.Status, err, string(b))
+		t.Fatal(r.Status, err, string(bb))
 	}
 	at.SetCookie(test.ExtractCookie(r))
-	r, b, _ = at.Post("/user/pubkey/register", nil, bodyParams)
-	if r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "user's sub doesn't match update sub") {
-		t.Fatalf("Expected %d '%s', got %d '%s'",
-			http.StatusBadRequest, "user's sub doesn't match update sub", r.StatusCode, string(b))
+	_, status, err = at.UserPubkeyRegisterPOST(response, ed25519.Sign(sk[:], response))
+	if status != http.StatusBadRequest {
+		t.Fatalf("Expected %d, got %d", http.StatusBadRequest, status)
 	}
 
 	// Request a new challenge with the original test user.
 	at.SetCookie(c)
-	queryParams = url.Values{}
-	queryParams.Set("pubKey", hex.EncodeToString(pk[:]))
-	r, b, err = at.Get("/user/pubkey/register", queryParams)
-	err = json.Unmarshal(b, &ch)
-	if err != nil || r.StatusCode != http.StatusOK {
-		t.Fatal("Failed to get a challenge:", err, r.Status, string(b))
+	ch, status, err = at.UserPubkeyRegisterGET(hex.EncodeToString(pk[:]))
+	if err != nil || status != http.StatusOK {
+		t.Fatal("Failed to get a challenge:", err, r.Status, err)
 	}
 	chBytes, err = hex.DecodeString(ch.Challenge)
 	if err != nil {
@@ -289,12 +221,9 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 
 	// Solve the challenge.
 	response = append(chBytes, append([]byte(database.ChallengeTypeUpdate), []byte(database.PortalName)...)...)
-	bodyParams = url.Values{}
-	bodyParams.Set("response", hex.EncodeToString(response))
-	bodyParams.Set("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
-	r, b, err = at.Post("/user/pubkey/register", nil, bodyParams)
+	_, status, err = at.UserPubkeyRegisterPOST(response, ed25519.Sign(sk[:], response))
 	if err != nil {
-		t.Fatalf("Failed to confirm the update. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+		t.Fatalf("Failed to confirm the update. Status %d, error '%s'", status, err)
 	}
 
 	// Make sure the user's pubKey is properly set.
@@ -327,15 +256,11 @@ func testUserDeletePubKey(t *testing.T, at *test.AccountsTester) {
 	defer at.ClearCredentials()
 
 	sk, pk := crypto.GenerateKeyPair()
-	var ch database.Challenge
 
 	// Request a new challenge.
-	queryParams := url.Values{}
-	queryParams.Set("pubKey", hex.EncodeToString(pk[:]))
-	r, b, err := at.Get("/user/pubkey/register", queryParams)
-	err = json.Unmarshal(b, &ch)
-	if err != nil || r.StatusCode != http.StatusOK {
-		t.Fatal("Failed to get a challenge:", err, r.Status, string(b))
+	ch, status, err := at.UserPubkeyRegisterGET(hex.EncodeToString(pk[:]))
+	if err != nil || status != http.StatusOK {
+		t.Fatal("Failed to get a challenge:", err, status)
 	}
 	chBytes, err := hex.DecodeString(ch.Challenge)
 	if err != nil {
@@ -343,12 +268,9 @@ func testUserDeletePubKey(t *testing.T, at *test.AccountsTester) {
 	}
 	// Solve the challenge.
 	response := append(chBytes, append([]byte(database.ChallengeTypeUpdate), []byte(database.PortalName)...)...)
-	bodyParams := url.Values{}
-	bodyParams.Set("response", hex.EncodeToString(response))
-	bodyParams.Set("signature", hex.EncodeToString(ed25519.Sign(sk[:], response)))
-	r, b, err = at.Post("/user/pubkey/register", nil, bodyParams)
+	_, status, err = at.UserPubkeyRegisterPOST(response, ed25519.Sign(sk[:], response))
 	if err != nil {
-		t.Fatalf("Failed to confirm the update. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+		t.Fatalf("Failed to confirm the update. Status %d, error '%s'", status, err)
 	}
 	// Make sure the user's pubKey is properly set.
 	u1, err := at.DB.UserBySub(at.Ctx, u.Sub)
@@ -364,26 +286,26 @@ func testUserDeletePubKey(t *testing.T, at *test.AccountsTester) {
 
 	// Call DELETE without a cookie.
 	at.ClearCredentials()
-	r, b, err = at.Delete("/user/pubkey/"+hex.EncodeToString(pk[:]), nil)
-	if err == nil || r.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("Expected to fail with 401. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	status, err = at.UserPubkeyDELETE(pk[:])
+	if err == nil || status != http.StatusUnauthorized {
+		t.Fatalf("Expected to fail with 401. Status %d, error '%s'", status, err)
 	}
 	at.SetCookie(c)
 	// Call DELETE with an invalid key.
-	r, b, err = at.Delete("/user/pubkey/INVALID_KEY", nil)
-	if err == nil || r.StatusCode != http.StatusBadRequest {
-		t.Fatalf("Expected to fail with 400. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	status, err = at.UserPubkeyDELETE([]byte("INVALID_KEY"))
+	if err == nil || status != http.StatusBadRequest {
+		t.Fatalf("Expected to fail with 400. Status %d, error '%s'", status, err)
 	}
 	_, pk1 := crypto.GenerateKeyPair()
 	// Call DELETE with a key that doesn't belong to this user.
-	r, b, err = at.Delete("/user/pubkey/"+hex.EncodeToString(pk1[:]), nil)
-	if err == nil || r.StatusCode != http.StatusBadRequest {
-		t.Fatalf("Expected to fail with 400. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	status, err = at.UserPubkeyDELETE(pk1[:])
+	if err == nil || status != http.StatusBadRequest {
+		t.Fatalf("Expected to fail with 400. Status %d, error '%s'", status, err)
 	}
 	// Call DELETE with correct parameters.
-	r, b, err = at.Delete("/user/pubkey/"+hex.EncodeToString(pk[:]), nil)
-	if err != nil || r.StatusCode != http.StatusNoContent {
-		t.Fatalf("Expected to succeed. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	status, err = at.UserPubkeyDELETE(pk[:])
+	if err != nil || status != http.StatusNoContent {
+		t.Fatalf("Expected to succeed. Status %d, error '%s'", status, err)
 	}
 	// Verify that the key was deleted.
 	u2, err := at.DB.UserBySub(at.Ctx, u.Sub)
@@ -394,8 +316,8 @@ func testUserDeletePubKey(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Expected no public keys, got", len(u2.PubKeys))
 	}
 	// Call DELETE with the already deleted key.
-	r, b, err = at.Delete("/user/pubkey/"+hex.EncodeToString(pk[:]), nil)
-	if err == nil || r.StatusCode != http.StatusBadRequest {
-		t.Fatalf("Expected to fail with 400. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
+	status, err = at.UserPubkeyDELETE(pk[:])
+	if err == nil || status != http.StatusBadRequest {
+		t.Fatalf("Expected to fail with 400. Status %d, error '%s'", status, err)
 	}
 }
