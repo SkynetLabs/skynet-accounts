@@ -498,3 +498,36 @@ func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, head
 	}
 	return resp, r.StatusCode, nil
 }
+
+// UploadInfo performs a `GET /uploadinfo/:skylink` request.
+func (at *AccountsTester) UploadInfo(sl string) ([]api.UploadInfo, int, error) {
+	if !database.ValidSkylinkHash(sl) {
+		return nil, http.StatusBadRequest, database.ErrInvalidSkylink
+	}
+	r, b, err := at.request(http.MethodGet, "/uploadinfo/"+sl, nil, nil, nil)
+	if err != nil {
+		return nil, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return nil, r.StatusCode, errors.New(string(b))
+	}
+	var resp []api.UploadInfo
+	err = json.Unmarshal(b, &resp)
+	if err != nil {
+		return nil, http.StatusInternalServerError, errors.AddContext(err, "failed to marshal the body JSON")
+	}
+	return resp, r.StatusCode, nil
+}
+
+// UploadsDELETE performs `DELETE /user/uploads/:skylink`
+// TODO Remove this one when we merge the tester refactoring.
+func (at *AccountsTester) UploadsDELETE(skylink string) (int, error) {
+	r, b, err := at.request(http.MethodDelete, "/user/uploads/"+skylink, nil, nil, nil)
+	if err != nil {
+		return r.StatusCode, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode != http.StatusNoContent {
+		return r.StatusCode, errors.New("unexpected status code")
+	}
+	return r.StatusCode, nil
+}

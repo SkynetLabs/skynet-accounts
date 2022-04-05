@@ -74,6 +74,7 @@ func TestHandlers(t *testing.T) {
 		{name: "PublicAPIKeysFlow", test: testPublicAPIKeysFlow},
 		{name: "PublicAPIKeysUsage", test: testPublicAPIKeysUsage},
 		{name: "APIKeysAcceptance", test: testAPIKeysAcceptance},
+		{name: "UploadInfo", test: testUploadInfo},
 	}
 
 	// Run subtests
