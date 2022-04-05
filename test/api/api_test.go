@@ -175,6 +175,9 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if ul.Sub != u.Sub {
+		t.Fatalf("Expected user sub '%s', got '%s'", u.Sub, ul.Sub)
+	}
 	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
 		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
 	}

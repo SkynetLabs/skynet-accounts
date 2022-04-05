@@ -17,27 +17,27 @@ func TestUserTierCache(t *testing.T) {
 		QuotaExceeded:   false,
 	}
 	// Get the user from the empty cache.
-	tier, _, ok := cache.Get(u.Sub)
-	if ok || tier != database.TierAnonymous {
-		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", database.TierAnonymous, false, tier, ok)
+	ce, ok := cache.Get(u.Sub)
+	if ok || ce.Tier != database.TierAnonymous {
+		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", database.TierAnonymous, false, ce.Tier, ok)
 	}
 	// Set the user in the cache.
 	cache.Set(u.Sub, u)
 	// Check again.
-	tier, qe, ok := cache.Get(u.Sub)
-	if !ok || tier != u.Tier {
-		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", u.Tier, true, tier, ok)
+	ce, ok = cache.Get(u.Sub)
+	if !ok || ce.Tier != u.Tier {
+		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", u.Tier, true, ce.Tier, ok)
 	}
-	if qe != u.QuotaExceeded {
+	if ce.QuotaExceeded != u.QuotaExceeded {
 		t.Fatal("Quota exceeded flag doesn't match.")
 	}
 	u.QuotaExceeded = true
 	cache.Set(u.Sub, u)
-	tier, qe, ok = cache.Get(u.Sub)
-	if !ok || tier != u.Tier {
-		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", u.Tier, true, tier, ok)
+	ce, ok = cache.Get(u.Sub)
+	if !ok || ce.Tier != u.Tier {
+		t.Fatalf("Expected to get tier %d and %t, got %d and %t.", u.Tier, true, ce.Tier, ok)
 	}
-	if qe != u.QuotaExceeded {
+	if ce.QuotaExceeded != u.QuotaExceeded {
 		t.Fatal("Quota exceeded flag doesn't match.")
 	}
 	ce, exists := cache.cache[u.Sub]
@@ -66,18 +66,18 @@ func TestUserTierCache(t *testing.T) {
 		t.Fatal("Invalid API key.")
 	}
 	// Try to get a value from the cache. Expect this to fail.
-	_, _, ok = cache.Get(string(ak))
+	_, ok = cache.Get(string(ak))
 	if ok {
 		t.Fatal("Did not expect to get a cache entry!")
 	}
 	// Update the cache with a custom key.
 	cache.Set(string(ak), u)
 	// Fetch the data for the custom key.
-	tier, _, ok = cache.Get(string(ak))
+	ce, ok = cache.Get(string(ak))
 	if !ok {
 		t.Fatal("Expected the entry to exist.")
 	}
-	if tier != u.Tier {
-		t.Fatalf("Expected tier %d, got %d", u.Tier, tier)
+	if ce.Tier != u.Tier {
+		t.Fatalf("Expected tier %d, got %d", u.Tier, ce.Tier)
 	}
 }
