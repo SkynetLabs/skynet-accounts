@@ -16,12 +16,12 @@ func testUploadInfo(t *testing.T, at *test.AccountsTester) {
 	name2 := name + "2"
 	email := name + "@siasky.net"
 	email2 := name2 + "@siasky.net"
-	r, _, err := at.CreateUserPost(email, name+"_pass")
+	r, _, err := at.UserPOST(email, name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
 	c1 := test.ExtractCookie(r)
-	r, _, err = at.CreateUserPost(email2, name2+"_pass")
+	r, _, err = at.UserPOST(email2, name2+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}

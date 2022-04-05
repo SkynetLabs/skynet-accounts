@@ -247,14 +247,14 @@ func (cr *ChallengeResponse) LoadFromReader(r io.Reader) error {
 
 // LoadString loads a PubKey from its hex-encoded string form.
 func (pk *PubKey) LoadString(s string) error {
-	bb, err := hex.DecodeString(s)
+	b, err := hex.DecodeString(s)
 	if err != nil {
 		return errors.AddContext(err, ErrInvalidPublicKey.Error())
 	}
-	if len(bb) != PubKeySize {
+	if len(b) != PubKeySize {
 		return ErrInvalidPublicKey
 	}
-	*pk = bb[:]
+	*pk = b[:]
 	return nil
 }
 
