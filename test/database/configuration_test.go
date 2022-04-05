@@ -14,7 +14,7 @@ import (
 func TestConfiguration(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := test.NewDatabase(ctx, dbName, nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}

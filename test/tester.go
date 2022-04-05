@@ -44,20 +44,6 @@ type (
 	}
 )
 
-// CleanName sanitizes the input for all kinds of unwanted characters and
-// replaces those with underscores.
-// See https://docs.mongodb.com/manual/reference/limits/#naming-restrictions
-func CleanName(s string) string {
-	re := regexp.MustCompile(`[/\\.\s"$*<>:|?]`)
-	cleanDBName := re.ReplaceAllString(s, "_")
-	// 64 characters is MongoDB's limit on database names.
-	// See https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Length-of-Database-Names
-	if len(cleanDBName) > 64 {
-		cleanDBName = cleanDBName[:64]
-	}
-	return cleanDBName
-}
-
 // ExtractCookie is a helper method which extracts the login cookie from a
 // response, so we can use it with future requests while testing.
 func ExtractCookie(r *http.Response) *http.Cookie {
@@ -70,16 +56,15 @@ func ExtractCookie(r *http.Response) *http.Cookie {
 }
 
 // NewDatabase returns a new DB connection based on the passed parameters.
-func NewDatabase(ctx context.Context, dbName string, logger *logrus.Logger) (*database.DB, error) {
-	return database.NewCustomDB(ctx, CleanName(dbName), DBTestCredentials(), logger)
+func NewDatabase(ctx context.Context, dbName string) (*database.DB, error) {
+	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDummyLogger())
 }
 
 // NewAccountsTester creates and starts a new AccountsTester service.
 // Use the Close method for a graceful shutdown.
 func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	ctx := context.Background()
-	logger := logrus.New()
-	logger.Out = ioutil.Discard
+	logger := NewDummyLogger()
 
 	// Initialise the environment.
 	jwt.PortalName = testPortalAddr
@@ -90,7 +75,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	}
 
 	// Connect to the database.
-	db, err := NewDatabase(ctx, dbName, logger)
+	db, err := NewDatabase(ctx, dbName)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to connect to the DB")
 	}
@@ -145,6 +130,27 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 		return nil, errors.AddContext(err, "failed to start accounts tester in the given time")
 	}
 	return at, nil
+}
+
+// NewDummyLogger returns a new logger that sends all output to ioutil.Discard.
+func NewDummyLogger() *logrus.Logger {
+	logger := logrus.New()
+	logger.Out = ioutil.Discard
+	return logger
+}
+
+// SanitizeName sanitizes the input for all kinds of unwanted characters and
+// replaces those with underscores.
+// See https://docs.mongodb.com/manual/reference/limits/#naming-restrictions
+func SanitizeName(s string) string {
+	re := regexp.MustCompile(`[/\\.\s"$*<>:|?]`)
+	cleanDBName := re.ReplaceAllString(s, "_")
+	// 64 characters is MongoDB's limit on database names.
+	// See https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Length-of-Database-Names
+	if len(cleanDBName) > 64 {
+		cleanDBName = cleanDBName[:64]
+	}
+	return cleanDBName
 }
 
 // ClearCredentials removes any credentials stored by this tester, such as a

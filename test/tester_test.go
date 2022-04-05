@@ -2,8 +2,8 @@ package test
 
 import "testing"
 
-// TestCleanName ensures that CleanName works as expected.
-func TestCleanName(t *testing.T) {
+// TestSanitizeName ensures that SanitizeName works as expected.
+func TestSanitizeName(t *testing.T) {
 	tests := map[string]struct {
 		input    string
 		expected string
@@ -21,7 +21,7 @@ func TestCleanName(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			out := CleanName(tt.input)
+			out := SanitizeName(tt.input)
 			if out != tt.expected {
 				t.Errorf("Test '%s' failed. Expected '%s', got '%s'", name, tt.expected, out)
 			}

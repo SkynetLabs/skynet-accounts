@@ -345,22 +345,9 @@ func testAPIKeysAcceptance(t *testing.T, at *test.AccountsTester) {
 	}
 
 	for _, tt := range tests {
-		switch tt.verb {
-		case http.MethodGet:
-			r, err = at.Request(http.MethodGet, tt.endpoint, nil, nil, nil, nil)
-		case http.MethodPost:
-			r, err = at.Request(http.MethodPost, tt.endpoint, nil, nil, nil, nil)
-		case http.MethodPut:
-			r, err = at.Request(http.MethodPut, tt.endpoint, nil, nil, nil, nil)
-		case http.MethodPatch:
-			r, err = at.Request(http.MethodPatch, tt.endpoint, nil, nil, nil, nil)
-		case http.MethodDelete:
-			r, err = at.Request(http.MethodDelete, tt.endpoint, nil, nil, nil, nil)
-		default:
-			t.Fatalf("Invalid verb: %+v", tt)
-		}
+		r, err = at.Request(tt.verb, tt.endpoint, nil, nil, nil, nil)
 		if err == nil || r.StatusCode != http.StatusUnauthorized || !strings.Contains(err.Error(), api.ErrAPIKeyNotAllowed.Error()) {
-			t.Fatalf("Expected error '%s' with status %d, got '%s' with status %d. Endpoint %s %s", api.ErrAPIKeyNotAllowed, http.StatusUnauthorized, err, r.StatusCode, tt.verb, tt.endpoint)
+			t.Errorf("Expected error '%s' with status %d, got '%s' with status %d. Endpoint %s %s", api.ErrAPIKeyNotAllowed, http.StatusUnauthorized, err, r.StatusCode, tt.verb, tt.endpoint)
 		}
 	}
 }
