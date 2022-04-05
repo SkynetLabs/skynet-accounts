@@ -57,14 +57,14 @@ func ExtractCookie(r *http.Response) *http.Cookie {
 
 // NewDatabase returns a new DB connection based on the passed parameters.
 func NewDatabase(ctx context.Context, dbName string) (*database.DB, error) {
-	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDummyLogger())
+	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDiscardLogger())
 }
 
 // NewAccountsTester creates and starts a new AccountsTester service.
 // Use the Close method for a graceful shutdown.
 func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	ctx := context.Background()
-	logger := NewDummyLogger()
+	logger := NewDiscardLogger()
 
 	// Initialise the environment.
 	jwt.PortalName = testPortalAddr
@@ -132,8 +132,8 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	return at, nil
 }
 
-// NewDummyLogger returns a new logger that sends all output to ioutil.Discard.
-func NewDummyLogger() *logrus.Logger {
+// NewDiscardLogger returns a new logger that sends all output to ioutil.Discard.
+func NewDiscardLogger() *logrus.Logger {
 	logger := logrus.New()
 	logger.Out = ioutil.Discard
 	return logger

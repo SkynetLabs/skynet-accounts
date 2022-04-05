@@ -122,7 +122,7 @@ func TestContendingSenders(t *testing.T) {
 	// messages from the DB and "send" them. It will stop doing that when it
 	// reaches two executions that fail to send any messages.
 	sender := func(serverID string) {
-		s, err := email.NewSender(ctx, db, test.NewDummyLogger(), &test.DependencySkipSendingEmails{}, test.FauxEmailURI)
+		s, err := email.NewSender(ctx, db, test.NewDiscardLogger(), &test.DependencySkipSendingEmails{}, test.FauxEmailURI)
 		if err != nil {
 			t.Fatal(err)
 		}
