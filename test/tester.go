@@ -436,7 +436,7 @@ func (at *AccountsTester) UserPOST(emailAddr, password string) (*http.Response, 
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) UserPUT(email, password, stipeID string) (api.UserGET, int, error) {
-	bb, err := json.Marshal(map[string]string{
+	b, err := json.Marshal(map[string]string{
 		"email":            email,
 		"password":         password,
 		"stripeCustomerId": stipeID,
@@ -445,7 +445,7 @@ func (at *AccountsTester) UserPUT(email, password, stipeID string) (api.UserGET,
 		return api.UserGET{}, http.StatusBadRequest, err
 	}
 	var resp api.UserGET
-	r, err := at.Request(http.MethodPut, "/user", nil, bb, nil, &resp)
+	r, err := at.Request(http.MethodPut, "/user", nil, b, nil, &resp)
 	return resp, r.StatusCode, err
 }
 
@@ -485,32 +485,32 @@ func (at *AccountsTester) UserAPIKeysLIST() ([]api.APIKeyResponse, int, error) {
 
 // UserAPIKeysPOST performs a `POST /user/apikeys` Request.
 func (at *AccountsTester) UserAPIKeysPOST(body api.APIKeyPOST) (api.APIKeyResponseWithKey, int, error) {
-	bb, err := json.Marshal(body)
+	b, err := json.Marshal(body)
 	if err != nil {
 		return api.APIKeyResponseWithKey{}, http.StatusBadRequest, err
 	}
 	var result api.APIKeyResponseWithKey
-	r, err := at.Request(http.MethodPost, "/user/apikeys", nil, bb, nil, &result)
+	r, err := at.Request(http.MethodPost, "/user/apikeys", nil, b, nil, &result)
 	return result, r.StatusCode, err
 }
 
 // UserAPIKeysPUT performs a `PUT /user/apikeys` Request.
 func (at *AccountsTester) UserAPIKeysPUT(akID primitive.ObjectID, body api.APIKeyPUT) (int, error) {
-	bb, err := json.Marshal(body)
+	b, err := json.Marshal(body)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
-	r, err := at.Request(http.MethodPut, "/user/apikeys/"+akID.Hex(), nil, bb, nil, nil)
+	r, err := at.Request(http.MethodPut, "/user/apikeys/"+akID.Hex(), nil, b, nil, nil)
 	return r.StatusCode, err
 }
 
 // UserAPIKeysPATCH performs a `PATCH /user/apikeys` Request.
 func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.APIKeyPATCH) (int, error) {
-	bb, err := json.Marshal(body)
+	b, err := json.Marshal(body)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
-	r, err := at.Request(http.MethodPatch, "/user/apikeys/"+akID.Hex(), nil, bb, nil, nil)
+	r, err := at.Request(http.MethodPatch, "/user/apikeys/"+akID.Hex(), nil, b, nil, nil)
 	return r.StatusCode, err
 }
 
@@ -563,12 +563,12 @@ func (at *AccountsTester) UserPubkeyRegisterPOST(response, signature []byte) (ap
 		Response:  hex.EncodeToString(response),
 		Signature: hex.EncodeToString(signature),
 	}
-	bb, err := json.Marshal(body)
+	b, err := json.Marshal(body)
 	if err != nil {
 		return api.UserGET{}, http.StatusBadRequest, err
 	}
 	var result api.UserGET
-	r, err := at.Request(http.MethodPost, "/user/pubkey/register", nil, bb, nil, &result)
+	r, err := at.Request(http.MethodPost, "/user/pubkey/register", nil, b, nil, &result)
 	return result, r.StatusCode, err
 }
 
@@ -630,30 +630,10 @@ func (at *AccountsTester) UploadInfo(sl string) ([]api.UploadInfo, int, error) {
 	if !database.ValidSkylinkHash(sl) {
 		return nil, http.StatusBadRequest, database.ErrInvalidSkylink
 	}
-	r, b, err := at.request(http.MethodGet, "/uploadinfo/"+sl, nil, nil, nil)
+	var resp []api.UploadInfo
+	r, err := at.Request(http.MethodGet, "/uploadinfo/"+sl, nil, nil, nil, &resp)
 	if err != nil {
 		return nil, r.StatusCode, err
 	}
-	if r.StatusCode != http.StatusOK {
-		return nil, r.StatusCode, errors.New(string(b))
-	}
-	var resp []api.UploadInfo
-	err = json.Unmarshal(b, &resp)
-	if err != nil {
-		return nil, http.StatusInternalServerError, errors.AddContext(err, "failed to marshal the body JSON")
-	}
 	return resp, r.StatusCode, nil
-}
-
-// UploadsDELETE performs `DELETE /user/uploads/:skylink`
-// TODO Remove this one when we merge the tester refactoring.
-func (at *AccountsTester) UploadsDELETE(skylink string) (int, error) {
-	r, b, err := at.request(http.MethodDelete, "/user/uploads/"+skylink, nil, nil, nil)
-	if err != nil {
-		return r.StatusCode, errors.AddContext(err, string(b))
-	}
-	if r.StatusCode != http.StatusNoContent {
-		return r.StatusCode, errors.New("unexpected status code")
-	}
-	return r.StatusCode, nil
 }
