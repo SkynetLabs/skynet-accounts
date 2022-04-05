@@ -423,58 +423,58 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 
 	// Call /user/limits with a cookie. Expect FreeTier response.
-	ul, _, err := at.UserLimits("byte", nil)
+	tl, _, err := at.UserLimits("byte", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ul.Sub != u.Sub {
-		t.Fatalf("Expected user sub '%s', got '%s'", u.Sub, ul.Sub)
+	if tl.Sub != u.Sub {
+		t.Fatalf("Expected user sub '%s', got '%s'", u.Sub, tl.Sub)
 	}
-	if ul.TierID != database.TierFree {
-		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierFree, ul.TierID)
+	if tl.TierID != database.TierFree {
+		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
 	}
-	if ul.TierName != database.UserLimits[database.TierFree].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, ul.TierName)
+	if tl.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
 	}
-	if ul.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
-		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierFree].DownloadBandwidth, ul.DownloadBandwidth)
+	if tl.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
+		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierFree].DownloadBandwidth, tl.DownloadBandwidth)
 	}
 
 	// Call /user/limits without a cookie. Expect FreeAnonymous response.
 	at.ClearCredentials()
-	ul, _, err = at.UserLimits("byte", nil)
+	tl, _, err = at.UserLimits("byte", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ul.Sub != "" {
-		t.Fatalf("Expected user sub '%s', got '%s'", "", ul.Sub)
+	if tl.Sub != "" {
+		t.Fatalf("Expected user sub '%s', got '%s'", "", tl.Sub)
 	}
-	if ul.TierID != database.TierAnonymous {
-		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierAnonymous, ul.TierID)
+	if tl.TierID != database.TierAnonymous {
+		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierAnonymous, tl.TierID)
 	}
-	if ul.TierName != database.UserLimits[database.TierAnonymous].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, ul.TierName)
+	if tl.TierName != database.UserLimits[database.TierAnonymous].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierAnonymous].TierName, tl.TierName)
 	}
-	if ul.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
-		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, ul.DownloadBandwidth)
+	if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
+		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
 	}
 
 	// Call /user/limits with an API key. Expect TierFree response.
-	ul, _, err = at.UserLimits("byte", map[string]string{api.APIKeyHeader: string(akr.Key)})
+	tl, _, err = at.UserLimits("byte", map[string]string{api.APIKeyHeader: string(akr.Key)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ul.Sub != u.Sub {
-		t.Fatalf("Expected user sub '%s', got '%s'", u.Sub, ul.Sub)
+	if tl.Sub != u.Sub {
+		t.Fatalf("Expected user sub '%s', got '%s'", u.Sub, tl.Sub)
 	}
-	if ul.TierName != database.UserLimits[database.TierFree].TierName {
-		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierFree].TierName, ul.TierName)
+	if tl.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierFree].TierName, tl.TierName)
 	}
-	if ul.TierName != database.UserLimits[database.TierFree].TierName {
-		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, ul.TierName)
+	if tl.TierName != database.UserLimits[database.TierFree].TierName {
+		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
 	}
-	if ul.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
-		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierFree].DownloadBandwidth, ul.DownloadBandwidth)
+	if tl.DownloadBandwidth != database.UserLimits[database.TierFree].DownloadBandwidth {
+		t.Fatalf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierFree].DownloadBandwidth, tl.DownloadBandwidth)
 	}
 
 	// Create a new user which we'll use to test the quota limits. We can't use
@@ -512,18 +512,18 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	err = build.Retry(10, 200*time.Millisecond, func() error {
 		// Check the user's limits. We expect the tier to be Free but the limits to
 		// match Anonymous.
-		ul, _, err = at.UserLimits("byte", nil)
+		tl, _, err = at.UserLimits("byte", nil)
 		if err != nil {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}
-		if ul.TierID != database.TierFree {
-			return fmt.Errorf("Expected to get the results for tier id %d, got %d", database.TierFree, ul.TierID)
+		if tl.TierID != database.TierFree {
+			return fmt.Errorf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
 		}
-		if ul.TierName != database.UserLimits[database.TierFree].TierName {
-			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, ul.TierName)
+		if tl.TierName != database.UserLimits[database.TierFree].TierName {
+			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
 		}
-		if ul.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
-			return fmt.Errorf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, ul.DownloadBandwidth)
+		if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
+			return fmt.Errorf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
 		}
 		return nil
 	})
@@ -533,7 +533,7 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 
 	// Test the `unit` parameter. The only valid value is `byte`, anything else
 	// is ignored and the results are returned in bits per second.
-	ul, _, err = at.UserLimits("", nil)
+	tl, _, err = at.UserLimits("", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -542,15 +542,15 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tlBits.UploadBandwidth != ul.UploadBandwidth || tlBits.DownloadBandwidth != ul.DownloadBandwidth {
-		t.Fatalf("Expected these to be equal. %+v, %+v", ul, tlBits)
+	if tlBits.UploadBandwidth != tl.UploadBandwidth || tlBits.DownloadBandwidth != tl.DownloadBandwidth {
+		t.Fatalf("Expected these to be equal. %+v, %+v", tl, tlBits)
 	}
 	tlBytes, _, err := at.UserLimits("byte", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tlBytes.UploadBandwidth*8 != ul.UploadBandwidth || tlBytes.DownloadBandwidth*8 != ul.DownloadBandwidth {
-		t.Fatalf("Invalid values in bytes. Values in bps: %+v, values in Bps: %+v", ul, tlBytes)
+	if tlBytes.UploadBandwidth*8 != tl.UploadBandwidth || tlBytes.DownloadBandwidth*8 != tl.DownloadBandwidth {
+		t.Fatalf("Invalid values in bytes. Values in bps: %+v, values in Bps: %+v", tl, tlBytes)
 	}
 	// Ensure we're not case-sensitive.
 	tlBytes2, _, err := at.UserLimits("ByTe", nil)
