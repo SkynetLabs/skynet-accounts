@@ -8,7 +8,7 @@ on:
 
 jobs:
   hadolint:
-    uses: SkynetLabs/.github/workflows/dockerfile-lint.yml
+    uses: SkynetLabs/.github/workflows/dockerfile-lint.yml@master
 
   tests:
     uses: ./.github/workflows/tests.yml
