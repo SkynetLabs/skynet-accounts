@@ -1,0 +1,37 @@
+name: Daily
+on:
+  # Run daily at 1:15am
+  schedule:
+    - cron: "15 1 * * *"
+
+jobs:
+  # Run the linting and tests
+  hadolint:
+    uses: SkynetLabs/.github/workflows/dockerfile-lint.yml
+
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  # Check if there were any changes since the last tag
+  changes:
+    needs: [hadolint, tests]
+    runs-on: ubuntu-latest
+    outputs:
+      updates: ${{steps.changes.outputs.any == 'true'}}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Required due to the weg Git works, without it this action won't be able to find any or the correct tags
+      - uses: SkynetLabs/.github/actions/changes-since-last-tag@master
+
+  # Make a release if there were changes
+  release:
+    needs: changes
+    runs-on: ubuntu-latest
+    if: ${{needs.changes.outputs.updates == 'true'}}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Version Release
+        uses: SkynetLabs/.github/actions/version-release@master
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
