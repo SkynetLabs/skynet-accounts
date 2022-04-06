@@ -427,6 +427,9 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if tl.Sub != u.Sub {
+		t.Fatalf("Expected user sub '%s', got '%s'", u.Sub, tl.Sub)
+	}
 	if tl.TierID != database.TierFree {
 		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
 	}
@@ -443,6 +446,9 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if tl.Sub != "" {
+		t.Fatalf("Expected user sub '%s', got '%s'", "", tl.Sub)
+	}
 	if tl.TierID != database.TierAnonymous {
 		t.Fatalf("Expected to get the results for tier id %d, got %d", database.TierAnonymous, tl.TierID)
 	}
@@ -457,6 +463,9 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	tl, _, err = at.UserLimits("byte", map[string]string{api.APIKeyHeader: string(akr.Key)})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if tl.Sub != u.Sub {
+		t.Fatalf("Expected user sub '%s', got '%s'", u.Sub, tl.Sub)
 	}
 	if tl.TierName != database.UserLimits[database.TierFree].TierName {
 		t.Fatalf("Expected to get the results for %s, got %s", database.UserLimits[database.TierFree].TierName, tl.TierName)

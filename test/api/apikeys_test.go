@@ -125,9 +125,12 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	h := map[string]string{
 		api.APIKeyHeader: akWithKey.Key.String(),
 	}
-	ulg, _, err := at.UserLimits("", h)
-	if ulg.TierID != database.TierFree {
+	ul, _, err := at.UserLimits("", h)
+	if ul.TierID != database.TierFree {
 		t.Fatal("Unexpected user tier.")
+	}
+	if ul.Sub != u.Sub {
+		t.Fatalf("Expected user sub '%s', got '%s'", u.Sub, ul.Sub)
 	}
 }
 
