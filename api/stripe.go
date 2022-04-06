@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -13,6 +14,9 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stripe/stripe-go/v71"
+	bpsession "github.com/stripe/stripe-go/v71/billingportal/session"
+	cosession "github.com/stripe/stripe-go/v71/checkout/session"
+	"github.com/stripe/stripe-go/v71/customer"
 	"github.com/stripe/stripe-go/v71/price"
 	"github.com/stripe/stripe-go/v71/sub"
 	"github.com/stripe/stripe-go/v71/webhook"
@@ -25,6 +29,9 @@ const (
 )
 
 var (
+	// DashboardURL is the dashboard address of this portal.
+	DashboardURL = "https://account.siasky.net"
+
 	// StripeTestMode tells us whether to use Stripe's test mode or prod mode
 	// plan and price ids. This depends on what kind of key is stored in the
 	// STRIPE_API_KEY environment variable.
@@ -161,6 +168,131 @@ func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http
 		sPrices = append(sPrices, sp)
 	}
 	api.WriteJSON(w, sPrices)
+}
+
+// stripeBillingPOST creates a new billing session for the user and redirects
+// them to it. If the user does not yet have a Stripe customer, one is
+// registered for them.
+func (api *API) stripeBillingPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	if u.StripeID == "" {
+		id, err := api.stripeCreateCustomer(req.Context(), u)
+		if err != nil {
+			api.WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
+		u.StripeID = id
+	}
+	params := &stripe.BillingPortalSessionParams{
+		Customer:  stripe.String(u.StripeID),
+		ReturnURL: stripe.String(DashboardURL + "/payments"),
+	}
+	s, err := bpsession.New(params)
+	if err != nil {
+		api.WriteError(w, errors.AddContext(err, "failed to create a Stripe billing portal session"), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Location", s.URL)
+	w.WriteHeader(http.StatusTemporaryRedirect)
+	return
+}
+
+// stripeCheckoutPOST creates a checkout session with the price specified in the
+// POST parameter with the same name. It returns the ID of the created session.
+func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	body := struct {
+		Price string `json:"price"`
+	}{}
+	err := json.NewDecoder(io.LimitReader(req.Body, LimitBodySizeSmall)).Decode(&body)
+	if err != nil {
+		api.WriteError(w, errors.New("missing parameter 'price'"), http.StatusBadRequest)
+		return
+	}
+	if u.StripeID == "" {
+		id, err := api.stripeCreateCustomer(req.Context(), u)
+		if err != nil {
+			api.WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
+		u.StripeID = id
+	}
+	subscriptions := "subscriptions"
+	paymentMethodTypeCard := "card"
+	lineItem1Quantity := int64(1)
+	cancelURL := DashboardURL + "/payments"
+	successURL := DashboardURL + "/payments?session_id={CHECKOUT_SESSION_ID}"
+	params := stripe.CheckoutSessionParams{
+		AllowPromotionCodes: &True,
+		CancelURL:           &cancelURL,
+		ClientReferenceID:   &u.Sub,
+		Customer:            &u.StripeID,
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			{
+				Price:    &body.Price,
+				Quantity: &lineItem1Quantity,
+			},
+		},
+		Mode:               &subscriptions,
+		PaymentMethodTypes: []*string{&paymentMethodTypeCard},
+		SuccessURL:         &successURL,
+	}
+	s, err := cosession.New(&params)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	response := struct {
+		SessionID string `json:"sessionId"`
+	}{
+		SessionID: s.ID,
+	}
+	api.WriteJSON(w, response)
+}
+
+// stripeSubscriptionsGET fetches the first Stripe subscription that belongs to
+// the user.
+func (api *API) stripeSubscriptionsGET(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	if u.StripeID == "" {
+		id, err := api.stripeCreateCustomer(req.Context(), u)
+		if err != nil {
+			api.WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
+		u.StripeID = id
+	}
+	subscriptions := "subscriptions"
+	params := &stripe.CustomerParams{
+		Params: stripe.Params{
+			Expand: []*string{&subscriptions},
+		},
+	}
+	cus, err := customer.Get(u.StripeID, params)
+	if err != nil {
+		err = errors.AddContext(err, "failed to fetch customer subscriptions from Stripe")
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if cus.Subscriptions.TotalCount == 0 {
+		// This might be a bit odd, but it is what the previous implementation
+		// returned and what the portal expects.
+		api.WriteSuccess(w)
+		return
+	}
+	api.WriteJSON(w, cus.Subscriptions.Data[0])
+}
+
+// stripeCreateCustomer creates a Stripe customer record for this user and
+// updates the user in the database.
+func (api *API) stripeCreateCustomer(ctx context.Context, u *database.User) (string, error) {
+	cus, err := customer.New(&stripe.CustomerParams{})
+	if err != nil {
+		return "", errors.AddContext(err, "failed to create Stripe customer")
+	}
+	stripeID := cus.ID
+	err = api.staticDB.UserSetStripeID(ctx, u, stripeID)
+	if err != nil {
+		return "", errors.AddContext(err, "failed to save user's StripeID")
+	}
+	return stripeID, nil
 }
 
 // readStripeEvent reads the event from the request body and verifies its

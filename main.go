@@ -228,6 +228,7 @@ func main() {
 	database.PortalName = config.PortalName
 	jwt.PortalName = config.PortalName
 	email.PortalAddressAccounts = config.PortalAddressAccounts
+	api.DashboardURL = config.PortalAddressAccounts
 	email.ServerLockID = config.ServerLockID
 	stripe.Key = config.StripeKey
 	api.StripeTestMode = config.StripeTestMode
