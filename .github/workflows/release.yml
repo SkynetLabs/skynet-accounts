@@ -25,12 +25,14 @@ jobs:
   tests:
     uses: ./.github/workflows/tests.yml
 
-  # Check if there were any changes since the last tag
+  # Check if there were any changes since the last tag if this was a scheduled
+  # run
   changes:
     needs: [hadolint, tests]
     runs-on: ubuntu-latest
     outputs:
       updates: ${{steps.changes.outputs.any == 'true'}}
+    if: ${{ GITHUB_EVENT_NAME == schedule}}
     steps:
       - uses: actions/checkout@v3
         with:
