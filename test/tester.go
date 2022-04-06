@@ -525,9 +525,7 @@ func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.API
 // UserLimits performs a `GET /user/limits` Request.
 func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
 	queryParams := url.Values{}
-	if unit != "" {
-		queryParams.Set("unit", unit)
-	}
+	queryParams.Set("unit", unit)
 	var resp api.UserLimitsGET
 	r, err := at.Request(http.MethodGet, "/user/limits", queryParams, nil, headers, &resp)
 	return resp, r.StatusCode, err
@@ -623,9 +621,7 @@ func (at *AccountsTester) UploadsDELETE(skylink string) (int, error) {
 // UserStats performs a `GET /user/stats` Request.
 func (at *AccountsTester) UserStats(unit string, headers map[string]string) (database.UserStats, int, error) {
 	queryParams := url.Values{}
-	if unit != "" {
-		queryParams.Set("unit", unit)
-	}
+	queryParams.Set("unit", unit)
 	var resp database.UserStats
 	r, err := at.Request(http.MethodGet, "/user/stats", queryParams, nil, headers, &resp)
 	return resp, r.StatusCode, err
@@ -642,4 +638,17 @@ func (at *AccountsTester) UploadInfo(sl string) ([]api.UploadInfo, int, error) {
 		return nil, r.StatusCode, err
 	}
 	return resp, r.StatusCode, nil
+}
+
+/*** Stripe helpers ***/
+
+// StripePricesGET performs a `GET /stripe/prices`
+func (at *AccountsTester) StripePricesGET() ([]api.StripePrice, int, error) {
+	resp := make([]api.StripePrice, 0)
+	r, err := at.Request(http.MethodGet, "/stripe/prices", nil, nil, nil, &resp)
+	if err != nil {
+		return nil, r.StatusCode, err
+	}
+	return resp, r.StatusCode, nil
+
 }

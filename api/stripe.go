@@ -43,7 +43,7 @@ var (
 	// TODO These should be in the DB.
 
 	// stripePricesTest maps Stripe plan prices to specific tiers.
-	// DO NOT USE THESE DIRECTLY! Use stripePrices() instead.
+	// DO NOT USE THESE DIRECTLY! Use StripePrices() instead.
 	stripePricesTest = map[string]int{
 		// "price_1IQAgvIzjULiPWN60U5buItF": database.TierFree,
 		"price_1IReXpIzjULiPWN66PvsxHL4": database.TierPremium5,
@@ -51,7 +51,7 @@ var (
 		"price_1IReYFIzjULiPWN6DqN2DwjN": database.TierPremium80,
 	}
 	// stripePricesProd maps Stripe plan prices to specific tiers.
-	// DO NOT USE THESE DIRECTLY! Use stripePrices() instead.
+	// DO NOT USE THESE DIRECTLY! Use StripePrices() instead.
 	stripePricesProd = map[string]int{
 		"price_1IQApHIzjULiPWN6tGNYEIOi": database.TierFree,
 		"price_1IO6AdIzjULiPWN6PtviaWtS": database.TierPremium5,
@@ -61,8 +61,8 @@ var (
 )
 
 type (
-	// stripePrice ...
-	stripePrice struct {
+	// StripePrice ...
+	StripePrice struct {
 		ID          string  `json:"id"`
 		Name        string  `json:"name"`
 		Description string  `json:"description"`
@@ -108,7 +108,7 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	} else {
 		// It seems weird that the Plan.ID is actually a price id but this
 		// is what we get from Stripe.
-		u.Tier = stripePrices()[mostRecentSub.Plan.ID]
+		u.Tier = StripePrices()[mostRecentSub.Plan.ID]
 		u.SubscribedUntil = time.Unix(mostRecentSub.CurrentPeriodEnd, 0).UTC().Truncate(time.Millisecond)
 		u.SubscriptionStatus = string(mostRecentSub.Status)
 		u.SubscriptionCancelAt = time.Unix(mostRecentSub.CancelAt, 0).UTC().Truncate(time.Millisecond)
@@ -241,7 +241,7 @@ func (api *API) stripeCreateCustomer(ctx context.Context, u *database.User) (str
 
 // stripePricesGET returns a list of plans and prices.
 func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	var sPrices []stripePrice
+	var sPrices []StripePrice
 	params := &stripe.PriceListParams{Active: &True}
 	params.AddExpand("data.product")
 	params.Filters.AddFilter("limit", "", "1000")
@@ -251,11 +251,11 @@ func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http
 		if !p.Active {
 			continue
 		}
-		sp := stripePrice{
+		sp := StripePrice{
 			ID:          p.ID,
 			Name:        p.Product.Name,
 			Description: p.Product.Description,
-			Tier:        stripePrices()[p.ID],
+			Tier:        StripePrices()[p.ID],
 			Price:       float64(p.UnitAmount) / 100,
 			Currency:    string(p.Currency),
 			StripeID:    p.ID,
@@ -383,8 +383,8 @@ func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, i
 	return &event, http.StatusOK, nil
 }
 
-// stripePrices returns a mapping of Stripe price ids to Skynet tiers.
-func stripePrices() map[string]int {
+// StripePrices returns a mapping of Stripe price ids to Skynet tiers.
+func StripePrices() map[string]int {
 	if StripeTestMode {
 		return stripePricesTest
 	}
