@@ -191,7 +191,7 @@ func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req 
 		}
 		u.StripeID = id
 	}
-	subscriptions := "subscriptions"
+	subscription := "subscription"
 	paymentMethodTypeCard := "card"
 	lineItem1Quantity := int64(1)
 	cancelURL := DashboardURL + "/payments"
@@ -207,7 +207,7 @@ func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req 
 				Quantity: &lineItem1Quantity,
 			},
 		},
-		Mode:               &subscriptions,
+		Mode:               &subscription,
 		PaymentMethodTypes: []*string{&paymentMethodTypeCard},
 		SuccessURL:         &successURL,
 	}
@@ -265,38 +265,6 @@ func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http
 		sPrices = append(sPrices, sp)
 	}
 	api.WriteJSON(w, sPrices)
-}
-
-// stripeSubscriptionsGET fetches the first Stripe subscription that belongs to
-// the user.
-func (api *API) stripeSubscriptionsGET(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if u.StripeID == "" {
-		id, err := api.stripeCreateCustomer(req.Context(), u)
-		if err != nil {
-			api.WriteError(w, err, http.StatusInternalServerError)
-			return
-		}
-		u.StripeID = id
-	}
-	subscriptions := "subscriptions"
-	params := &stripe.CustomerParams{
-		Params: stripe.Params{
-			Expand: []*string{&subscriptions},
-		},
-	}
-	cus, err := customer.Get(u.StripeID, params)
-	if err != nil {
-		err = errors.AddContext(err, "failed to fetch customer subscriptions from Stripe")
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-	if len(cus.Subscriptions.Data) == 0 {
-		// This might be a bit odd, but it is what the previous implementation
-		// returned and what the portal expects.
-		api.WriteSuccess(w)
-		return
-	}
-	api.WriteJSON(w, cus.Subscriptions.Data[0])
 }
 
 // stripeWebhookPOST handles various events issued by Stripe.

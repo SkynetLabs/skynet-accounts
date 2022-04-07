@@ -80,7 +80,6 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/stripe/billing", api.WithDBSession(api.withAuth(api.stripeBillingPOST, false)))
 	api.staticRouter.POST("/stripe/checkout", api.WithDBSession(api.withAuth(api.stripeCheckoutPOST, false)))
 	api.staticRouter.GET("/stripe/prices", api.noAuth(api.stripePricesGET))
-	api.staticRouter.GET("/stripe/subscriptions", api.WithDBSession(api.withAuth(api.stripeSubscriptionsGET, false)))
 	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noAuth(api.stripeWebhookPOST)))
 
 	api.staticRouter.GET("/.well-known/jwks.json", api.noAuth(api.wellKnownJWKSGET))

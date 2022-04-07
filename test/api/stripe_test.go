@@ -35,8 +35,9 @@ func TestStripe(t *testing.T) {
 	api.StripeTestMode = true
 
 	tests := map[string]func(t *testing.T, at *test.AccountsTester){
-		"post billing": testBillingPOST,
-		"get prices":   testPricesGET,
+		"post billing":  testStripeBillingPOST,
+		"get prices":    testStripePricesGET,
+		"post checkout": testStripeCheckoutPOST,
 	}
 
 	at, err := test.NewAccountsTester(t.Name())
@@ -51,8 +52,8 @@ func TestStripe(t *testing.T) {
 	}
 }
 
-// testBillingPOST ensures that we can create a new billing session.
-func testBillingPOST(t *testing.T, at *test.AccountsTester) {
+// testStripeBillingPOST ensures that we can create a new billing session.
+func testStripeBillingPOST(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	r, _, err := at.UserPOST(name+"@siasky.net", name+"pass")
 	if err != nil {
@@ -82,8 +83,38 @@ func testBillingPOST(t *testing.T, at *test.AccountsTester) {
 	}
 }
 
-// testPricesGET ensures that we have the expected test prices set on Stripe.
-func testPricesGET(t *testing.T, at *test.AccountsTester) {
+// testStripeCheckoutPOST ensures that we can create a new checkout session.
+func testStripeCheckoutPOST(t *testing.T, at *test.AccountsTester) {
+	name := test.DBNameForTest(t.Name())
+	r, _, err := at.UserPOST(name+"@siasky.net", name+"pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := test.ExtractCookie(r)
+
+	at.ClearCredentials()
+	_, s, err := at.StripeCheckoutPOST("")
+	if err == nil || s != http.StatusUnauthorized {
+		t.Fatalf("Expected 401 Unauthorized, got %d %s", s, err)
+	}
+	at.SetCookie(c)
+	// Get a valid test price id.
+	var price string
+	for pid := range api.StripePrices() {
+		price = pid
+		break
+	}
+	sessID, s, err := at.StripeCheckoutPOST(price)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessID == "" {
+		t.Fatal("Empty session ID.")
+	}
+}
+
+// testStripePricesGET ensures that we have the expected test prices set on Stripe.
+func testStripePricesGET(t *testing.T, at *test.AccountsTester) {
 	ps, _, err := at.StripePricesGET()
 	if err != nil {
 		t.Fatal(err)

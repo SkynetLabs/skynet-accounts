@@ -679,6 +679,24 @@ func (at *AccountsTester) StripeBillingPOST() (http.Header, int, error) {
 	return r.Header, r.StatusCode, nil
 }
 
+// StripeCheckoutPOST performs a `POST /stripe/checkout`
+func (at *AccountsTester) StripeCheckoutPOST(price string) (string, int, error) {
+	body := struct {
+		Price string
+	}{
+		price,
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return "", http.StatusBadRequest, errors.AddContext(err, "failed to serialize request body")
+	}
+	resp := struct {
+		SessionID string
+	}{}
+	r, err := at.Request(http.MethodPost, "/stripe/checkout", nil, bodyBytes, nil, &resp)
+	return resp.SessionID, r.StatusCode, err
+}
+
 // StripePricesGET performs a `GET /stripe/prices`
 func (at *AccountsTester) StripePricesGET() ([]api.StripePrice, int, error) {
 	resp := make([]api.StripePrice, 0)
