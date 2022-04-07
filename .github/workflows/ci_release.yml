@@ -21,7 +21,7 @@ on:
 jobs:
   # Run the linting and tests
   hadolint:
-    uses: SkynetLabs/.github/workflows/dockerfile-lint.yml@master
+    uses: SkynetLabs/.github/.github/workflows/dockerfile-lint.yml@sevey/reusable-updates
 
   test:
     runs-on: ubuntu-latest
