@@ -1,7 +1,8 @@
 name: Release
 on:
-  # Run daily at 1:15am
+  push:
   schedule:
+    # Run daily at 1:15am
     - cron: "15 1 * * *"
   workflow_dispatch:
     # Inputs the workflow accepts.
@@ -22,28 +23,44 @@ jobs:
   hadolint:
     uses: SkynetLabs/.github/workflows/dockerfile-lint.yml@master
 
-  tests:
-    uses: ./.github/workflows/tests.yml
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - uses: actions/setup-go@v2
+        with:
+          go-version: "1.18"
+      - name: Install analyze
+        run: go install gitlab.com/NebulousLabs/analyze@latest
+      - name: Install golangci-lint
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.45.0
+      - name: Lint
+        run: make lint
+      - name: Run unit tests
+        run: make test
 
-  # Check if there were any changes since the last tag if this was a scheduled
-  # run
+  # Check if there were any changes since the last tag if this is not a push
+  # event
   changes:
-    needs: [hadolint, tests]
+    needs: [hadolint, test]
     runs-on: ubuntu-latest
     outputs:
       updates: ${{steps.changes.outputs.any == 'true'}}
-    if: ${{ GITHUB_EVENT_NAME == schedule}}
+    if: ${{ github.event_name != 'push' }}
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0 # Required due to the weg Git works, without it this action won't be able to find any or the correct tags
       - uses: SkynetLabs/.github/actions/changes-since-last-tag@master
 
-  # Make a release if there were changes
+  # Make a release if
+  # - there were changes and this is a scheduled job
+  # - This is a manually trigger job, i.e. workflow_dispatch
   release:
     needs: changes
     runs-on: ubuntu-latest
-    if: ${{needs.changes.outputs.updates == 'true'}}
+    if: ${{ (needs.changes.outputs.updates == 'true' && github.event_name == 'schedule') || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v3
       - name: Version Release
