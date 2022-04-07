@@ -13,13 +13,13 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/julienschmidt/httprouter"
-	"github.com/stripe/stripe-go/v71"
-	bpsession "github.com/stripe/stripe-go/v71/billingportal/session"
-	cosession "github.com/stripe/stripe-go/v71/checkout/session"
-	"github.com/stripe/stripe-go/v71/customer"
-	"github.com/stripe/stripe-go/v71/price"
-	"github.com/stripe/stripe-go/v71/sub"
-	"github.com/stripe/stripe-go/v71/webhook"
+	"github.com/stripe/stripe-go/v72"
+	bpsession "github.com/stripe/stripe-go/v72/billingportal/session"
+	cosession "github.com/stripe/stripe-go/v72/checkout/session"
+	"github.com/stripe/stripe-go/v72/customer"
+	"github.com/stripe/stripe-go/v72/price"
+	"github.com/stripe/stripe-go/v72/sub"
+	"github.com/stripe/stripe-go/v72/webhook"
 	"gitlab.com/NebulousLabs/errors"
 )
 
@@ -290,7 +290,7 @@ func (api *API) stripeSubscriptionsGET(u *database.User, w http.ResponseWriter, 
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	if cus.Subscriptions.TotalCount == 0 {
+	if len(cus.Subscriptions.Data) == 0 {
 		// This might be a bit odd, but it is what the previous implementation
 		// returned and what the portal expects.
 		api.WriteSuccess(w)

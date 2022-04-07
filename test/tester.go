@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
@@ -27,18 +28,25 @@ var (
 	testPortalAddr = "http://127.0.0.1"
 	testPortalPort = "6000"
 	pathToJWKSFile = "../../jwt/fixtures/jwks.json"
+
+	// dontFollowRedirectsCheckRedirectFn is a function that instructs http.Client
+	// to return with the last user response, instead of following a redirect.
+	dontFollowRedirectsCheckRedirectFn = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 )
 
 type (
 	// AccountsTester is a simple testing kit for accounts. It starts a testing
 	// instance of the service and provides simplified ways to call the handlers.
 	AccountsTester struct {
-		Ctx    context.Context
-		DB     *database.DB
-		Logger *logrus.Logger
-		APIKey string
-		Cookie *http.Cookie
-		Token  string
+		Ctx             context.Context
+		DB              *database.DB
+		Logger          *logrus.Logger
+		APIKey          string
+		Cookie          *http.Cookie
+		Token           string
+		FollowRedirects bool
 
 		cancel context.CancelFunc
 	}
@@ -116,10 +124,11 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	}()
 
 	at := &AccountsTester{
-		Ctx:    ctxWithCancel,
-		DB:     db,
-		Logger: logger,
-		cancel: cancel,
+		Ctx:             ctxWithCancel,
+		DB:              db,
+		FollowRedirects: true,
+		Logger:          logger,
+		cancel:          cancel,
 	}
 	// Wait for the accounts tester to be fully ready.
 	err = build.Retry(50, time.Millisecond, func() error {
@@ -194,6 +203,12 @@ func (at *AccountsTester) SetToken(t string) {
 	at.Token = t
 }
 
+// SetFollowRedirects configures the tester to either follow HTTP redirects or
+// not. The default is to follow them.
+func (at *AccountsTester) SetFollowRedirects(f bool) {
+	at.FollowRedirects = f
+}
+
 // post executes a POST Request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
@@ -238,8 +253,16 @@ func (at *AccountsTester) Request(method string, endpoint string, queryParams ur
 		req.Header.Set(name, val)
 	}
 	r, b, err := at.executeRequest(req)
+	// Define a list of response codes we assume are "good". We are going to
+	// return an error if the response returns a code that's not on this list.
+	acceptedResponseCodes := map[int]bool{
+		http.StatusOK:                true,
+		http.StatusNoContent:         true,
+		http.StatusTemporaryRedirect: true,
+		http.StatusPermanentRedirect: true,
+	}
 	// Use the response's body as error response on bad response codes.
-	if r.StatusCode != http.StatusOK && r.StatusCode != http.StatusNoContent {
+	if !acceptedResponseCodes[r.StatusCode] {
 		if err == nil {
 			return r, errors.New(string(b))
 		}
@@ -273,6 +296,9 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 		req.Header.Set("Authorization", "Bearer "+at.Token)
 	}
 	client := http.Client{}
+	if !at.FollowRedirects {
+		client.CheckRedirect = dontFollowRedirectsCheckRedirectFn
+	}
 	r, err := client.Do(req)
 	if err != nil {
 		return &http.Response{}, nil, err
@@ -642,6 +668,17 @@ func (at *AccountsTester) UploadInfo(sl string) ([]api.UploadInfo, int, error) {
 
 /*** Stripe helpers ***/
 
+// StripeBillingPOST performs a `POST /stripe/billing`
+func (at *AccountsTester) StripeBillingPOST() (http.Header, int, error) {
+	r, err := at.Request(http.MethodPost, "/stripe/billing", nil, nil, nil, nil)
+	// We ignore the temporary redirect error because it's the expected
+	// behaviour of this endpoint.
+	if err != nil && !strings.Contains(err.Error(), "307 Temporary Redirect") {
+		return nil, r.StatusCode, err
+	}
+	return r.Header, r.StatusCode, nil
+}
+
 // StripePricesGET performs a `GET /stripe/prices`
 func (at *AccountsTester) StripePricesGET() ([]api.StripePrice, int, error) {
 	resp := make([]api.StripePrice, 0)
@@ -650,5 +687,4 @@ func (at *AccountsTester) StripePricesGET() ([]api.StripePrice, int, error) {
 		return nil, r.StatusCode, err
 	}
 	return resp, r.StatusCode, nil
-
 }

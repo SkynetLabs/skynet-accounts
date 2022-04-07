@@ -16,7 +16,7 @@ require (
 	github.com/klauspost/reedsolomon v1.9.16 // indirect
 	github.com/lestrrat-go/jwx v1.2.18
 	github.com/sirupsen/logrus v1.8.1
-	github.com/stripe/stripe-go/v71 v71.48.0
+	github.com/stripe/stripe-go/v72 v72.100.0
 	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/tus/tusd v1.8.0 // indirect
 	github.com/xdg-go/scram v1.1.0 // indirect

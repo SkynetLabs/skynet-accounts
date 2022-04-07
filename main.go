@@ -16,7 +16,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/joho/godotenv"
-	"github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v72"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/sirupsen/logrus"

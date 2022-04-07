@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -8,7 +9,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"github.com/joho/godotenv"
-	"github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v72"
 )
 
 // TestStripe is a complete test suite that covers all Stripe endpoints we
@@ -34,7 +35,8 @@ func TestStripe(t *testing.T) {
 	api.StripeTestMode = true
 
 	tests := map[string]func(t *testing.T, at *test.AccountsTester){
-		"get prices": testPricesGET,
+		"post billing": testBillingPOST,
+		"get prices":   testPricesGET,
 	}
 
 	at, err := test.NewAccountsTester(t.Name())
@@ -46,6 +48,37 @@ func TestStripe(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			tt(t, at)
 		})
+	}
+}
+
+// testBillingPOST ensures that we can create a new billing session.
+func testBillingPOST(t *testing.T, at *test.AccountsTester) {
+	name := test.DBNameForTest(t.Name())
+	r, _, err := at.UserPOST(name+"@siasky.net", name+"pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := test.ExtractCookie(r)
+
+	at.SetFollowRedirects(false)
+
+	// Try to start a billing session without valid user auth.
+	at.ClearCredentials()
+	_, s, err := at.StripeBillingPOST()
+	if err == nil || s != http.StatusUnauthorized {
+		t.Fatalf("Expected 401 Unauthorized, got %d %s", s, err)
+	}
+	// Try with a valid user. Expect a temporary redirect error. This is not a
+	// fail case, we expect that to happen. In production we'll follow that
+	// redirect.
+	at.SetCookie(c)
+	h, s, err := at.StripeBillingPOST()
+	if err != nil || s != http.StatusTemporaryRedirect {
+		t.Fatalf("Expected %d and no error, got %d '%s'", http.StatusTemporaryRedirect, s, err)
+	}
+	expectedRedirectPrefix := "https://billing.stripe.com/session/"
+	if !strings.HasPrefix(h.Get("Location"), expectedRedirectPrefix) {
+		t.Fatalf("Expected a redirect link with prefix '%s', got '%s'", expectedRedirectPrefix, h.Get("Location"))
 	}
 }
 
