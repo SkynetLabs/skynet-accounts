@@ -30,6 +30,8 @@ const (
 
 var (
 	// DashboardURL is the dashboard address of this portal.
+	// This value is controlled by the PORTAL_DOMAIN environment variable (with
+	// `https://account.` prepended to it).
 	DashboardURL = "https://account.siasky.net"
 
 	// StripeTestMode tells us whether to use Stripe's test mode or prod mode
