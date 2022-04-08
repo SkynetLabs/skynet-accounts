@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
@@ -25,7 +24,7 @@ import (
 func TestWithDBSession(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,9 +147,9 @@ func TestUserTierCache(t *testing.T) {
 		}
 	}()
 
-	email := test.DBNameForTest(t.Name()) + "@siasky.net"
+	emailAddr := test.DBNameForTest(t.Name()) + "@siasky.net"
 	password := hex.EncodeToString(fastrand.Bytes(16))
-	u, err := test.CreateUser(at, email, password)
+	u, err := test.CreateUser(at, emailAddr, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,10 +165,7 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bodyParams := url.Values{}
-	bodyParams.Set("email", email)
-	bodyParams.Set("password", password)
-	r, _, err := at.Post("/login", nil, bodyParams)
+	r, _, err := at.LoginCredentialsPOST(emailAddr, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,6 +174,9 @@ func TestUserTierCache(t *testing.T) {
 	ul, _, err := at.UserLimits("byte", nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if ul.Sub != u.Sub {
+		t.Fatalf("Expected user sub '%s', got '%s'", u.Sub, ul.Sub)
 	}
 	if ul.TierName != database.UserLimits[database.TierPremium20].TierName {
 		t.Fatalf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierPremium20].TierName, ul.TierName)
@@ -230,7 +229,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	// Delete the uploaded file, so the user's quota recovers.
 	// This call should invalidate the tier cache.
-	_, _, err = at.Delete("/user/uploads/"+sl.Skylink, nil)
+	_, err = at.UploadsDELETE(sl.Skylink)
 	if err != nil {
 		t.Fatal(err)
 	}

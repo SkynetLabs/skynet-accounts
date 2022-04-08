@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"github.com/sirupsen/logrus"
@@ -24,7 +23,7 @@ func TestSender(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,8 +89,7 @@ func TestSender(t *testing.T) {
 func TestContendingSenders(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	logger := logrus.New()
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), logger)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +122,7 @@ func TestContendingSenders(t *testing.T) {
 	// messages from the DB and "send" them. It will stop doing that when it
 	// reaches two executions that fail to send any messages.
 	sender := func(serverID string) {
-		s, err := email.NewSender(ctx, db, logger, &test.DependencySkipSendingEmails{}, test.FauxEmailURI)
+		s, err := email.NewSender(ctx, db, test.NewDiscardLogger(), &test.DependencySkipSendingEmails{}, test.FauxEmailURI)
 		if err != nil {
 			t.Fatal(err)
 		}
