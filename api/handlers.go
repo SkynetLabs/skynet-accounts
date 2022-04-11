@@ -1013,11 +1013,6 @@ func (api *API) userRecoverRequestPOST(_ *database.User, w http.ResponseWriter, 
 		api.WriteError(w, errors.AddContext(err, "failed to fetch the user with this email"), http.StatusInternalServerError)
 		return
 	}
-	// Verify that the user's email is confirmed.
-	if u.EmailConfirmationToken != "" {
-		api.WriteError(w, errors.New("user's email is not confirmed. it cannot be used for account recovery"), http.StatusBadRequest)
-		return
-	}
 	// Generate a new recovery token and add it to the user's account.
 	u.RecoveryToken, err = lib.GenerateUUID()
 	if err != nil {

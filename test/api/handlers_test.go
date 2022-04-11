@@ -728,18 +728,8 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	if len(msgs) != 1 || msgs[0].Subject != "Account access attempted" {
 		t.Fatalf("Expected to find a single email with subject '%s', got %v", "Account access attempted", msgs)
 	}
-	// Request recovery with a valid but unconfirmed email.
-	_, err = at.UserRecoverRequestPOST(u.Email)
-	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%s'", badRequest, err)
-	}
-	// Confirm the email.
-	_, err = at.UserConfirmGET(u.EmailConfirmationToken)
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Request recovery with a valid email. We expect there to be a single email
-	// with the recovery token.
+	// with the recovery token. The email is unconfirmed but we don't mind that.
 	bodyParams := url.Values{}
 	bodyParams.Set("email", u.Email)
 	_, err = at.UserRecoverRequestPOST(u.Email)
