@@ -37,14 +37,6 @@ type DownloadResponse struct {
 	CreatedAt time.Time `bson:"created_at" json:"downloadedOn"`
 }
 
-// DownloadsResponse defines the final format of our response to the caller.
-type DownloadsResponse struct {
-	Items    []DownloadResponse `json:"items"`
-	Offset   int                `json:"offset"`
-	PageSize int                `json:"pageSize"`
-	Count    int                `json:"count"`
-}
-
 // DownloadByID fetches a single download from the DB.
 func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Download, error) {
 	var d Download
@@ -59,20 +51,17 @@ func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Downloa
 
 // DownloadCreate registers a new download. Marks partial downloads by supplying
 // the `bytes` param. If `bytes` is 0 we assume a full download.
-func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, bytes int64) error {
-	if user.ID.IsZero() {
-		return errors.New("invalid user")
-	}
+func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, bytes int64) (*Download, error) {
 	if skylink.ID.IsZero() {
-		return errors.New("invalid skylink")
+		return nil, ErrInvalidSkylink
 	}
 
 	// Check if there exists a download of this skylink by this user, updated
 	// within the DownloadUpdateWindow and keep updating that, if so.
-	down, err := db.DownloadRecent(ctx, skylink.ID)
+	down, err := db.DownloadRecent(ctx, user.ID, skylink.ID)
 	if err == nil {
 		// We found a recent download of this skylink. Let's update it.
-		return db.DownloadIncrement(ctx, down, bytes)
+		return nil, db.DownloadIncrement(ctx, down, bytes)
 	}
 
 	// We couldn't find a recent download of this skylink, updated within
@@ -84,15 +73,19 @@ func (db *DB) DownloadCreate(ctx context.Context, user User, skylink Skylink, by
 		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
 		UpdatedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
-	_, err = db.staticDownloads.InsertOne(ctx, down)
-	return err
+	ior, err := db.staticDownloads.InsertOne(ctx, down)
+	if err != nil {
+		return nil, err
+	}
+	down.ID = ior.InsertedID.(primitive.ObjectID)
+	return down, nil
 }
 
 // DownloadsBySkylink fetches a page of downloads of this skylink and the total
 // number of such downloads.
 func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]DownloadResponse, int, error) {
 	if skylink.ID.IsZero() {
-		return nil, 0, errors.New("invalid skylink")
+		return nil, 0, ErrInvalidSkylink
 	}
 	if err := validateOffsetPageSize(offset, pageSize); err != nil {
 		return nil, 0, err
@@ -134,9 +127,10 @@ func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSi
 }
 
 // DownloadRecent returns the most recent download of the given skylink.
-func (db *DB) DownloadRecent(ctx context.Context, skylinkID primitive.ObjectID) (*Download, error) {
+func (db *DB) DownloadRecent(ctx context.Context, uID primitive.ObjectID, skylinkID primitive.ObjectID) (*Download, error) {
 	updatedAtThreshold := time.Now().UTC().Add(-1 * DownloadUpdateWindow)
 	filter := bson.D{
+		{"user_id", uID},
 		{"skylink_id", skylinkID},
 		{"updated_at", bson.D{{"$gt", updatedAtThreshold}}},
 	}

@@ -2,18 +2,19 @@ package email
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.sia.tech/siad/build"
 )
 
 // TestSender goes through the standard Sender workflow and ensures that it
@@ -22,7 +23,7 @@ func TestSender(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,18 +63,23 @@ func TestSender(t *testing.T) {
 	}
 	// Start the sender and wait for a second.
 	sender.Start()
-	time.Sleep(2 * time.Second)
-	// Check that the email has been sent.
-	_, emails, err = db.FindEmails(ctx, filterTo, &options.FindOptions{})
+	err = build.Retry(10, 200*time.Millisecond, func() error {
+		// Check that the email has been sent.
+		_, emails, err = db.FindEmails(ctx, filterTo, &options.FindOptions{})
+		if err != nil {
+			return err
+		}
+		if len(emails) != 1 {
+			return fmt.Errorf("expected 1 email in the DB, got %d", len(emails))
+		}
+		if emails[0].SentAt.IsZero() {
+			emails[0].Body = "<<<Body removed for logging brevity.>>>"
+			return fmt.Errorf("email not sent. Email: %+v", emails[0])
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(emails) != 1 {
-		t.Fatalf("Expected 1 email in the DB, got %d\n", len(emails))
-	}
-	if emails[0].SentAt.IsZero() {
-		emails[0].Body = "<<<Body removed for logging brevity.>>>"
-		t.Fatalf("Email not sent. Email: %+v\n", emails[0])
 	}
 }
 
@@ -83,8 +89,7 @@ func TestSender(t *testing.T) {
 func TestContendingSenders(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	logger := logrus.New()
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), logger)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +122,7 @@ func TestContendingSenders(t *testing.T) {
 	// messages from the DB and "send" them. It will stop doing that when it
 	// reaches two executions that fail to send any messages.
 	sender := func(serverID string) {
-		s, err := email.NewSender(ctx, db, logger, &test.DependencySkipSendingEmails{}, test.FauxEmailURI)
+		s, err := email.NewSender(ctx, db, test.NewDiscardLogger(), &test.DependencySkipSendingEmails{}, test.FauxEmailURI)
 		if err != nil {
 			t.Fatal(err)
 		}

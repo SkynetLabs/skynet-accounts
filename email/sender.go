@@ -29,7 +29,7 @@ var (
 	From = "noreply@siasky.net"
 
 	// PortalAddressAccounts defines the URI where we can access the accounts
-	// sub-site.
+	// sub-site. The domain comes from the PORTAL_DOMAIN environment variable.
 	PortalAddressAccounts = build.Select(
 		build.Var{
 			Dev:      "",

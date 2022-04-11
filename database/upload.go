@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/skynet"
-
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -13,11 +12,12 @@ import (
 
 // Upload ...
 type Upload struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	UserID    primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
-	SkylinkID primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
-	Timestamp time.Time          `bson:"timestamp" json:"timestamp"`
-	Unpinned  bool               `bson:"unpinned" json:"-"`
+	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID     primitive.ObjectID `bson:"user_id,omitempty" json:"userId"`
+	UploaderIP string             `bson:"uploader_ip" json:"uploaderIP"`
+	SkylinkID  primitive.ObjectID `bson:"skylink_id,omitempty" json:"skylinkId"`
+	Timestamp  time.Time          `bson:"timestamp" json:"timestamp"`
+	Unpinned   bool               `bson:"unpinned" json:"-"`
 }
 
 // UploadResponse is the representation of an upload we send as response to
@@ -29,14 +29,6 @@ type UploadResponse struct {
 	Size       int64     `bson:"size" json:"size"`
 	RawStorage int64     `bson:"raw_storage" json:"rawStorage"`
 	Timestamp  time.Time `bson:"timestamp" json:"uploadedOn"`
-}
-
-// UploadsResponse defines the final format of our response to the caller.
-type UploadsResponse struct {
-	Items    []UploadResponse `json:"items"`
-	Offset   int              `json:"offset"`
-	PageSize int              `json:"pageSize"`
-	Count    int              `json:"count"`
 }
 
 // UploadByID fetches a single upload from the DB.
@@ -53,17 +45,15 @@ func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, e
 
 // UploadCreate registers a new upload and counts it towards the user's used
 // storage.
-func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Upload, error) {
-	if user.ID.IsZero() {
-		return nil, errors.New("invalid user")
-	}
+func (db *DB) UploadCreate(ctx context.Context, user User, ip string, skylink Skylink) (*Upload, error) {
 	if skylink.ID.IsZero() {
-		return nil, errors.New("invalid skylink")
+		return nil, errors.New("skylink doesn't exist")
 	}
 	up := Upload{
-		UserID:    user.ID,
-		SkylinkID: skylink.ID,
-		Timestamp: time.Now().UTC(),
+		UserID:     user.ID,
+		UploaderIP: ip,
+		SkylinkID:  skylink.ID,
+		Timestamp:  time.Now().UTC(),
 	}
 	ior, err := db.staticUploads.InsertOne(ctx, up)
 	if err != nil {
@@ -77,7 +67,7 @@ func (db *DB) UploadCreate(ctx context.Context, user User, skylink Skylink) (*Up
 // number of such uploads.
 func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]UploadResponse, int, error) {
 	if skylink.ID.IsZero() {
-		return nil, 0, errors.New("invalid skylink")
+		return nil, 0, ErrInvalidSkylink
 	}
 	if err := validateOffsetPageSize(offset, pageSize); err != nil {
 		return nil, 0, err
@@ -89,11 +79,28 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pag
 	return db.uploadsBy(ctx, matchStage, offset, pageSize)
 }
 
+// UploadsBySkylinkID returns all uploads of the given skylink.
+func (db *DB) UploadsBySkylinkID(ctx context.Context, slID primitive.ObjectID) ([]Upload, error) {
+	if slID.IsZero() {
+		return nil, ErrInvalidSkylink
+	}
+	c, err := db.staticUploads.Find(ctx, bson.M{"skylink_id": slID})
+	if err != nil {
+		return nil, err
+	}
+	uploads := make([]Upload, 0)
+	err = c.All(ctx, &uploads)
+	if err != nil {
+		return nil, err
+	}
+	return uploads, nil
+}
+
 // UnpinUploads unpins all uploads of this skylink by this user. Returns
 // the number of unpinned uploads.
 func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int64, error) {
 	if skylink.ID.IsZero() {
-		return 0, errors.New("invalid skylink")
+		return 0, ErrInvalidSkylink
 	}
 	if user.ID.IsZero() {
 		return 0, errors.New("invalid user")

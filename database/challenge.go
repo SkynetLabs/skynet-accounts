@@ -1,12 +1,12 @@
 package database
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"strings"
 	"time"
@@ -29,7 +29,7 @@ const (
 	// ChallengeTypeRegister is the type of the registration challenge.
 	ChallengeTypeRegister = "skynet-portal-register"
 	// ChallengeTypeUpdate is the type of the update challenge which we use when
-	// we change the user's pubKey.
+	// we register a new pubkey for the user.
 	ChallengeTypeUpdate = "skynet-portal-update"
 
 	// PubKeySize defines the length of the public key in bytes.
@@ -44,6 +44,8 @@ var (
 	// response object is not valid, i.e. it's either missing one of its
 	// required fields or those do not follow the expected format.
 	ErrInvalidChallengeResponse = errors.New("invalid response")
+	// ErrInvalidPublicKey is returned when the provided public key is invalid.
+	ErrInvalidPublicKey = errors.New("invalid pubKey provided")
 	// PortalName is the name this portal uses to announce itself to the world.
 	// Its value is controlled by the PORTAL_DOMAIN environment variable.
 	// This name does not have a protocol prefix.
@@ -81,9 +83,9 @@ type (
 		ExpiresAt   time.Time          `bson:"expires_at"`
 	}
 
-	// challengeResponseRequest defines the format in which the caller will deliver
+	// ChallengeResponseRequest defines the format in which the caller will deliver
 	// its response to a challenge.
-	challengeResponseRequest struct {
+	ChallengeResponseRequest struct {
 		Response  string `json:"response"`
 		Signature string `json:"signature"`
 	}
@@ -92,7 +94,7 @@ type (
 // NewChallenge creates a new challenge with the given type and pubKey.
 func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, cType string) (*Challenge, error) {
 	if cType != ChallengeTypeLogin && cType != ChallengeTypeRegister && cType != ChallengeTypeUpdate {
-		return nil, errors.New(fmt.Sprintf("invalid challenge type '%s'", cType))
+		return nil, fmt.Errorf("invalid challenge type '%s'", cType)
 	}
 	ch := &Challenge{
 		Challenge: hex.EncodeToString(fastrand.Bytes(ChallengeSize)),
@@ -212,8 +214,15 @@ func (cr *ChallengeResponse) LoadFromBytes(b []byte) error {
 	if b == nil {
 		return errors.New("invalid input")
 	}
-	var payload challengeResponseRequest
-	err := json.Unmarshal(b, &payload)
+	return cr.LoadFromReader(bytes.NewBuffer(b))
+}
+
+// LoadFromReader loads a ChallengeResponse from the given io.Reader.
+//
+// Typically, this reader will be a request.Body.
+func (cr *ChallengeResponse) LoadFromReader(r io.Reader) error {
+	var payload ChallengeResponseRequest
+	err := json.NewDecoder(r).Decode(&payload)
 	if err != nil {
 		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
 	}
@@ -236,28 +245,16 @@ func (cr *ChallengeResponse) LoadFromBytes(b []byte) error {
 	return nil
 }
 
-// LoadFromReader loads a ChallengeResponse from the given io.Reader.
-//
-// Typically, this reader will be a request.Body.
-func (cr *ChallengeResponse) LoadFromReader(r io.Reader) error {
-	// Parse the request's body.
-	b, err := ioutil.ReadAll(r)
-	if err != nil {
-		return errors.AddContext(err, ErrInvalidChallengeResponse.Error())
-	}
-	return cr.LoadFromBytes(b)
-}
-
 // LoadString loads a PubKey from its hex-encoded string form.
 func (pk *PubKey) LoadString(s string) error {
-	bytes, err := hex.DecodeString(s)
+	b, err := hex.DecodeString(s)
 	if err != nil {
-		return errors.AddContext(err, "invalid pubKey provided")
+		return errors.AddContext(err, ErrInvalidPublicKey.Error())
 	}
-	if len(bytes) != PubKeySize {
-		return errors.New("invalid pubKey provided")
+	if len(b) != PubKeySize {
+		return ErrInvalidPublicKey
 	}
-	*pk = bytes[:]
+	*pk = b[:]
 	return nil
 }
 

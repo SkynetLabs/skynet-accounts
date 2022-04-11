@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"crypto/subtle"
 	"reflect"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ import (
 func TestUserByEmail(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +45,10 @@ func TestUserByEmail(t *testing.T) {
 		t.Fatalf("Unexpected result %+v\n", u)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	// Ensure that once the user exists, we'll fetch it correctly.
 	u2, err := db.UserByEmail(ctx, email)
@@ -55,16 +59,13 @@ func TestUserByEmail(t *testing.T) {
 	if u2 == nil || u2.ID != u.ID {
 		t.Fatalf("Expected %+v, got %+v\n", u, u2)
 	}
-	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
-	}(u2)
 }
 
 // TestUserByID ensures UserByID works as expected.
 func TestUserByID(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +86,10 @@ func TestUserByID(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 
 	// Test finding an existent user. This should pass.
@@ -103,7 +107,7 @@ func TestUserByID(t *testing.T) {
 func TestUserByPubKey(t *testing.T) {
 	ctx := context.Background()
 	name := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, name, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +158,7 @@ func TestUserByPubKey(t *testing.T) {
 func TestUserByStripeID(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +177,10 @@ func TestUserByStripeID(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	err = db.UserSetStripeID(ctx, u, stripeID)
 	if err != nil {
@@ -188,9 +195,6 @@ func TestUserByStripeID(t *testing.T) {
 	if u2 == nil || u2.ID != u.ID {
 		t.Fatalf("Expected %+v, got %+v\n", u, u2)
 	}
-	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
-	}(u2)
 }
 
 // TestUserBySub ensures UserBySub works as expected.
@@ -198,7 +202,7 @@ func TestUserByStripeID(t *testing.T) {
 func TestUserBySub(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,12 +210,12 @@ func TestUserBySub(t *testing.T) {
 	sub := t.Name()
 	// Ensure we don't have a user with this sub and the method handles that
 	// correctly.
-	_, err = db.UserBySub(ctx, sub, false)
+	_, err = db.UserBySub(ctx, sub)
 	if !errors.Contains(err, database.ErrUserNotFound) {
 		t.Fatalf("Expected error %v, got %v.\n", database.ErrUserNotFound, err)
 	}
-	// Ensure creating a user via this method works as expected.
-	u, err := db.UserBySub(ctx, sub, true)
+	// Create a test user.
+	u, err := db.UserCreate(ctx, "", "", sub, database.TierFree)
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}
@@ -219,10 +223,13 @@ func TestUserBySub(t *testing.T) {
 		t.Fatalf("Unexpected result %+v\n", u)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	// Ensure that once the user exists, we'll fetch it correctly.
-	u2, err := db.UserBySub(ctx, sub, false)
+	u2, err := db.UserBySub(ctx, sub)
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}
@@ -230,9 +237,6 @@ func TestUserBySub(t *testing.T) {
 	if u2 == nil || u2.ID != u.ID {
 		t.Fatalf("Expected %+v, got %+v\n", u, u2)
 	}
-	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
-	}(u2)
 }
 
 // TestUserConfirmEmail ensures that email confirmation works as expected,
@@ -240,7 +244,7 @@ func TestUserBySub(t *testing.T) {
 func TestUserConfirmEmail(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal("Failed to connect to the DB:", err)
 	}
@@ -278,7 +282,7 @@ func TestUserConfirmEmail(t *testing.T) {
 func TestUserCreate(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,19 +291,21 @@ func TestUserCreate(t *testing.T) {
 	pass := t.Name() + "pass"
 	sub := t.Name() + "sub"
 
-	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
-	// // Try to create a user with an invalid email.
-	// _, err = db.UserCreate(ctx, "invalid email", pass, sub, database.TierFree)
-	// if err == nil {
-	// 	t.Fatal("Expected a malformed email error, got nil.")
-	// }
+	// Try to create a user with an invalid email.
+	_, err = db.UserCreate(ctx, "invalid email", pass, sub, database.TierFree)
+	if err == nil {
+		t.Fatal("Expected a malformed email error, got nil.")
+	}
 	// Add a user. Happy case.
 	u, err := db.UserCreate(ctx, email, pass, sub, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	// Make sure the user is there.
 	fu, err := db.UserByID(ctx, u.ID)
@@ -324,11 +330,42 @@ func TestUserCreate(t *testing.T) {
 	}
 }
 
+// TestUserCreateEmailConfirmation tests UserCreateEmailConfirmation.
+func TestUserCreateEmailConfirmation(t *testing.T) {
+	ctx := context.Background()
+	dbName := test.DBNameForTest(t.Name())
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}(u)
+	tk, err := db.UserCreateEmailConfirmation(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u1, err := db.UserByEmail(ctx, u.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u1.EmailConfirmationToken != tk {
+		t.Fatal("Unexpected confirmation token.")
+	}
+}
+
 // TestUserDelete ensures UserDelete works as expected.
 func TestUserDelete(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,9 +376,6 @@ func TestUserDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
-	}(u)
 	// Make sure the user is there.
 	fu, err := db.UserByID(ctx, u.ID)
 	if err != nil {
@@ -366,7 +400,7 @@ func TestUserDelete(t *testing.T) {
 func TestUserSave(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +416,7 @@ func TestUserSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u1, err := db.UserBySub(ctx, u.Sub, false)
+	u1, err := db.UserBySub(ctx, u.Sub)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +430,7 @@ func TestUserSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u1, err = db.UserBySub(ctx, u.Sub, false)
+	u1, err = db.UserBySub(ctx, u.Sub)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +446,7 @@ func TestUserSave(t *testing.T) {
 func TestUserSetStripeID(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,7 +458,10 @@ func TestUserSetStripeID(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	err = db.UserSetStripeID(ctx, u, stripeID)
 	if err != nil {
@@ -439,11 +476,95 @@ func TestUserSetStripeID(t *testing.T) {
 	}
 }
 
+// TestUserPubKey tests UserPubKeyAdd and UserPubKeyRemove.
+func TestUserPubKey(t *testing.T) {
+	ctx := context.Background()
+	dbName := test.DBNameForTest(t.Name())
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Create a test user.
+	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(user *database.User) {
+		_ = db.UserDelete(ctx, user)
+	}(u)
+	pk := database.PubKey(make([]byte, database.PubKeySize))
+	copy(pk[:], fastrand.Bytes(database.PubKeySize))
+	pk1 := database.PubKey(make([]byte, database.PubKeySize))
+	copy(pk1[:], fastrand.Bytes(database.PubKeySize))
+	// Try to remove a pubkey. Expect this to fail.
+	err = db.UserPubKeyRemove(ctx, *u, pk)
+	if err == nil {
+		t.Fatal(err)
+	}
+	// Add a pubkey.
+	err = db.UserPubKeyAdd(ctx, *u, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u1, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u1.PubKeys) == 1 && subtle.ConstantTimeCompare(u1.PubKeys[0][:], pk[:]) != 1 {
+		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u1.PubKeys, pk)
+	}
+	// Add another.
+	err = db.UserPubKeyAdd(ctx, *u, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u2, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u2.PubKeys) == 2 && subtle.ConstantTimeCompare(u1.PubKeys[1][:], pk1[:]) == 1 {
+		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u2.PubKeys, pk1)
+	}
+	// Delete a pubkey.
+	err = db.UserPubKeyRemove(ctx, *u, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u3, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u3.PubKeys) == 1 && subtle.ConstantTimeCompare(u3.PubKeys[0][:], pk1[:]) == 1 {
+		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u3.PubKeys, pk1)
+	}
+	// Make sure UserPubKeyRemove removes all copies of the pubkey from the set.
+	// We don't expect there to be multiple but we still want to make sure.
+	u.PubKeys = make([]database.PubKey, 0)
+	u.PubKeys = append(u.PubKeys, pk)
+	u.PubKeys = append(u.PubKeys, pk)
+	u.PubKeys = append(u.PubKeys, pk)
+	err = db.UserSave(ctx, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.UserPubKeyRemove(ctx, *u, pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u4, err := db.UserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u4.PubKeys) > 0 {
+		t.Fatal("Expected zero pubkeys.")
+	}
+}
+
 // TestUserSetTier ensures that UserSetTier works as expected.
 func TestUserSetTier(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +574,10 @@ func TestUserSetTier(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 	err = db.UserSetTier(ctx, u, database.TierPremium80)
 	if err != nil {
@@ -472,7 +596,7 @@ func TestUserSetTier(t *testing.T) {
 func TestUserStats(t *testing.T) {
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +608,10 @@ func TestUserStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		_ = db.UserDelete(ctx, user)
+		err := db.UserDelete(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}(u)
 
 	testUploadSizeSmall := int64(1 + fastrand.Intn(4*skynet.MiB-1))
@@ -493,7 +620,7 @@ func TestUserStats(t *testing.T) {
 	expectedDownloadBandwidth := int64(0)
 
 	// Create a small upload.
-	skylinkSmall, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeSmall)
+	skylinkSmall, _, err := test.CreateTestUpload(ctx, db, *u, testUploadSizeSmall)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,7 +640,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// Create a big upload.
-	skylinkBig, _, err := test.CreateTestUpload(ctx, db, u, testUploadSizeBig)
+	skylinkBig, _, err := test.CreateTestUpload(ctx, db, *u, testUploadSizeBig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -534,7 +661,7 @@ func TestUserStats(t *testing.T) {
 
 	// Register a small download.
 	smallDownload := int64(1 + fastrand.Intn(4*skynet.MiB))
-	err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
+	_, err = db.DownloadCreate(ctx, *u, *skylinkSmall, smallDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}
@@ -554,7 +681,7 @@ func TestUserStats(t *testing.T) {
 	}
 	// Register a big download.
 	bigDownload := int64(100*skynet.MiB + fastrand.Intn(4*skynet.MiB))
-	err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
+	_, err = db.DownloadCreate(ctx, *u, *skylinkBig, bigDownload)
 	if err != nil {
 		t.Fatal("Failed to download.", err)
 	}

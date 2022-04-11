@@ -22,8 +22,10 @@ type (
 	// userTierCacheEntry allows us to cache some basic information about the
 	// user, so we don't need to hit the DB to fetch data that rarely changes.
 	userTierCacheEntry struct {
-		Tier      int
-		ExpiresAt time.Time
+		Sub           string
+		Tier          int
+		QuotaExceeded bool
+		ExpiresAt     time.Time
 	}
 )
 
@@ -34,39 +36,29 @@ func newUserTierCache() *userTierCache {
 	}
 }
 
-// Get returns the user's tier and an OK indicator which is true when the cache
-// entry exists and hasn't expired, yet.
-func (utc *userTierCache) Get(sub string) (int, bool) {
+// Get returns the user's tier, a quota exceeded flag, and an OK indicator
+// which is true when the cache entry exists and hasn't expired, yet.
+func (utc *userTierCache) Get(sub string) (userTierCacheEntry, bool) {
 	utc.mu.Lock()
 	ce, exists := utc.cache[sub]
 	utc.mu.Unlock()
 	if !exists || ce.ExpiresAt.Before(time.Now().UTC()) {
-		return database.TierAnonymous, false
+		anon := userTierCacheEntry{
+			Tier: database.TierAnonymous,
+		}
+		return anon, false
 	}
-	return ce.Tier, true
+	return ce, true
 }
 
-// Set stores the user's tier in the cache.
-func (utc *userTierCache) Set(u *database.User) {
-	var ce userTierCacheEntry
-	now := time.Now().UTC()
-	if u.SubscribedUntil.Before(now) {
-		ce = userTierCacheEntry{
-			Tier:      database.TierFree,
-			ExpiresAt: now.Add(userTierCacheTTL),
-		}
-	} else if u.QuotaExceeded {
-		ce = userTierCacheEntry{
-			Tier:      database.TierAnonymous,
-			ExpiresAt: now.Add(userTierCacheTTL),
-		}
-	} else {
-		ce = userTierCacheEntry{
-			Tier:      u.Tier,
-			ExpiresAt: now.Add(userTierCacheTTL),
-		}
-	}
+// Set stores the user's tier in the cache under the given key.
+func (utc *userTierCache) Set(key string, u *database.User) {
 	utc.mu.Lock()
-	utc.cache[u.Sub] = ce
+	utc.cache[key] = userTierCacheEntry{
+		Sub:           u.Sub,
+		Tier:          u.Tier,
+		QuotaExceeded: u.QuotaExceeded,
+		ExpiresAt:     time.Now().UTC().Add(userTierCacheTTL),
+	}
 	utc.mu.Unlock()
 }

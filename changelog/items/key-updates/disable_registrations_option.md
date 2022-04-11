@@ -1,2 +1,0 @@
-- Add database-backed configuration options.
-- Add an option for disabling new account registrations.

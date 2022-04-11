@@ -2,15 +2,14 @@ package database
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net/mail"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/hash"
-	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"gitlab.com/NebulousLabs/errors"
@@ -35,20 +34,25 @@ const (
 	// TierMaxReserved is a guard value that helps us validate tier values.
 	TierMaxReserved
 
-	// mbpsToBytesPerSecond is a multiplier to get from megabits per second to
-	// bytes per second.
-	mbpsToBytesPerSecond = 1024 * 1024 / 8
-
-	// filesAllowedPerTB defines a limit of number of uploaded files we impose
-	// on users. While we define it per TB, we impose it based on their entire
+	// filesAllowedPerTiB defines a limit of number of uploaded files we impose
+	// on users. While we define it per TiB, we impose it based on their entire
 	// quota, so an Extreme user will be able to upload up to 400_000 files
 	// before being hit with a speed limit.
-	filesAllowedPerTB = 25_000
+	filesAllowedPerTiB = 25_000
+
+	// mbpsToBytesPerSecond is a multiplier to get from mebibits per second to
+	// bytes per second.
+	mbpsToBytesPerSecond = 1024 * 1024 / 8
 )
 
 var (
+	// AnonUser is a helper struct that we can use when we don't have a relevant
+	// user, e.g. when an upload is made by an anonymous user.
+	AnonUser = User{}
 	// True is a helper for when we need to pass a *bool to MongoDB.
 	True = true
+	// False is a helper for when we need to pass a *bool to MongoDB.
+	False = false
 	// UserLimits defines the speed limits for each tier.
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
@@ -68,7 +72,7 @@ var (
 			UploadBandwidth:   10 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
 			MaxUploadSize:     100 * skynet.GiB,
-			MaxNumberUploads:  0.1 * filesAllowedPerTB,
+			MaxNumberUploads:  0.1 * filesAllowedPerTiB,
 			RegistryDelay:     125,
 			Storage:           100 * skynet.GiB,
 		},
@@ -77,7 +81,7 @@ var (
 			UploadBandwidth:   20 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 80 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.TiB,
-			MaxNumberUploads:  1 * filesAllowedPerTB,
+			MaxNumberUploads:  1 * filesAllowedPerTiB,
 			RegistryDelay:     0,
 			Storage:           1 * skynet.TiB,
 		},
@@ -86,7 +90,7 @@ var (
 			UploadBandwidth:   40 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 160 * mbpsToBytesPerSecond,
 			MaxUploadSize:     4 * skynet.TiB,
-			MaxNumberUploads:  4 * filesAllowedPerTB,
+			MaxNumberUploads:  4 * filesAllowedPerTiB,
 			RegistryDelay:     0,
 			Storage:           4 * skynet.TiB,
 		},
@@ -95,7 +99,7 @@ var (
 			UploadBandwidth:   80 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 320 * mbpsToBytesPerSecond,
 			MaxUploadSize:     10 * skynet.TiB,
-			MaxNumberUploads:  20 * filesAllowedPerTB,
+			MaxNumberUploads:  20 * filesAllowedPerTiB,
 			RegistryDelay:     0,
 			Storage:           20 * skynet.TiB,
 		},
@@ -127,10 +131,7 @@ type (
 		SubscriptionCancelAtPeriodEnd    bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
 		StripeID                         string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                    bool               `bson:"quota_exceeded" json:"quotaExceeded"`
-		// The currently active (or default) key is going to be the first one in
-		// the list. If we want to activate a new pubkey, we'll just move it to
-		// the first position in the list.
-		PubKeys []PubKey `bson:"pub_keys" json:"-"`
+		PubKeys                          []PubKey           `bson:"pub_keys" json:"-"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
@@ -158,20 +159,6 @@ type (
 		Storage           int64  `json:"-"`
 	}
 )
-
-// UserByAPIKey returns the user who owns the given API key.
-func (db *DB) UserByAPIKey(ctx context.Context, ak APIKey) (*User, error) {
-	sr := db.staticAPIKeys.FindOne(ctx, bson.M{"key": ak})
-	if sr.Err() != nil {
-		return nil, sr.Err()
-	}
-	var apiKey APIKeyRecord
-	err := sr.Decode(&apiKey)
-	if err != nil {
-		return nil, err
-	}
-	return db.UserByID(ctx, apiKey.UserID)
-}
 
 // UserByEmail returns the user with the given username.
 func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
@@ -258,31 +245,9 @@ func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
-// UserBySub returns the user with the given sub. If `create` is `true` it will
-// create the user if it doesn't exist.
-func (db *DB) UserBySub(ctx context.Context, sub string, create bool) (*User, error) {
-	users, err := db.managedUsersBySub(ctx, sub)
-	if create && errors.Contains(err, ErrUserNotFound) {
-		_, email, err := jwt.UserDetailsFromJWT(ctx)
-		if err != nil {
-			// Log the error but don't do anything differently.
-			db.staticLogger.Debugf("We failed to extract the expected user infotmation from the JWT token. Error: %s", err.Error())
-		}
-		u, err := db.UserCreate(ctx, email, "", sub, TierFree)
-		// If we're successful or hit any error, other than a duplicate key we
-		// want to just return. Hitting a duplicate key error means we ran into
-		// a race condition and we can easily recover from that.
-		if err == nil || !strings.Contains(err.Error(), "E11000 duplicate key error collection") {
-			return u, err
-		}
-		// Recover from the race condition by fetching the existing user from
-		// the DB.
-		users, err = db.managedUsersBySub(ctx, sub)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return users[0], nil
+// UserBySub returns the user with the given sub.
+func (db *DB) UserBySub(ctx context.Context, sub string) (*User, error) {
+	return db.managedUserBySub(ctx, sub)
 }
 
 // UserConfirmEmail confirms that the email to which the passed confirmation
@@ -322,35 +287,36 @@ func (db *DB) UserConfirmEmail(ctx context.Context, token string) (*User, error)
 // The new user is created as "unconfirmed" and a confirmation email is sent to
 // the address they provided.
 func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier int) (*User, error) {
-	// TODO Uncomment once we no longer create users via the UserBySub and similar methods.
-	// emailAddr, err := lib.NormalizeEmail(emailAddr)
-	// if err != nil {
-	// 	return nil, errors.AddContext(err, "invalid email address")
-	// }
-	// Check for an existing user with this email.
-	users, err := db.managedUsersByField(ctx, "email", emailAddr)
-	if err != nil && !errors.Contains(err, ErrUserNotFound) {
-		return nil, errors.AddContext(err, "failed to query DB")
-	}
-	if len(users) > 0 {
-		return nil, ErrUserAlreadyExists
+	// Ensure the email is valid if it's passed. We allow empty emails.
+	if emailAddr != "" {
+		addr, err := mail.ParseAddress(emailAddr)
+		if err != nil {
+			return nil, errors.AddContext(err, "invalid email address")
+		}
+		emailAddr = addr.Address
 	}
 	if sub == "" {
 		return nil, errors.New("empty sub is not allowed")
 	}
-	// Check for an existing user with this sub.
-	users, err = db.managedUsersBySub(ctx, sub)
+
+	// Check for an existing user with this email.
+	_, err := db.UserByEmail(ctx, emailAddr)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
-	if len(users) > 0 {
+	if !errors.Contains(err, ErrUserNotFound) {
 		return nil, ErrUserAlreadyExists
 	}
-	// TODO Review this when we fully migrate away from Kratos.
+	// Check for an existing user with this sub.
+	_, err = db.managedUserBySub(ctx, sub)
+	if err != nil && !errors.Contains(err, ErrUserNotFound) {
+		return nil, errors.AddContext(err, "failed to query DB")
+	}
+	if !errors.Contains(err, ErrUserNotFound) {
+		return nil, ErrUserAlreadyExists
+	}
 	// Generate a password hash, if a password is provided. A password might not
-	// be provided if the user is generated externally, e.g. in Kratos. We can
-	// remove that option in the future when `accounts` is the only system
-	// managing users but for the moment we still need it.
+	// be provided if the user is registered from MySky with a pubkey.
 	var passHash []byte
 	if pass != "" {
 		passHash, err = hash.Generate(pass)
@@ -371,6 +337,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		Sub:                              sub,
 		Tier:                             tier,
 	}
+	// TODO This part can race and create multiple accounts with the same email, unless we add DB-level uniqueness restriction.
 	// Insert the user.
 	fields, err := bson.Marshal(u)
 	if err != nil {
@@ -382,6 +349,29 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	}
 	u.ID = ir.InsertedID.(primitive.ObjectID)
 	return u, nil
+}
+
+// UserCreateEmailConfirmation creates a new email confirmation record for this
+// user.
+func (db *DB) UserCreateEmailConfirmation(ctx context.Context, uID primitive.ObjectID) (string, error) {
+	exp := time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond)
+	tk, err := lib.GenerateUUID()
+	if err != nil {
+		return "", err
+	}
+	filter := bson.M{"_id": uID}
+	update := bson.M{
+		"$set": bson.M{
+			"email_confirmation_token":            tk,
+			"email_confirmation_token_expiration": exp,
+		},
+	}
+	opts := options.Update().SetUpsert(false)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return "", err
+	}
+	return tk, nil
 }
 
 // UserCreatePK creates a new user with a pubkey in the DB.
@@ -411,11 +401,11 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		}
 	}
 	// Check for an existing user with this sub.
-	users, err = db.managedUsersBySub(ctx, sub)
+	_, err = db.managedUserBySub(ctx, sub)
 	if err != nil && !errors.Contains(err, ErrUserNotFound) {
 		return nil, errors.AddContext(err, "failed to query DB")
 	}
-	if len(users) > 0 {
+	if !errors.Contains(err, ErrUserNotFound) {
 		return nil, ErrUserAlreadyExists
 	}
 	// Generate a password hash, if a password is provided. A password might not
@@ -477,6 +467,14 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user registry writes")
 	}
+	_, err = db.staticAPIKeys.DeleteMany(ctx, filter)
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user API keys")
+	}
+	_, err = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.D{{"sub", u.Sub}})
+	if err != nil {
+		return errors.AddContext(err, "failed to delete user unconfirmed updates")
+	}
 	// Delete the actual user.
 	filter = bson.D{{"_id", u.ID}}
 	dr, err := db.staticUsers.DeleteOne(ctx, filter)
@@ -492,14 +490,52 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 // UserSave saves the user to the DB.
 func (db *DB) UserSave(ctx context.Context, u *User) error {
 	filter := bson.M{"_id": u.ID}
-	opts := &options.ReplaceOptions{
-		Upsert: &True,
-	}
+	opts := options.Replace().SetUpsert(true)
 	_, err := db.staticUsers.ReplaceOne(ctx, filter, u, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
 	}
 	return nil
+}
+
+// UserPubKeyAdd adds a new PubKey to the given user's set.
+func (db *DB) UserPubKeyAdd(ctx context.Context, u User, pk PubKey) (err error) {
+	filter := bson.M{"_id": u.ID}
+	// This update is so complicated because we can't use mutation operations
+	// like $push, $addToSet and so on if the target field is null. That's why
+	// here we check if the field is an array and then merge the key in. If the
+	// field is not an array (i.e. it's null) we set it to an empty array before
+	// performing the merge.
+	update := bson.A{
+		bson.M{
+			"$set": bson.M{
+				"pub_keys": bson.M{
+					"$cond": bson.A{
+						bson.M{"$eq": bson.A{bson.M{"$type": "$pub_keys"}, "array"}},
+						bson.M{"$setUnion": bson.A{"$pub_keys", bson.A{pk}}},
+						bson.A{pk},
+					}},
+			},
+		},
+	}
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update)
+	return err
+}
+
+// UserPubKeyRemove removes a PubKey from the given user's set.
+func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
+	filter := bson.M{
+		"_id":      u.ID,
+		"pub_keys": bson.M{"$ne": nil},
+	}
+	update := bson.M{
+		"$pull": bson.M{"pub_keys": pk},
+	}
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
+	if err == nil && ur.MatchedCount == 0 {
+		err = mongo.ErrNoDocuments
+	}
+	return err
 }
 
 // UserSetStripeID changes the user's stripe id in the DB.
@@ -571,10 +607,22 @@ func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue str
 	return users, nil
 }
 
-// managedUsersBySub fetches all users that have the given sub. This should
+// managedUserBySub fetches all users that have the given sub. This should
 // normally be up to one user.
-func (db *DB) managedUsersBySub(ctx context.Context, sub string) ([]*User, error) {
-	return db.managedUsersByField(ctx, "sub", sub)
+func (db *DB) managedUserBySub(ctx context.Context, sub string) (*User, error) {
+	sr := db.staticUsers.FindOne(ctx, bson.M{"sub": sub})
+	if sr.Err() == mongo.ErrNoDocuments {
+		return nil, ErrUserNotFound
+	}
+	if sr.Err() != nil {
+		return nil, sr.Err()
+	}
+	var u User
+	err := sr.Decode(&u)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 // userStats reports statistical information about the user.
@@ -825,24 +873,60 @@ func (db *DB) userRegistryReadStats(ctx context.Context, userID primitive.Object
 	return reads, reads * skynet.CostBandwidthRegistryRead, nil
 }
 
+// HasKey checks if the given pubkey is among the pubkeys registered for the
+// user.
+func (u User) HasKey(pk PubKey) bool {
+	for _, upk := range u.PubKeys {
+		if subtle.ConstantTimeCompare(upk, pk) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
 // monthStart returns the start of the user's subscription month.
 // Users get their bandwidth quota reset at the start of the month.
+//
+// This function follows the behaviour of Stripe:
+// If a month doesn’t have the anchor day, the subscription will be billed on
+// the last day of the month. For example, a subscription starting on 31 January
+// bills on 28 February (or 29 February in a leap year), then 31 March, 30
+// April, and so on.
+//
+// See: https://stripe.com/docs/billing/subscriptions/billing-cycle
+//
+// NOTE: This function ignores the time (hour and minutes) of the sub expiration
+// - all quotas reset at midnight UTC.
 func monthStart(subscribedUntil time.Time) time.Time {
-	now := time.Now().UTC()
-	// Check how many days are left until the end of the user's subscription
-	// month. Then calculate when the last subscription month started. We don't
-	// care if the user is no longer subscribed and their sub expired 3 months
-	// ago, all we care about here is the day of the month on which that
-	// happened because that is the day from which we count their statistics for
-	// the month. If they were never subscribed we use Jan 1st 1970 for
-	// SubscribedUntil.
-	daysDelta := subscribedUntil.Day() - now.Day()
-	monthsDelta := 0
-	if daysDelta > 0 {
-		// The end of sub day is after the current date, so the start of month
-		// is in the previous month.
-		monthsDelta = -1
+	return monthStartWithTime(subscribedUntil, time.Now().UTC())
+}
+
+// monthStartWithTime returns the start of the user's subscription month in
+// relation to the given `now` value. This function exists only for testing
+// purposes and implements the desired behaviour of monthStart.
+func monthStartWithTime(subscribedUntil time.Time, current time.Time) time.Time {
+	// Normalize the day of month. Subs ending on 31st should end on the last
+	// day of the month when the month doesn't have 31 days.
+	dayOfMonth := normalizeDayOfMonth(current.Month(), subscribedUntil.Day(), current)
+	// If we're past the reset day this month, use the current day of the month.
+	if current.Day() >= dayOfMonth {
+		return time.Date(current.Year(), current.Month(), dayOfMonth, 0, 0, 0, 0, time.UTC)
 	}
-	d := now.AddDate(0, monthsDelta, daysDelta)
-	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+	// If we haven't reached the reset day this month, use last month's day.
+	dayOfMonth = normalizeDayOfMonth(current.Month()-1, subscribedUntil.Day(), current)
+	return time.Date(current.Year(), current.Month()-1, dayOfMonth, 0, 0, 0, 0, time.UTC)
+}
+
+// normalizeDayOfMonth checks whether the current month has the given day and if
+// it doesn't, it returns the last day the current month has.
+//
+// Example:
+// In February normalizeDayOfMonth(31) will return 28 or 29.
+func normalizeDayOfMonth(month time.Month, day int, current time.Time) int {
+	t := time.Date(current.Year(), month, day, 0, 0, 0, 0, time.UTC)
+	if t.Month() > month {
+		// This month doesn't have this day. Return the last day of the month.
+		t = time.Date(current.Year(), month+1, 0, 0, 0, 0, 0, time.UTC)
+	}
+	return t.Day()
 }

@@ -234,6 +234,115 @@ Changes the user's password without them being logged in.
 - 400
 - 500
 
+## API Keys endpoints
+
+### PATCH `/user/apikeys/:id`
+
+Updates the list of skylinks covered by a public API key.
+Additions are performed before removals. Only one copy of each API key is stored.
+
+* Requires valid JWT: `true`
+* GET params: none
+* Body:
+```json
+{
+  "add": ["AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw", "AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw"],
+  "remove": ["AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw", "AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw"]
+}
+```
+* Returns:
+- 204
+- 400
+- 401
+- 500
+
+### POST `/user/apikeys`
+
+Creates a new general API key.
+This type of API key gives full access to `accounts` and is equivalent to using a JWT token.
+This type of API key needs to be kept secret and never be shared with anyone.
+
+* Requires valid JWT: `true`
+* GET params: none
+* Body:
+```json
+{
+  "name": "key's name",
+  "public": "true",
+  // The skylinks field is only applicable to public API keys. 
+  "skylinks": ["AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw", "AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw"]
+}
+```
+* Returns:
+- 200
+```json
+{
+  "id": "6221f3f248c7d376e12f99c4",
+  "createdAt": "2022-03-04T11:11:46.946334Z",
+  "key": "rpfccs5kLCib4PPERtcaY88_yHsJFNNpeMc62pYhBfM="
+}
+```
+- 400
+- 401
+- 500
+
+### PUT `/user/apikeys/:id`
+
+Updates an API key.
+Private API keys cannot be updated.
+A public API key cannot be converted to private and vice-versa.
+
+* Requires valid JWT: `true`
+* GET params: none
+* Body:
+```json
+{
+  "skylinks": ["AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw", "AADDE7_5MJyl1DKyfbuQMY_XBOBC9bR7idiU6isp6LXxEw"]
+}
+```
+* Returns:
+- 204
+- 400
+- 401
+- 500
+
+### GET `/user/apikeys`
+
+Lists all API keys registered by the current user.
+
+Note: The actual API key will not be revealed, only its metadata.
+
+* Requires valid JWT: `true`
+* GET params: none
+* Returns:
+- 200
+```json
+[
+    {
+        "id": "620ba9c66e18552db39cd5ce",
+        "createdAt": "2022-02-15T13:25:26.348Z"
+    },
+    {
+        "id": "6221f3f248c7d376e12f99c4",
+        "createdAt": "2022-03-04T11:11:46.946Z"
+    }
+]
+```
+- 401
+- 500
+
+### DELETE `/user/apikeys/:id`
+
+Deletes the API key with the given ID.
+
+* Requires valid JWT: `true`
+* GET params: none
+* Returns:
+- 204
+- 400
+- 401
+- 500
+
 ## Reports endpoints
 
 ### POST `/track/upload/:skylink`
