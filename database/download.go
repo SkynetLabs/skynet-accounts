@@ -40,8 +40,7 @@ type DownloadResponse struct {
 // DownloadByID fetches a single download from the DB.
 func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Download, error) {
 	var d Download
-	filter := bson.M{"_id": id}
-	sr := db.staticDownloads.FindOne(ctx, filter)
+	sr := db.staticDownloads.FindOne(ctx, bson.M{"_id": id})
 	err := sr.Decode(&d)
 	if err != nil {
 		return nil, err

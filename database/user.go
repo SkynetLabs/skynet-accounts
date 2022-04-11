@@ -171,8 +171,7 @@ func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
 
 // UserByID finds a user by their ID.
 func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error) {
-	filter := bson.M{"_id": id}
-	c, err := db.staticUsers.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, bson.M{"_id": id})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
@@ -581,8 +580,7 @@ func (db *DB) Ping(ctx context.Context) error {
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
-	filter := bson.M{fieldName: fieldValue}
-	c, err := db.staticUsers.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, bson.M{fieldName: fieldValue})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to find user")
 	}

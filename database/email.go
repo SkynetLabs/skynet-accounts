@@ -180,8 +180,7 @@ func (db *DB) PurgeEmailCollection(ctx context.Context) (int64, error) {
 	if build.Release != "testing" {
 		return 0, nil
 	}
-	filter := bson.M{}
-	dr, err := db.staticEmails.DeleteMany(ctx, filter)
+	dr, err := db.staticEmails.DeleteMany(ctx, bson.M{})
 	if err != nil {
 		return 0, err
 	}
