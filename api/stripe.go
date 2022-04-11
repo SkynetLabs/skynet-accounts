@@ -44,7 +44,7 @@ var (
 
 	// stripePageSize defines the number of records we are going to request from
 	// endpoints that support pagination.
-	stripePageSize = int64(100)
+	stripePageSize = int64(1)
 
 	// TODO These should be in the DB.
 
@@ -249,13 +249,12 @@ func (api *API) stripeCreateCustomer(ctx context.Context, u *database.User) (str
 func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	var sPrices []StripePrice
 	params := &stripe.PriceListParams{
+		Active: &True,
 		ListParams: stripe.ListParams{
 			Limit: &stripePageSize,
 		},
-		Active: &True,
 	}
 	params.Filters.AddFilter("limit", "", fmt.Sprint(stripePageSize))
-	params.Limit = &stripePageSize
 	i := price.List(params)
 	for i.Next() {
 		p := i.Price()
