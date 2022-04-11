@@ -49,7 +49,7 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 		Skylink: skylinkHash,
 	}
 	// Try to find the skylink in the database.
-	filter := bson.D{{"skylink", skylinkHash}}
+	filter := bson.M{"skylink": skylinkHash}
 	upsert := bson.M{"$setOnInsert": bson.M{"skylink": skylinkHash}}
 	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
 	sr := db.staticSkylinks.FindOneAndUpdate(ctx, filter, upsert, opts)
@@ -62,8 +62,7 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 
 // SkylinkByID finds a skylink by its ID.
 func (db *DB) SkylinkByID(ctx context.Context, id primitive.ObjectID) (*Skylink, error) {
-	filter := bson.D{{"_id", id}}
-	sr := db.staticSkylinks.FindOne(ctx, filter)
+	sr := db.staticSkylinks.FindOne(ctx, bson.M{"_id": id})
 	var sl Skylink
 	err := sr.Decode(&sl)
 	if err != nil {

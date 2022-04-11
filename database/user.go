@@ -171,7 +171,7 @@ func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
 
 // UserByID finds a user by their ID.
 func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error) {
-	filter := bson.D{{"_id", id}}
+	filter := bson.M{"_id": id}
 	c, err := db.staticUsers.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
@@ -219,8 +219,7 @@ func (db *DB) UserByRecoveryToken(ctx context.Context, token string) (*User, err
 
 // UserByStripeID finds a user by their Stripe customer id.
 func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
-	filter := bson.D{{"stripe_id", id}}
-	c, err := db.staticUsers.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, bson.M{"stripe_id": id})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
@@ -450,7 +449,7 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
 	}
 	// Delete all data associated with this user.
-	filter := bson.D{{"user_id", u.ID}}
+	filter := bson.M{"user_id": u.ID}
 	_, err := db.staticDownloads.DeleteMany(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user downloads")
@@ -471,12 +470,12 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user API keys")
 	}
-	_, err = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.D{{"sub", u.Sub}})
+	_, err = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.M{"sub": u.Sub})
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user unconfirmed updates")
 	}
 	// Delete the actual user.
-	filter = bson.D{{"_id", u.ID}}
+	filter = bson.M{"_id": u.ID}
 	dr, err := db.staticUsers.DeleteOne(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to Delete")
