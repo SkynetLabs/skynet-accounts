@@ -42,6 +42,10 @@ var (
 	// True is a helper for when we need to pass a *bool to Stripe.
 	True = true
 
+	// stripePageSize defines the number of records we are going to request from
+	// endpoints that support pagination.
+	stripePageSize = int64(100)
+
 	// TODO These should be in the DB.
 
 	// stripePricesTest maps Stripe plan prices to specific tiers.
@@ -244,9 +248,14 @@ func (api *API) stripeCreateCustomer(ctx context.Context, u *database.User) (str
 // stripePricesGET returns a list of plans and prices.
 func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	var sPrices []StripePrice
-	params := &stripe.PriceListParams{Active: &True}
-	params.AddExpand("data.product")
-	params.Filters.AddFilter("limit", "", "1000")
+	params := &stripe.PriceListParams{
+		ListParams: stripe.ListParams{
+			Limit: &stripePageSize,
+		},
+		Active: &True,
+	}
+	params.Filters.AddFilter("limit", "", fmt.Sprint(stripePageSize))
+	params.Limit = &stripePageSize
 	i := price.List(params)
 	for i.Next() {
 		p := i.Price()
