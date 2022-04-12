@@ -16,7 +16,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/joho/godotenv"
-	"github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v72"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/sirupsen/logrus"
@@ -228,6 +228,7 @@ func main() {
 	database.PortalName = config.PortalName
 	jwt.PortalName = config.PortalName
 	email.PortalAddressAccounts = config.PortalAddressAccounts
+	api.DashboardURL = config.PortalAddressAccounts
 	email.ServerLockID = config.ServerLockID
 	stripe.Key = config.StripeKey
 	api.StripeTestMode = config.StripeTestMode
