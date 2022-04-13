@@ -35,11 +35,13 @@ paths:
          - username and password
          - challenge-response (undocumented)
          - authorization header (undocumented)
+      security:
+        - { } # No authentication needed
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginPOSTCredentials'
+              $ref: '#/components/schemas/Credentials'
         description: Login credentials.
       responses:
         '204':
@@ -83,6 +85,63 @@ paths:
               description: Sets an encrypted cookie that contains the user's JWT.
         '500':
           description: internal server error
+  /user:
+    get:
+      tags:
+        - User
+      summary: user
+      operationId: user
+      description: Get user's data.
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '200':
+          description: user data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: unauthorized
+        '404':
+          description: user not found
+        '500':
+          description: internal server error
+    post:
+      summary: creates a new user using email/password
+      operationId: userCreate
+      tags:
+        - User
+      description: Creates a new user with the given email and password
+      security:
+        - { } # No authentication needed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+        description: Login credentials.
+      responses:
+        '204':
+          description: user successfully created
+          headers:
+            Skynet-Token:
+              schema:
+                type: string
+              description: |
+                Unencrypted JWT that can be used for authentication via the 
+                `Authorization: Bearer <JWT>` header.
+            Set-Cookie:
+              schema:
+                type: string
+              description: Sets an encrypted cookie that contains the user's JWT.
+              example: skynet-jwt=abcde12345; Path=/; HttpOnly; Secure
+        '400':
+          description: invalid input
+        '500':
+          description: internal server error
   /user/limits:
     get:
       tags:
@@ -116,7 +175,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserLimitsResponse'
+                $ref: '#/components/schemas/UserLimits'
   /user/apikeys:
     post:
       summary: creates a new API key
@@ -129,7 +188,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/APIKeyRequest'
+              $ref: '#/components/schemas/APIKeyCreate'
         description: API creation request
       responses:
         '200':
@@ -137,7 +196,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIKeyResponse'
+                $ref: '#/components/schemas/APIKey'
         '400':
           description: invalid input
         '401':
@@ -159,21 +218,83 @@ components:
       in: cookie
       name: skynet-jwt
   schemas:
-    LoginPOSTCredentials:
+    Credentials:
       type: object
       required:
         - email
         - password
       properties:
         email:
-          type: string
-          format: email
-          example: tr4@gmail.com
+          $ref: '#/components/schemas/Email'
         password:
+          $ref: '#/components/schemas/Password'
+    Email:
+      type: string
+      format: email
+      example: tr4@gmail.com
+    Password:
+      type: string
+      format: password
+      example: me1fzxCVXqHeu619nuiMjlVQ
+    Timestamp:
+      type: string
+      format: date-time
+      example: 2021-03-18T09:57:58.146Z
+    User:
+      type: object
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+        sub:
+          description: Unique identifier of the user
           type: string
-          format: password
-          example: me1fzxCVXqHeu619nuiMjlVQ
-    UserLimitsResponse:
+          example: 3726634b-22f3-480f-9df2-51caae1c2b57
+        tier:
+          description: |
+            Numberic representation of the tier level of the user's account.
+            
+            Examples:
+            0 - unauthenticated
+            1 - free
+            2 - plus
+            3 - pro
+            4 - extreme
+          type: integer
+          example: 1
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        migratedAt:
+          $ref: '#/components/schemas/Timestamp'
+        subscribedUntil:
+          $ref: '#/components/schemas/Timestamp'
+        subscriptionStatus:
+          description: |
+            Stripe subscription status. Defined by Stripe's API.
+            Possible values: <empty>, active, canceled, incomplete, incomplete_expired, past_due, trialing, unpaid.
+            This status can be <empty>, meaning that it will be "", if the user is not known to Stripe, which is true
+            for some free users.
+          type: string
+          example: active
+        subscriptionCancelAt:
+          $ref: '#/components/schemas/Timestamp'
+        subscriptionCancelAtPeriodEnd:
+          description: |
+            True, if the user's subscription is not set to auto-renew after the current subscription period expires.
+          type: boolean
+          example: false
+        stripeCustomerId:
+          type: string
+          example: cus_J8cb7YkqBIoPjK
+        quotaExceeded:
+          description: |
+            True, when the user has stored either more data (as cumulative size) or number of uploads on Skynet than 
+            their tier allows.
+          type: boolean
+          example: false
+        emailConfirmed:
+          type: boolean
+          example: false
+    UserLimits:
       type: object
       properties:
         tierID:
@@ -190,7 +311,7 @@ components:
           type: integer
         registry:
           type: integer
-    APIKeyRequest:
+    APIKeyCreate:
       type: object
       properties:
         public:
@@ -207,7 +328,7 @@ components:
             type: string
             description: skylink
           example: [ "AAAKvcU4_Jhzd907PyU2Tnup7INBQCh-RNr6PmvQQ0lTzQ", "_A3dyZt5FAD4Trdn800eTxAPuZVZsvQalmK-vL-l14KIsg" ]
-    APIKeyResponse:
+    APIKey:
       type: object
       properties:
         id:
