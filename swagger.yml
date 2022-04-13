@@ -10,10 +10,10 @@ tags:
     #   url: 'http://swagger.io'
   - name: User
     description: User information - limits, statistics, etc.
+  - name: API Keys
+    description: API keys, both sponsor and general.
   - name: MySky
     description: Adding, removing, and checking MySky identities attached to current account.
-  - name: API Keys
-    description: API keys, both public and private.
 info:
   description: Accounts is a service that manages user accounts for a Skynet portal
   version: "1.0.0"
@@ -239,7 +239,7 @@ components:
     Timestamp:
       type: string
       format: date-time
-      example: 2021-03-18T09:57:58.146Z
+      example: "2021-03-18T09:57:58.146Z"
     User:
       type: object
       properties:
@@ -252,13 +252,7 @@ components:
         tier:
           description: |
             Numberic representation of the tier level of the user's account.
-            
-            Examples:
-            0 - unauthenticated
-            1 - free
-            2 - plus
-            3 - pro
-            4 - extreme
+            Examples: 0 - unauthenticated, 1 - free, 2 - plus, 3 - pro, 4 - extreme.
           type: integer
           example: 1
         createdAt:
@@ -270,9 +264,9 @@ components:
         subscriptionStatus:
           description: |
             Stripe subscription status. Defined by Stripe's API.
-            Possible values: <empty>, active, canceled, incomplete, incomplete_expired, past_due, trialing, unpaid.
-            This status can be <empty>, meaning that it will be "", if the user is not known to Stripe, which is true
-            for some free users.
+            Possible values: [empty], active, canceled, incomplete, incomplete_expired, past_due, trialing, unpaid.
+            This status can be [empty] (meaning that it will be an empty string) if the user is not known to Stripe,
+            which is true for some free users.
           type: string
           example: active
         subscriptionCancelAt:
@@ -352,6 +346,4 @@ components:
             description: skylink
           example: [ "AAAKvcU4_Jhzd907PyU2Tnup7INBQCh-RNr6PmvQQ0lTzQ", "_A3dyZt5FAD4Trdn800eTxAPuZVZsvQalmK-vL-l14KIsg" ]
         createdAt:
-          type: string
-          format: date-time
-          example: 2022-03-09T15:59:08.817Z
+          $ref: '#/components/schemas/Timestamp'
