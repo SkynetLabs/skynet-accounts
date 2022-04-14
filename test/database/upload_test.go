@@ -43,7 +43,6 @@ func TestUploadsByUser(t *testing.T) {
 	uploadsCount := 1
 	// Fetch the user's uploads.
 	opts := database.FindSkylinksOptions{
-		Offset:   0,
 		PageSize: database.DefaultPageSize,
 	}
 	ups, n, err := db.UploadsByUser(ctx, *u, opts)
@@ -200,7 +199,6 @@ func TestUnpinUploads(t *testing.T) {
 	}
 	// Fetch the first user's uploads.
 	opts := database.FindSkylinksOptions{
-		Offset:   0,
 		PageSize: database.DefaultPageSize,
 	}
 	_, n, err := db.UploadsByUser(ctx, *u1, opts)

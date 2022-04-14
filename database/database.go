@@ -285,6 +285,7 @@ func generateUploadsPipeline(matchStage bson.D, opts FindSkylinksOptions) mongo.
 // difference is that it supports partial downloads via the `bytes` field in the
 // `downloads` collection.
 func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pipeline {
+	offset, pageSize = validOffsetPageSize(offset, pageSize)
 	sortStage := bson.D{{"$sort", bson.D{{"created_at", -1}}}}
 	skipStage := bson.D{{"$skip", offset}}
 	limitStage := bson.D{{"$limit", pageSize}}

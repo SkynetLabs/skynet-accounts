@@ -91,9 +91,6 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pag
 	if skylink.ID.IsZero() {
 		return nil, 0, ErrInvalidSkylink
 	}
-	if err := validateOffsetPageSize(offset, pageSize); err != nil {
-		return nil, 0, err
-	}
 	matchStage := bson.D{{"$match", bson.D{
 		{"skylink_id", skylink.ID},
 		{"unpinned", false},
@@ -162,9 +159,7 @@ func (db *DB) UploadsByUser(ctx context.Context, user User, opts FindSkylinksOpt
 // uploadsBy fetches a page of uploads, filtered by an arbitrary match criteria.
 // It also reports the total number of records in the list.
 func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, opts FindSkylinksOptions) ([]UploadResponse, int, error) {
-	if err := validateOffsetPageSize(opts.Offset, opts.PageSize); err != nil {
-		return nil, 0, err
-	}
+	opts.Offset, opts.PageSize = validOffsetPageSize(opts.Offset, opts.PageSize)
 	cnt, err := db.count(ctx, db.staticUploads, matchStage)
 	if err != nil || cnt == 0 {
 		return []UploadResponse{}, 0, err
@@ -185,14 +180,14 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, opts FindSkylink
 	return uploads, int(cnt), nil
 }
 
-// validateOffsetPageSize returns an error if offset and/or page size are invalid.
-func validateOffsetPageSize(offset, pageSize int) error {
-	var errs []error
+// validOffsetPageSize returns valid values for offset and page size. If the
+// input values are invalid, it returns defaults.
+func validOffsetPageSize(offset, pageSize int) (int, int) {
 	if offset < 0 {
-		errs = append(errs, errors.New("the offset must be non-negative"))
+		offset = 0
 	}
 	if pageSize < 1 {
-		errs = append(errs, errors.New("the page size needs to be positive"))
+		pageSize = DefaultPageSize
 	}
-	return errors.Compose(errs...)
+	return offset, pageSize
 }
