@@ -907,13 +907,13 @@ func monthStart(subscribedUntil time.Time) time.Time {
 func monthStartWithTime(subscribedUntil time.Time, current time.Time) time.Time {
 	// Normalize the day of month. Subs ending on 31st should end on the last
 	// day of the month when the month doesn't have 31 days.
-	dayOfMonth := normalizeDayOfMonth(current.Month(), subscribedUntil.Day(), current)
+	dayOfMonth := normalizeDayOfMonth(current.Year(), current.Month(), subscribedUntil.Day())
 	// If we're past the reset day this month, use the current day of the month.
 	if current.Day() >= dayOfMonth {
 		return time.Date(current.Year(), current.Month(), dayOfMonth, 0, 0, 0, 0, time.UTC)
 	}
 	// If we haven't reached the reset day this month, use last month's day.
-	dayOfMonth = normalizeDayOfMonth(current.Month()-1, subscribedUntil.Day(), current)
+	dayOfMonth = normalizeDayOfMonth(current.Year(), current.Month()-1, subscribedUntil.Day())
 	return time.Date(current.Year(), current.Month()-1, dayOfMonth, 0, 0, 0, 0, time.UTC)
 }
 
@@ -922,11 +922,11 @@ func monthStartWithTime(subscribedUntil time.Time, current time.Time) time.Time 
 //
 // Example:
 // In February normalizeDayOfMonth(31) will return 28 or 29.
-func normalizeDayOfMonth(month time.Month, day int, current time.Time) int {
-	t := time.Date(current.Year(), month, day, 0, 0, 0, 0, time.UTC)
+func normalizeDayOfMonth(year int, month time.Month, day int) int {
+	t := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	if t.Month() > month {
 		// This month doesn't have this day. Return the last day of the month.
-		t = time.Date(current.Year(), month+1, 0, 0, 0, 0, 0, time.UTC)
+		t = time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC)
 	}
 	return t.Day()
 }
