@@ -68,3 +68,4 @@ jobs:
         uses: SkynetLabs/.github/.github/actions/version-release@master
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
+          version-bump: ${{inputs.version}}
