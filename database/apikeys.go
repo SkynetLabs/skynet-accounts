@@ -277,7 +277,7 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 	}
 	filter := bson.M{
 		"_id":    akID,
-		"public": &True, // you can only update public API keys
+		"public": true, // you can only update public API keys
 	}
 	var update bson.M
 	// First, all new skylinks to the record.

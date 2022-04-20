@@ -467,10 +467,12 @@ func (at *AccountsTester) UserPOST(emailAddr, password string) (*http.Response, 
 // UserPUT is a helper method which updates the entire user record.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) UserPUT(email, password, stipeID string) (api.UserGET, int, error) {
+func (at *AccountsTester) UserPUT(email, name, password, profilePic, stipeID string) (api.UserGET, int, error) {
 	b, err := json.Marshal(map[string]string{
 		"email":            email,
+		"name":             name,
 		"password":         password,
+		"profilePic":       profilePic,
 		"stripeCustomerId": stipeID,
 	})
 	if err != nil {

@@ -239,14 +239,14 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 
 	// Call unauthorized.
 	at.ClearCredentials()
-	_, _, err = at.UserPUT("", "", "")
+	_, _, err = at.UserPUT("", "", "", "", "")
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected error '%s', got '%s'", unauthorized, err)
 	}
 	at.SetCookie(c)
 	// Update the user's Stripe ID.
 	stripeID := name + "_stripe_id"
-	u2, status, err := at.UserPUT("", "", stripeID)
+	u2, status, err := at.UserPUT("", "", "", "", stripeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,14 +254,77 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected the user to have StripeID %s, got %s", stripeID, u2.StripeID)
 	}
 	// Try to update the StripeID again. Expect this to fail.
-	_, status, err = at.UserPUT("", "", stripeID)
+	_, status, err = at.UserPUT("", "", "", "", stripeID)
 	if err == nil || !strings.Contains(err.Error(), "409 Conflict") || status != http.StatusConflict {
-		t.Fatalf("Expected to get error '409 Conflict' and status 409, got '%s' and %d", err, status)
+		t.Fatalf("Expected to get error 409 '409 Conflict', got %d '%s'", status, err)
 	}
 
-	// Update the user's password with an empty one. Expect this to succeed but
-	// not change anything.
-	_, status, _ = at.UserPUT("", "", "")
+	// Update the user's name.
+	_, _, err = at.UserPUT("", "new name", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify the change.
+	uName, err := at.DB.UserByID(at.Ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uName.Name != "new name" {
+		t.Fatal("Unexpected name:", uName.Name)
+	}
+
+	// Update the user's profile picture link with an invalid link.
+	_, _, err = at.UserPUT("", "", "", "this is an image link", "")
+	// TODO This will become "invalid profile picture link" after we refactor
+	// 	tester
+	if err == nil || !strings.Contains(err.Error(), "400 Bad Request") {
+		t.Fatalf("Expected '400 Bad Request', got '%v'", err)
+	}
+	// Update the user's profile picture link with a valid link.
+	link := "https://skynetpro.net/CAAfpFBBK6wsb7r9lSOth7TR1M_EPt816y1i_aVR84DuqA"
+	_, _, err = at.UserPUT("", "", "", link, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify the change.
+	uPic, err := at.DB.UserByID(at.Ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uPic.ProfilePic != link {
+		t.Fatal("Unexpected name:", uPic.ProfilePic)
+	}
+	// Update the user's profile picture link with a skylink.
+	link = "CAAfpFBBK6wsb7r9lSOth7TR1M_EPt816y1i_aVR84DuqA"
+	_, _, err = at.UserPUT("", "", "", link, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify the change.
+	uPic, err = at.DB.UserByID(at.Ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uPic.ProfilePic != link {
+		t.Fatal("Unexpected name:", uPic.ProfilePic)
+	}
+	// Update the user's profile picture link with a valid link.
+	link = "1001v92g84lqob3fnbupa8tdguqd3l6fogvdudfb5lhfr9ahue0eta0"
+	_, _, err = at.UserPUT("", "", "", link, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify the change.
+	uPic, err = at.DB.UserByID(at.Ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uPic.ProfilePic != link {
+		t.Fatal("Unexpected name:", uPic.ProfilePic)
+	}
+
+	// Update the user without changing anything. Expect this to fail with a 400.
+	_, status, _ = at.UserPUT("", "", "", "", "")
 	if status != http.StatusBadRequest {
 		t.Fatalf("Expected 400 Bad Request, got %d", status)
 	}
@@ -275,7 +338,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatal("Expected the user's password to not change but it did.")
 	}
 	pw := hex.EncodeToString(fastrand.Bytes(12))
-	_, _, err = at.UserPUT("", pw, "")
+	_, _, err = at.UserPUT("", "", pw, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +363,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 
 	// Update the user's email.
 	emailAddr := name + "_new@siasky.net"
-	_, status, err = at.UserPUT(emailAddr, "", "")
+	_, status, err = at.UserPUT(emailAddr, "", "", "", "")
 	if err != nil || status != http.StatusOK {
 		t.Fatal(status, err)
 	}
@@ -1006,7 +1069,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	at.SetCookie(c)
 	// Change the user's email.
 	newEmail := name + "_new@siasky.net"
-	_, _, err = at.UserPUT(newEmail, "", "")
+	_, _, err = at.UserPUT(newEmail, "", "", "", "")
 	if err != nil {
 		t.Fatalf("Failed to update user. Error: %s", err.Error())
 	}

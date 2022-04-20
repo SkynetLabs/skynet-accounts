@@ -123,9 +123,11 @@ type (
 	// userUpdatePUT defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
 	userUpdatePUT struct {
-		Email    string `json:"email,omitempty"`
-		Password string `json:"password,omitempty"`
-		StripeID string `json:"stripeCustomerId,omitempty"`
+		Email      string `json:"email,omitempty"`
+		Name       string `json:"name,omitempty"`
+		Password   string `json:"password,omitempty"`
+		ProfilePic string `json:"profilePic,omitempty"`
+		StripeID   string `json:"stripeCustomerId,omitempty"`
 	}
 )
 
@@ -723,6 +725,18 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 			return
 		}
 		changedEmail = true
+	}
+
+	if payload.Name != "" {
+		u.Name = payload.Name
+	}
+
+	if payload.ProfilePic != "" {
+		if !validProfilePic(payload.ProfilePic) {
+			api.WriteError(w, errors.New("invalid profile picture link"), http.StatusBadRequest)
+			return
+		}
+		u.ProfilePic = payload.ProfilePic
 	}
 
 	// Save the changes.
@@ -1379,4 +1393,22 @@ func validateIP(ip string) string {
 		return parsedIP.String()
 	}
 	return ""
+}
+
+// validProfilePic validates whether the given string is a valid profile picture
+// link. A valid link contains one of:
+// * a valid skylink (base32 or base64)
+// * a valid URI
+func validProfilePic(pp string) bool {
+	if database.ValidSkylinkHash(pp) {
+		return true
+	}
+	uri, err := url.Parse(pp)
+	// url.Parse will return no error for various strings that are not valid
+	// links, such as relative paths and so on. A valid link will have a scheme,
+	// path and host.
+	if err == nil && uri.Scheme != "" && uri.Host != "" && uri.Path != "" {
+		return true
+	}
+	return false
 }
