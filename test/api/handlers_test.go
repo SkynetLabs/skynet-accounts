@@ -887,65 +887,6 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats.BandwidthUploads += skynet.BandwidthUploadCost(0)
 	expectedStats.RawStorageUsed += skynet.RawStorageUsed(0)
 
-	// Call trackDownload without a cookie. Expect this to fail.
-	at.ClearCredentials()
-	_, err = at.TrackDownload(skylink.String(), 100)
-	if err == nil {
-		t.Fatal("Expects anonymous download to fail.")
-	}
-	at.SetCookie(c)
-	// Call trackDownload with an invalid skylink.
-	_, err = at.TrackDownload("INVALID_SKYLINK", 100)
-	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
-	}
-	// Call trackDownload with a valid skylink and a negative size download
-	_, err = at.TrackDownload(skylink.String(), -100)
-	if err == nil || !strings.Contains(err.Error(), badRequest) {
-		t.Fatalf("Expected '%s', got '%v'", badRequest, err)
-	}
-	// Call trackDownload with a valid skylink.
-	_, err = at.TrackDownload(skylink.String(), 200)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Adjust the expectations.
-	expectedStats.NumDownloads++
-	expectedStats.BandwidthDownloads += skynet.BandwidthDownloadCost(200)
-	expectedStats.TotalDownloadsSize += 200
-
-	// Call trackRegistryRead without a cookie.
-	at.ClearCredentials()
-	_, err = at.TrackRegistryRead()
-	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
-	}
-	at.SetCookie(c)
-	// Call trackRegistryRead.
-	_, err = at.TrackRegistryRead()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Adjust the expectations.
-	expectedStats.NumRegReads++
-	expectedStats.BandwidthRegReads += skynet.CostBandwidthRegistryRead
-
-	// Call trackRegistryWrite without a cookie.
-	at.ClearCredentials()
-	_, err = at.TrackRegistryWrite()
-	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
-	}
-	at.SetCookie(c)
-	// Call trackRegistryWrite.
-	_, err = at.TrackRegistryWrite()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Adjust the expectations.
-	expectedStats.NumRegWrites++
-	expectedStats.BandwidthRegWrites += skynet.CostBandwidthRegistryWrite
-
 	// Call userStats without a cookie.
 	at.ClearCredentials()
 	_, _, err = at.UserStats("", nil)
