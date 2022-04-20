@@ -42,18 +42,6 @@ var (
 				Options: options.Index().SetName("skylink_id"),
 			},
 		},
-		collRegistryReads: {
-			{
-				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("user_id"),
-			},
-		},
-		collRegistryWrites: {
-			{
-				Keys:    bson.D{{"user_id", 1}},
-				Options: options.Index().SetName("user_id"),
-			},
-		},
 		collEmails: {
 			{
 				Keys:    bson.D{{"failed_attempts", 1}},

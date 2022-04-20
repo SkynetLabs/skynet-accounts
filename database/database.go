@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/lib"
-
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -188,6 +188,22 @@ func connectionString(creds DBCredentials) string {
 // See https://docs.mongodb.com/manual/indexes/
 // See https://docs.mongodb.com/manual/core/index-unique/
 func ensureDBSchema(ctx context.Context, db *mongo.Database, schema map[string][]mongo.IndexModel, log *logrus.Logger) error {
+	// Drop collections we no longer need.
+	err := db.Collection(collRegistryReads).Drop(ctx)
+	if err != nil {
+		return err
+	}
+	err = db.Collection(collRegistryWrites).Drop(ctx)
+	if err != nil {
+		return err
+	}
+	// Drop indexes we no longer need.
+	_, err = db.Collection(collUsers).Indexes().DropOne(ctx, "email_unique")
+	// Ignore namespace not found errors.
+	if err != nil && !strings.Contains(err.Error(), "NamespaceNotFound") {
+		return err
+	}
+	// Ensure current schema.
 	for collName, models := range schema {
 		coll, err := ensureCollection(ctx, db, collName)
 		if err != nil {
