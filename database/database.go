@@ -199,9 +199,8 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, schema map[string][
 	}
 	// Drop indexes we no longer need.
 	_, err = db.Collection(collUsers).Indexes().DropOne(ctx, "email_unique")
-	// Ignore namespace not found errors.
-	if err != nil && !strings.Contains(err.Error(), "NamespaceNotFound") {
-		return err
+	if err != nil && !strings.Contains(err.Error(), "IndexNotFound") {
+		log.Debugf("Error while dropping index '%s': %v", "email_unique", err)
 	}
 	// Ensure current schema.
 	for collName, models := range schema {
