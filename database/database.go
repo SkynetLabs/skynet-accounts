@@ -199,7 +199,17 @@ func ensureDBSchema(ctx context.Context, db *mongo.Database, schema map[string][
 	}
 	// Drop indexes we no longer need.
 	_, err = db.Collection(collUsers).Indexes().DropOne(ctx, "email_unique")
-	if err != nil && !strings.Contains(err.Error(), "IndexNotFound") {
+	// We want to ignore IndexNotFound errors - we'll have that each time we run
+	// this code after the initial run on which we drop the index.
+	// We also want to ignore NamespaceNotFound errors - we'll have that on the
+	// very first run of the service when users collection doesn't exist, yet.
+	// We don't want to worry new portal operators and waste their time.
+	// All other errors we want to log for informational purposes but we don't
+	// want to return an error and prevent the service from running - if there
+	// is any issue with the database that would affect the operation of the
+	// service, it will surface during the next step where we ensure collections
+	// indexes exist.
+	if err != nil && !strings.Contains(err.Error(), "IndexNotFound") && !strings.Contains(err.Error(), "NamespaceNotFound") {
 		log.Debugf("Error while dropping index '%s': %v", "email_unique", err)
 	}
 	// Ensure current schema.
