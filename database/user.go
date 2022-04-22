@@ -49,10 +49,6 @@ var (
 	// AnonUser is a helper struct that we can use when we don't have a relevant
 	// user, e.g. when an upload is made by an anonymous user.
 	AnonUser = User{}
-	// True is a helper for when we need to pass a *bool to MongoDB.
-	True = true
-	// False is a helper for when we need to pass a *bool to MongoDB.
-	False = false
 	// UserLimits defines the speed limits for each tier.
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
@@ -60,7 +56,7 @@ var (
 			TierName:        "anonymous",
 			UploadBandwidth: 5 * mbpsToBytesPerSecond,
 			// TODO: temporarily lowered the download bandwidth on the anon tier
-			// from 20mbps to 5mpbs
+			// from 20mbps to 5mbps
 			DownloadBandwidth: 5 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  0,
@@ -334,8 +330,18 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
+		RecoveryToken:                    "",
 		Sub:                              sub,
 		Tier:                             tier,
+		CreatedAt:                        time.Now().UTC(),
+		MigratedAt:                       time.Time{},
+		SubscribedUntil:                  time.Time{},
+		SubscriptionStatus:               "",
+		SubscriptionCancelAt:             time.Time{},
+		SubscriptionCancelAtPeriodEnd:    false,
+		StripeID:                         "",
+		QuotaExceeded:                    false,
+		PubKeys:                          make([]PubKey, 0),
 	}
 	// TODO This part can race and create multiple accounts with the same email, unless we add DB-level uniqueness restriction.
 	// Insert the user.
@@ -427,8 +433,17 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
+		RecoveryToken:                    "",
 		Sub:                              sub,
 		Tier:                             tier,
+		CreatedAt:                        time.Now().UTC(),
+		MigratedAt:                       time.Time{},
+		SubscribedUntil:                  time.Time{},
+		SubscriptionStatus:               "",
+		SubscriptionCancelAt:             time.Time{},
+		SubscriptionCancelAtPeriodEnd:    false,
+		StripeID:                         "",
+		QuotaExceeded:                    false,
 		PubKeys:                          []PubKey{pk},
 	}
 	// Insert the user.
@@ -805,7 +820,7 @@ func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, mont
 		}},
 	}
 	// This stage checks if the download has a non-zero `bytes` field and if so,
-	// it takes it as the download's size. Otherwise it reports the full
+	// it takes it as the download's size. Otherwise, it reports the full
 	// skylink's size as download's size.
 	projectStage := bson.D{{"$project", bson.D{
 		{"size", bson.D{
@@ -888,7 +903,7 @@ func (u User) HasKey(pk PubKey) bool {
 // Users get their bandwidth quota reset at the start of the month.
 //
 // This function follows the behaviour of Stripe:
-// If a month doesn’t have the anchor day, the subscription will be billed on
+// If a month doesn't have the anchor day, the subscription will be billed on
 // the last day of the month. For example, a subscription starting on 31 January
 // bills on 28 February (or 29 February in a leap year), then 31 March, 30
 // April, and so on.
@@ -907,13 +922,13 @@ func monthStart(subscribedUntil time.Time) time.Time {
 func monthStartWithTime(subscribedUntil time.Time, current time.Time) time.Time {
 	// Normalize the day of month. Subs ending on 31st should end on the last
 	// day of the month when the month doesn't have 31 days.
-	dayOfMonth := normalizeDayOfMonth(current.Month(), subscribedUntil.Day(), current)
+	dayOfMonth := normalizeDayOfMonth(current.Year(), current.Month(), subscribedUntil.Day())
 	// If we're past the reset day this month, use the current day of the month.
 	if current.Day() >= dayOfMonth {
 		return time.Date(current.Year(), current.Month(), dayOfMonth, 0, 0, 0, 0, time.UTC)
 	}
 	// If we haven't reached the reset day this month, use last month's day.
-	dayOfMonth = normalizeDayOfMonth(current.Month()-1, subscribedUntil.Day(), current)
+	dayOfMonth = normalizeDayOfMonth(current.Year(), current.Month()-1, subscribedUntil.Day())
 	return time.Date(current.Year(), current.Month()-1, dayOfMonth, 0, 0, 0, 0, time.UTC)
 }
 
@@ -922,11 +937,11 @@ func monthStartWithTime(subscribedUntil time.Time, current time.Time) time.Time 
 //
 // Example:
 // In February normalizeDayOfMonth(31) will return 28 or 29.
-func normalizeDayOfMonth(month time.Month, day int, current time.Time) int {
-	t := time.Date(current.Year(), month, day, 0, 0, 0, 0, time.UTC)
+func normalizeDayOfMonth(year int, month time.Month, day int) int {
+	t := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	if t.Month() > month {
 		// This month doesn't have this day. Return the last day of the month.
-		t = time.Date(current.Year(), month+1, 0, 0, 0, 0, 0, time.UTC)
+		t = time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC)
 	}
 	return t.Day()
 }

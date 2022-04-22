@@ -133,6 +133,11 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal("Error while fetching the user from the DB. Error ", err.Error())
 	}
+	// Make sure the creation timestamp is correct.
+	now := time.Now().UTC()
+	if u.CreatedAt.Before(now.Add(-1*time.Minute)) || u.CreatedAt.After(now.Add(time.Minute)) {
+		t.Fatal("Unexpected user creation time:", u.CreatedAt, "Current time:", now)
+	}
 	// Clean up the user after the test.
 	defer func(user *database.User) {
 		err = at.DB.UserDelete(at.Ctx, user)
@@ -908,38 +913,6 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	expectedStats.NumDownloads++
 	expectedStats.BandwidthDownloads += skynet.BandwidthDownloadCost(200)
 	expectedStats.TotalDownloadsSize += 200
-
-	// Call trackRegistryRead without a cookie.
-	at.ClearCredentials()
-	_, err = at.TrackRegistryRead()
-	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
-	}
-	at.SetCookie(c)
-	// Call trackRegistryRead.
-	_, err = at.TrackRegistryRead()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Adjust the expectations.
-	expectedStats.NumRegReads++
-	expectedStats.BandwidthRegReads += skynet.CostBandwidthRegistryRead
-
-	// Call trackRegistryWrite without a cookie.
-	at.ClearCredentials()
-	_, err = at.TrackRegistryWrite()
-	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error '%s', got '%v'", unauthorized, err)
-	}
-	at.SetCookie(c)
-	// Call trackRegistryWrite.
-	_, err = at.TrackRegistryWrite()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Adjust the expectations.
-	expectedStats.NumRegWrites++
-	expectedStats.BandwidthRegWrites += skynet.CostBandwidthRegistryWrite
 
 	// Call userStats without a cookie.
 	at.ClearCredentials()

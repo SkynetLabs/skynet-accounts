@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/lib"
-
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -188,6 +188,31 @@ func connectionString(creds DBCredentials) string {
 // See https://docs.mongodb.com/manual/indexes/
 // See https://docs.mongodb.com/manual/core/index-unique/
 func ensureDBSchema(ctx context.Context, db *mongo.Database, schema map[string][]mongo.IndexModel, log *logrus.Logger) error {
+	// Drop collections we no longer need.
+	err := db.Collection(collRegistryReads).Drop(ctx)
+	if err != nil {
+		return err
+	}
+	err = db.Collection(collRegistryWrites).Drop(ctx)
+	if err != nil {
+		return err
+	}
+	// Drop indexes we no longer need.
+	_, err = db.Collection(collUsers).Indexes().DropOne(ctx, "email_unique")
+	// We want to ignore IndexNotFound errors - we'll have that each time we run
+	// this code after the initial run on which we drop the index.
+	// We also want to ignore NamespaceNotFound errors - we'll have that on the
+	// very first run of the service when users collection doesn't exist, yet.
+	// We don't want to worry new portal operators and waste their time.
+	// All other errors we want to log for informational purposes but we don't
+	// want to return an error and prevent the service from running - if there
+	// is any issue with the database that would affect the operation of the
+	// service, it will surface during the next step where we ensure collections
+	// indexes exist.
+	if err != nil && !strings.Contains(err.Error(), "IndexNotFound") && !strings.Contains(err.Error(), "NamespaceNotFound") {
+		log.Debugf("Error while dropping index '%s': %v", "email_unique", err)
+	}
+	// Ensure current schema.
 	for collName, models := range schema {
 		coll, err := ensureCollection(ctx, db, collName)
 		if err != nil {

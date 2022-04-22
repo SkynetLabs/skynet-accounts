@@ -13,6 +13,7 @@ func TestUserTierCache(t *testing.T) {
 	u := &database.User{
 		Sub:             t.Name(),
 		Tier:            database.TierPremium5,
+		CreatedAt:       time.Now().UTC(),
 		SubscribedUntil: time.Now().UTC().Add(100 * time.Hour),
 		QuotaExceeded:   false,
 	}
