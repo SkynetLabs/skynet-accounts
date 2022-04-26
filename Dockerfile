@@ -9,7 +9,7 @@ COPY . .
 
 RUN go mod download && make release
 
-FROM alpine:3.15.3
+FROM alpine:3.15.4
 LABEL maintainer="SkynetLabs <devs@skynetlabs.com>"
 
 COPY --from=builder /go/bin/skynet-accounts /usr/bin/skynet-accounts
