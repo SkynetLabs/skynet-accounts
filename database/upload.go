@@ -34,8 +34,7 @@ type UploadResponse struct {
 // UploadByID fetches a single upload from the DB.
 func (db *DB) UploadByID(ctx context.Context, id primitive.ObjectID) (*Upload, error) {
 	var d Upload
-	filter := bson.D{{"_id", id}}
-	sr := db.staticUploads.FindOne(ctx, filter)
+	sr := db.staticUploads.FindOne(ctx, bson.M{"_id": id})
 	err := sr.Decode(&d)
 	if err != nil {
 		return nil, err
@@ -105,10 +104,10 @@ func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int
 	if user.ID.IsZero() {
 		return 0, errors.New("invalid user")
 	}
-	filter := bson.D{
-		{"skylink_id", skylink.ID},
-		{"user_id", user.ID},
-		{"unpinned", false},
+	filter := bson.M{
+		"skylink_id": skylink.ID,
+		"user_id":    user.ID,
+		"unpinned":   false,
 	}
 	update := bson.M{"$set": bson.M{"unpinned": true}}
 	ur, err := db.staticUploads.UpdateMany(ctx, filter, update)
