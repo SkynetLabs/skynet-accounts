@@ -505,7 +505,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 //
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
-func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) userLimitsSkylinkGET(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// inBytes is a flag indicating that the caller wants all bandwidth limits
 	// to be presented in bytes per second. The default behaviour is to present
 	// them in bits per second.
@@ -530,7 +530,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	if errors.Contains(err, ErrNoAPIKey) {
 		// We failed to fetch an API key from this request but the request might
 		// be authenticated in another way, so we'll defer to userLimitsGET.
-		api.userLimitsGET(u, w, req, ps)
+		api.userLimitsGET(nil, w, req, ps)
 		return
 	}
 	if err != nil {
