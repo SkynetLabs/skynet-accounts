@@ -300,6 +300,16 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	if ul.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
 		t.Fatalf("Expected to get download bandwidth of %d, got %d", database.UserLimits[database.TierAnonymous].DownloadBandwidth, ul.DownloadBandwidth)
 	}
+	// Get the limits for all MySky skylinks.
+	for msl := range api.MyskyAllowlist {
+		ul, _, err = at.UserLimitsSkylink(msl, "byte", "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ul.DownloadBandwidth != database.UserLimits[database.TierPremium5].DownloadBandwidth {
+			t.Fatalf("Expected to get download bandwidth of %d, got %d", database.UserLimits[database.TierPremium5].DownloadBandwidth, ul.DownloadBandwidth)
+		}
+	}
 }
 
 // testPublicAPIKeysUsage makes sure that we can use public API keys to make

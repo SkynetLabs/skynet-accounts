@@ -40,6 +40,15 @@ var (
 	// flow fails. This error is sent instead of whatever internal error we had
 	// before in order to prevent an attacker from listing our users.
 	ErrInvalidCredentials = errors.New("invalid credentials")
+
+	// MyskyAllowlist contains skylinks we need to make available in order for
+	// users to be able to use MySky on all portals, including ones that require
+	// user authentication.
+	MyskyAllowlist = map[string]interface{}{
+		"AQCsSOIwqwn7lLCT0t110ImQJaI39HxrSrJ-GVNSltfUAQ": struct{}{},
+		"AQBIMqRcHbGWXy4rlIwGW4Aa4v0w0xLb6JvUonnXazfxiw": struct{}{},
+		"AQASyOUdaov383UggiDN7izfcCH8k-3Z0FlPjtNyem1qMg": struct{}{},
+	}
 )
 
 type (
@@ -507,6 +516,13 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	if !database.ValidSkylinkHash(skylink) {
 		api.staticLogger.Tracef("Invalid skylink: '%s'", skylink)
 		api.WriteJSON(w, respAnon)
+		return
+	}
+	// For all links that belong to MySky we return the first paid tier, so
+	// anyone can access them, even on portals which require authentication or
+	// premium accounts.
+	if _, ok := MyskyAllowlist[skylink]; ok {
+		api.WriteJSON(w, userLimitsGetFromTier("", database.TierPremium5, false, inBytes))
 		return
 	}
 	// Try to fetch an API attached to the request.
