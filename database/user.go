@@ -331,7 +331,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		RecoveryToken:                    "",
 		Sub:                              sub,
 		Tier:                             tier,
-		CreatedAt:                        time.Now().UTC(),
+		CreatedAt:                        time.Now().UTC().Truncate(time.Millisecond),
 		MigratedAt:                       time.Time{},
 		SubscribedUntil:                  time.Time{},
 		SubscriptionStatus:               "",

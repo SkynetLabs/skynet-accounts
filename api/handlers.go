@@ -40,6 +40,15 @@ var (
 	// flow fails. This error is sent instead of whatever internal error we had
 	// before in order to prevent an attacker from listing our users.
 	ErrInvalidCredentials = errors.New("invalid credentials")
+
+	// MyskyAllowlist contains skylinks we need to make available in order for
+	// users to be able to use MySky on all portals, including ones that require
+	// user authentication.
+	MyskyAllowlist = map[string]interface{}{
+		"AQCsSOIwqwn7lLCT0t110ImQJaI39HxrSrJ-GVNSltfUAQ": struct{}{}, // skynet-mysky
+		"AQBIMqRcHbGWXy4rlIwGW4Aa4v0w0xLb6JvUonnXazfxiw": struct{}{}, // skynet-mysky-dev
+		"AQASyOUdaov383UggiDN7izfcCH8k-3Z0FlPjtNyem1qMg": struct{}{}, // sandbridge
+	}
 )
 
 type (
@@ -496,7 +505,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 //
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
-func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) userLimitsSkylinkGET(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// inBytes is a flag indicating that the caller wants all bandwidth limits
 	// to be presented in bytes per second. The default behaviour is to present
 	// them in bits per second.
@@ -509,12 +518,19 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 		api.WriteJSON(w, respAnon)
 		return
 	}
+	// For all links that belong to MySky we return the first paid tier, so
+	// anyone can access them, even on portals which require authentication or
+	// premium accounts.
+	if _, ok := MyskyAllowlist[skylink]; ok {
+		api.WriteJSON(w, userLimitsGetFromTier("", database.TierPremium5, false, inBytes))
+		return
+	}
 	// Try to fetch an API attached to the request.
 	ak, err := apiKeyFromRequest(req)
 	if errors.Contains(err, ErrNoAPIKey) {
 		// We failed to fetch an API key from this request but the request might
 		// be authenticated in another way, so we'll defer to userLimitsGET.
-		api.userLimitsGET(u, w, req, ps)
+		api.userLimitsGET(nil, w, req, ps)
 		return
 	}
 	if err != nil {
