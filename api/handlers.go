@@ -40,6 +40,15 @@ var (
 	// flow fails. This error is sent instead of whatever internal error we had
 	// before in order to prevent an attacker from listing our users.
 	ErrInvalidCredentials = errors.New("invalid credentials")
+
+	// MyskyAllowlist contains skylinks we need to make available in order for
+	// users to be able to use MySky on all portals, including ones that require
+	// user authentication.
+	MyskyAllowlist = map[string]interface{}{
+		"AQCsSOIwqwn7lLCT0t110ImQJaI39HxrSrJ-GVNSltfUAQ": struct{}{}, // skynet-mysky
+		"AQBIMqRcHbGWXy4rlIwGW4Aa4v0w0xLb6JvUonnXazfxiw": struct{}{}, // skynet-mysky-dev
+		"AQASyOUdaov383UggiDN7izfcCH8k-3Z0FlPjtNyem1qMg": struct{}{}, // sandbridge
+	}
 )
 
 type (
@@ -496,7 +505,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 //
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
-func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) userLimitsSkylinkGET(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// inBytes is a flag indicating that the caller wants all bandwidth limits
 	// to be presented in bytes per second. The default behaviour is to present
 	// them in bits per second.
@@ -509,12 +518,19 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 		api.WriteJSON(w, respAnon)
 		return
 	}
+	// For all links that belong to MySky we return the first paid tier, so
+	// anyone can access them, even on portals which require authentication or
+	// premium accounts.
+	if _, ok := MyskyAllowlist[skylink]; ok {
+		api.WriteJSON(w, userLimitsGetFromTier("", database.TierPremium5, false, inBytes))
+		return
+	}
 	// Try to fetch an API attached to the request.
 	ak, err := apiKeyFromRequest(req)
 	if errors.Contains(err, ErrNoAPIKey) {
 		// We failed to fetch an API key from this request but the request might
 		// be authenticated in another way, so we'll defer to userLimitsGET.
-		api.userLimitsGET(u, w, req, ps)
+		api.userLimitsGET(nil, w, req, ps)
 		return
 	}
 	if err != nil {
@@ -1025,11 +1041,6 @@ func (api *API) userRecoverRequestPOST(_ *database.User, w http.ResponseWriter, 
 		api.WriteError(w, errors.AddContext(err, "failed to fetch the user with this email"), http.StatusInternalServerError)
 		return
 	}
-	// Verify that the user's email is confirmed.
-	if u.EmailConfirmationToken != "" {
-		api.WriteError(w, errors.New("user's email is not confirmed. it cannot be used for account recovery"), http.StatusBadRequest)
-		return
-	}
 	// Generate a new recovery token and add it to the user's account.
 	u.RecoveryToken, err = lib.GenerateUUID()
 	if err != nil {
@@ -1212,22 +1223,14 @@ func (api *API) trackDownloadPOST(u *database.User, w http.ResponseWriter, req *
 }
 
 // trackRegistryReadPOST registers a new registry read in the system.
-func (api *API) trackRegistryReadPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	_, err := api.staticDB.RegistryReadCreate(req.Context(), *u)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+func (api *API) trackRegistryReadPOST(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	// Tracking registry reads is disabled.
 	api.WriteSuccess(w)
 }
 
 // trackRegistryWritePOST registers a new registry write in the system.
-func (api *API) trackRegistryWritePOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	_, err := api.staticDB.RegistryWriteCreate(req.Context(), *u)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+func (api *API) trackRegistryWritePOST(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	// Tracking registry writes is disabled.
 	api.WriteSuccess(w)
 }
 

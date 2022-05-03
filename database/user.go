@@ -49,10 +49,6 @@ var (
 	// AnonUser is a helper struct that we can use when we don't have a relevant
 	// user, e.g. when an upload is made by an anonymous user.
 	AnonUser = User{}
-	// True is a helper for when we need to pass a *bool to MongoDB.
-	True = true
-	// False is a helper for when we need to pass a *bool to MongoDB.
-	False = false
 	// UserLimits defines the speed limits for each tier.
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
@@ -60,7 +56,7 @@ var (
 			TierName:        "anonymous",
 			UploadBandwidth: 5 * mbpsToBytesPerSecond,
 			// TODO: temporarily lowered the download bandwidth on the anon tier
-			// from 20mbps to 5mpbs
+			// from 20mbps to 5mbps
 			DownloadBandwidth: 5 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  0,
@@ -171,8 +167,7 @@ func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
 
 // UserByID finds a user by their ID.
 func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error) {
-	filter := bson.D{{"_id", id}}
-	c, err := db.staticUsers.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, bson.M{"_id": id})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
@@ -219,8 +214,7 @@ func (db *DB) UserByRecoveryToken(ctx context.Context, token string) (*User, err
 
 // UserByStripeID finds a user by their Stripe customer id.
 func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
-	filter := bson.D{{"stripe_id", id}}
-	c, err := db.staticUsers.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, bson.M{"stripe_id": id})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
@@ -334,8 +328,18 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
+		RecoveryToken:                    "",
 		Sub:                              sub,
 		Tier:                             tier,
+		CreatedAt:                        time.Now().UTC().Truncate(time.Millisecond),
+		MigratedAt:                       time.Time{},
+		SubscribedUntil:                  time.Time{},
+		SubscriptionStatus:               "",
+		SubscriptionCancelAt:             time.Time{},
+		SubscriptionCancelAtPeriodEnd:    false,
+		StripeID:                         "",
+		QuotaExceeded:                    false,
+		PubKeys:                          make([]PubKey, 0),
 	}
 	// TODO This part can race and create multiple accounts with the same email, unless we add DB-level uniqueness restriction.
 	// Insert the user.
@@ -427,8 +431,17 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
+		RecoveryToken:                    "",
 		Sub:                              sub,
 		Tier:                             tier,
+		CreatedAt:                        time.Now().UTC(),
+		MigratedAt:                       time.Time{},
+		SubscribedUntil:                  time.Time{},
+		SubscriptionStatus:               "",
+		SubscriptionCancelAt:             time.Time{},
+		SubscriptionCancelAtPeriodEnd:    false,
+		StripeID:                         "",
+		QuotaExceeded:                    false,
 		PubKeys:                          []PubKey{pk},
 	}
 	// Insert the user.
@@ -450,7 +463,7 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
 	}
 	// Delete all data associated with this user.
-	filter := bson.D{{"user_id", u.ID}}
+	filter := bson.M{"user_id": u.ID}
 	_, err := db.staticDownloads.DeleteMany(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user downloads")
@@ -471,12 +484,12 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user API keys")
 	}
-	_, err = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.D{{"sub", u.Sub}})
+	_, err = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.M{"sub": u.Sub})
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user unconfirmed updates")
 	}
 	// Delete the actual user.
-	filter = bson.D{{"_id", u.ID}}
+	filter = bson.M{"_id": u.ID}
 	dr, err := db.staticUsers.DeleteOne(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to Delete")
@@ -582,8 +595,7 @@ func (db *DB) Ping(ctx context.Context) error {
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
-	filter := bson.M{fieldName: fieldValue}
-	c, err := db.staticUsers.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, bson.M{fieldName: fieldValue})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to find user")
 	}
@@ -805,7 +817,7 @@ func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, mont
 		}},
 	}
 	// This stage checks if the download has a non-zero `bytes` field and if so,
-	// it takes it as the download's size. Otherwise it reports the full
+	// it takes it as the download's size. Otherwise, it reports the full
 	// skylink's size as download's size.
 	projectStage := bson.D{{"$project", bson.D{
 		{"size", bson.D{
@@ -888,7 +900,7 @@ func (u User) HasKey(pk PubKey) bool {
 // Users get their bandwidth quota reset at the start of the month.
 //
 // This function follows the behaviour of Stripe:
-// If a month doesn’t have the anchor day, the subscription will be billed on
+// If a month doesn't have the anchor day, the subscription will be billed on
 // the last day of the month. For example, a subscription starting on 31 January
 // bills on 28 February (or 29 February in a leap year), then 31 March, 30
 // April, and so on.

@@ -18,8 +18,7 @@ var (
 	// Note: It's important that we match the base32 first because base32 is a
 	// subset of base64, so the base64 regex will match part of the base32 and
 	// return partial data which will be useless.
-	extractSkylinkRE      = regexp.MustCompile("^.*([a-z0-9]{55})|([a-zA-Z0-9-_]{46}).*$")
-	validateSkylinkHashRE = regexp.MustCompile("(^[a-z0-9]{55}$)|(^[a-zA-Z0-9-_]{46}$)")
+	extractSkylinkRE = regexp.MustCompile("^.*([a-z0-9]{55})|([a-zA-Z0-9-_]{46}).*$")
 )
 
 type (
@@ -64,7 +63,7 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 		Skylink: skylinkHash,
 	}
 	// Try to find the skylink in the database.
-	filter := bson.D{{"skylink", skylinkHash}}
+	filter := bson.M{"skylink": skylinkHash}
 	upsert := bson.M{"$setOnInsert": bson.M{"skylink": skylinkHash}}
 	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
 	sr := db.staticSkylinks.FindOneAndUpdate(ctx, filter, upsert, opts)
@@ -77,8 +76,7 @@ func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
 
 // SkylinkByID finds a skylink by its ID.
 func (db *DB) SkylinkByID(ctx context.Context, id primitive.ObjectID) (*Skylink, error) {
-	filter := bson.D{{"_id", id}}
-	sr := db.staticSkylinks.FindOne(ctx, filter)
+	sr := db.staticSkylinks.FindOne(ctx, bson.M{"_id": id})
 	var sl Skylink
 	err := sr.Decode(&sl)
 	if err != nil {
@@ -134,5 +132,7 @@ func ExtractSkylinkHash(skylink string) (string, error) {
 
 // ValidSkylinkHash returns true if the given string is a valid skylink hash.
 func ValidSkylinkHash(skylink string) bool {
-	return validateSkylinkHashRE.Match([]byte(skylink))
+	var sl skymodules.Skylink
+	err := sl.LoadString(skylink)
+	return err == nil
 }

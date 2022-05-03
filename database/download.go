@@ -40,8 +40,7 @@ type DownloadResponse struct {
 // DownloadByID fetches a single download from the DB.
 func (db *DB) DownloadByID(ctx context.Context, id primitive.ObjectID) (*Download, error) {
 	var d Download
-	filter := bson.D{{"_id", id}}
-	sr := db.staticDownloads.FindOne(ctx, filter)
+	sr := db.staticDownloads.FindOne(ctx, bson.M{"_id": id})
 	err := sr.Decode(&d)
 	if err != nil {
 		return nil, err
@@ -124,13 +123,13 @@ func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSi
 // DownloadRecent returns the most recent download of the given skylink.
 func (db *DB) DownloadRecent(ctx context.Context, uID primitive.ObjectID, skylinkID primitive.ObjectID) (*Download, error) {
 	updatedAtThreshold := time.Now().UTC().Add(-1 * DownloadUpdateWindow)
-	filter := bson.D{
-		{"user_id", uID},
-		{"skylink_id", skylinkID},
-		{"updated_at", bson.D{{"$gt", updatedAtThreshold}}},
+	filter := bson.M{
+		"user_id":    uID,
+		"skylink_id": skylinkID,
+		"updated_at": bson.M{"$gt": updatedAtThreshold},
 	}
 	opts := options.FindOneOptions{
-		Sort: bson.D{{"updated_at", -1}},
+		Sort: bson.M{"updated_at": -1},
 	}
 	sr := db.staticDownloads.FindOne(ctx, filter, &opts)
 	var d Download

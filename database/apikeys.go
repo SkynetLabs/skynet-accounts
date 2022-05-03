@@ -187,8 +187,7 @@ func (db *DB) APIKeyDelete(ctx context.Context, user User, akID primitive.Object
 
 // APIKeyByKey returns a specific API key.
 func (db *DB) APIKeyByKey(ctx context.Context, key string) (APIKeyRecord, error) {
-	filter := bson.M{"key": key}
-	sr := db.staticAPIKeys.FindOne(ctx, filter)
+	sr := db.staticAPIKeys.FindOne(ctx, bson.M{"key": key})
 	if sr.Err() != nil {
 		return APIKeyRecord{}, sr.Err()
 	}
@@ -202,8 +201,7 @@ func (db *DB) APIKeyByKey(ctx context.Context, key string) (APIKeyRecord, error)
 
 // APIKeyGet returns a specific API key.
 func (db *DB) APIKeyGet(ctx context.Context, akID primitive.ObjectID) (APIKeyRecord, error) {
-	filter := bson.M{"_id": akID}
-	sr := db.staticAPIKeys.FindOne(ctx, filter)
+	sr := db.staticAPIKeys.FindOne(ctx, bson.M{"_id": akID})
 	if sr.Err() != nil {
 		return APIKeyRecord{}, sr.Err()
 	}
@@ -277,7 +275,7 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 	}
 	filter := bson.M{
 		"_id":    akID,
-		"public": &True, // you can only update public API keys
+		"public": true,
 	}
 	var update bson.M
 	// First, all new skylinks to the record.
