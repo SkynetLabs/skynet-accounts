@@ -2,9 +2,9 @@ package database
 
 import "testing"
 
-// TestExtractSkylinkHash ensures ExtractSkylink properly returns the
+// TestExtractSkylink ensures ExtractSkylink properly returns the
 // skylink hash.
-func TestExtractSkylinkHash(t *testing.T) {
+func TestExtractSkylink(t *testing.T) {
 	tests := []struct {
 		name  string
 		in    string
@@ -103,8 +103,8 @@ func TestExtractSkylinkHash(t *testing.T) {
 	}
 }
 
-// TestValidSkylinkHash ensures ValidSkylink works properly.
-func TestValidSkylinkHash(t *testing.T) {
+// TestValidSkylink ensures ValidSkylink works properly.
+func TestValidSkylink(t *testing.T) {
 	tests := []struct {
 		name  string
 		in    string
