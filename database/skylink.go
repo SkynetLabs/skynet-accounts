@@ -18,8 +18,7 @@ var (
 	// Note: It's important that we match the base32 first because base32 is a
 	// subset of base64, so the base64 regex will match part of the base32 and
 	// return partial data which will be useless.
-	extractSkylinkRE      = regexp.MustCompile("^.*([a-z0-9]{55})|([a-zA-Z0-9-_]{46}).*$")
-	validateSkylinkHashRE = regexp.MustCompile("(^[a-z0-9]{55}$)|(^[a-zA-Z0-9-_]{46}$)")
+	extractSkylinkRE = regexp.MustCompile("^.*([a-z0-9]{55})|([a-zA-Z0-9-_]{46}).*$")
 )
 
 // Skylink represents a skylink object in the DB.
@@ -118,5 +117,7 @@ func ExtractSkylink(skylink string) (string, error) {
 
 // ValidSkylink returns true if the given string is a valid skylink.
 func ValidSkylink(skylink string) bool {
-	return validateSkylinkHashRE.Match([]byte(skylink))
+	var sl skymodules.Skylink
+	err := sl.LoadString(skylink)
+	return err == nil
 }
