@@ -45,7 +45,7 @@ func (api *API) userAndTokenByAPIKey(req *http.Request, ak database.APIKey) (*da
 		if req.Method != http.MethodGet {
 			return nil, nil, database.ErrInvalidAPIKey
 		}
-		sl, err := database.ExtractSkylinkHash(req.RequestURI)
+		sl, err := database.ExtractSkylink(req.RequestURI)
 		if err != nil || !akr.CoversSkylink(sl) {
 			return nil, nil, database.ErrInvalidAPIKey
 		}

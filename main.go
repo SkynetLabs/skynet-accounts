@@ -10,13 +10,13 @@ import (
 	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/joho/godotenv"
 	"github.com/stripe/stripe-go/v72"
+	"gitlab.com/SkynetLabs/skyd/build"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/sirupsen/logrus"

@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/hash"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/SkynetLabs/skyd/build"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -331,7 +331,7 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		RecoveryToken:                    "",
 		Sub:                              sub,
 		Tier:                             tier,
-		CreatedAt:                        time.Now().UTC(),
+		CreatedAt:                        time.Now().UTC().Truncate(time.Millisecond),
 		MigratedAt:                       time.Time{},
 		SubscribedUntil:                  time.Time{},
 		SubscriptionStatus:               "",
@@ -434,7 +434,7 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		RecoveryToken:                    "",
 		Sub:                              sub,
 		Tier:                             tier,
-		CreatedAt:                        time.Now().UTC(),
+		CreatedAt:                        time.Now().UTC().Truncate(time.Millisecond),
 		MigratedAt:                       time.Time{},
 		SubscribedUntil:                  time.Time{},
 		SubscriptionStatus:               "",
@@ -545,7 +545,7 @@ func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
 		"$pull": bson.M{"pub_keys": pk},
 	}
 	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
-	if err == nil && ur.MatchedCount == 0 {
+	if err == nil && ur.ModifiedCount == 0 {
 		err = mongo.ErrNoDocuments
 	}
 	return err

@@ -562,7 +562,7 @@ func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, head
 	queryParams := url.Values{}
 	queryParams.Set("unit", unit)
 	queryParams.Set("apiKey", apikey)
-	if !database.ValidSkylinkHash(sl) {
+	if !database.ValidSkylink(sl) {
 		return api.UserLimitsGET{}, 0, database.ErrInvalidSkylink
 	}
 	var resp api.UserLimitsGET
@@ -655,7 +655,7 @@ func (at *AccountsTester) UserStats(unit string, headers map[string]string) (dat
 
 // UploadInfo performs a `GET /uploadinfo/:skylink` request.
 func (at *AccountsTester) UploadInfo(sl string) ([]api.UploadInfo, int, error) {
-	if !database.ValidSkylinkHash(sl) {
+	if !database.ValidSkylink(sl) {
 		return nil, http.StatusBadRequest, database.ErrInvalidSkylink
 	}
 	var resp []api.UploadInfo

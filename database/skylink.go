@@ -32,7 +32,7 @@ type Skylink struct {
 // Skylink gets the DB object for the given skylink.
 // If it doesn't exist it creates it.
 func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
-	skylinkHash, err := ExtractSkylinkHash(skylink)
+	skylinkHash, err := ExtractSkylink(skylink)
 	if err != nil {
 		return nil, ErrInvalidSkylink
 	}
@@ -103,9 +103,9 @@ func (db *DB) SkylinkDownloadsUpdate(ctx context.Context, id primitive.ObjectID,
 	return nil
 }
 
-// ExtractSkylinkHash extracts the skylink hash from the given skylink that might
+// ExtractSkylink extracts the skylink from the given skylink URL that might
 // have protocol, path, etc. within it.
-func ExtractSkylinkHash(skylink string) (string, error) {
+func ExtractSkylink(skylink string) (string, error) {
 	m := extractSkylinkRE.FindStringSubmatch(skylink)
 	if len(m) < 3 || (m[1] == "" && m[2] == "") {
 		return "", errors.New("no valid skylink found in string " + skylink)
@@ -116,7 +116,7 @@ func ExtractSkylinkHash(skylink string) (string, error) {
 	return m[2], nil
 }
 
-// ValidSkylinkHash returns true if the given string is a valid skylink hash.
-func ValidSkylinkHash(skylink string) bool {
+// ValidSkylink returns true if the given string is a valid skylink.
+func ValidSkylink(skylink string) bool {
 	return validateSkylinkHashRE.Match([]byte(skylink))
 }

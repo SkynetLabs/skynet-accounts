@@ -32,7 +32,7 @@ type (
 // skylink.
 func (api *API) uploadInfoGET(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	skylink := ps.ByName("skylink")
-	if !database.ValidSkylinkHash(skylink) {
+	if !database.ValidSkylink(skylink) {
 		api.WriteError(w, database.ErrInvalidSkylink, http.StatusBadRequest)
 		return
 	}

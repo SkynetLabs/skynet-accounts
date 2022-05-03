@@ -100,7 +100,7 @@ func (db *DB) NewChallenge(ctx context.Context, pubKey PubKey, cType string) (*C
 		Challenge: hex.EncodeToString(fastrand.Bytes(ChallengeSize)),
 		Type:      cType,
 		PubKey:    pubKey,
-		ExpiresAt: time.Now().UTC().Add(challengeTTL),
+		ExpiresAt: time.Now().UTC().Add(challengeTTL).Truncate(time.Millisecond),
 	}
 	ior, err := db.staticChallenges.InsertOne(ctx, ch)
 	if err != nil {

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/hash"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
@@ -23,6 +22,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	jwt2 "github.com/lestrrat-go/jwx/jwt"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/SkynetLabs/skyd/build"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -504,7 +504,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	respAnon := userLimitsGetFromTier("", database.TierAnonymous, false, inBytes)
 	// Validate the skylink.
 	skylink := ps.ByName("skylink")
-	if !database.ValidSkylinkHash(skylink) {
+	if !database.ValidSkylink(skylink) {
 		api.staticLogger.Tracef("Invalid skylink: '%s'", skylink)
 		api.WriteJSON(w, respAnon)
 		return
@@ -1209,7 +1209,7 @@ func (api *API) trackRegistryWritePOST(_ *database.User, w http.ResponseWriter, 
 // userUploadsDELETE unpins all uploads of a skylink uploaded by the user.
 func (api *API) userUploadsDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sl := ps.ByName("skylink")
-	if !database.ValidSkylinkHash(sl) {
+	if !database.ValidSkylink(sl) {
 		api.WriteError(w, database.ErrInvalidSkylink, http.StatusBadRequest)
 		return
 	}
