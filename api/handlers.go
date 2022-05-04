@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -898,18 +899,23 @@ func (api *API) userUploadsGET(u *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
 	}
+	searchTerms := req.FormValue("search")
 	// Default to descending order unless the `order` param specifically
 	// requires ascending.
 	orderAsc := strings.ToLower(req.FormValue("order")) == "asc"
-	// TODO This might need some custom mapping of column names to record fields.
-	orderBy := req.FormValue("orderBy")
+	orderBy, err := translateOrderBy(req.FormValue("orderBy"), searchTerms)
+	if err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
+	}
 	opts := database.FindSkylinksOptions{
-		SearchTerms:  req.FormValue("search"),
+		SearchTerms:  searchTerms,
 		OrderByField: orderBy,
 		OrderAsc:     orderAsc,
 		Offset:       offset,
 		PageSize:     pageSize,
 	}
+	fmt.Printf("### parsed opts: %+v\n", opts)
 	ups, total, err := api.staticDB.UploadsByUser(req.Context(), *u, opts)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
@@ -1394,4 +1400,32 @@ func validateIP(ip string) string {
 		return parsedIP.String()
 	}
 	return ""
+}
+
+// translateOrderBy is a helper function that maps the names of upload fields,
+// as they appear in the UI, to their database representation names. The fields
+// here refer to the field of database.UploadResponse as defined in
+// database.generateUploadsPipeline() which ultimately uses this information.
+func translateOrderBy(field string, textSearch string) (string, error) {
+	switch field {
+	case "id":
+		return "_id", nil
+	case "name":
+		return "name", nil
+	case "size":
+		return "size", nil
+	case "skylink":
+		return "skylink", nil
+	case "uploadedOn":
+		return "timestamp", nil
+	case "":
+		if textSearch != "" {
+			// "text" is a special field value which denotes that we need to use
+			// full text search instead of using a specific column.
+			return "text", nil
+		}
+		return "", nil
+	default:
+		return "", fmt.Errorf("invalid order by field '%s'", field)
+	}
 }

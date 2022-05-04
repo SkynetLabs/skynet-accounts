@@ -545,7 +545,7 @@ func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
 		"$pull": bson.M{"pub_keys": pk},
 	}
 	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
-	if err == nil && ur.MatchedCount == 0 {
+	if err == nil && ur.ModifiedCount == 0 {
 		err = mongo.ErrNoDocuments
 	}
 	return err

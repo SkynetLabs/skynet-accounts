@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -246,9 +247,9 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 	return coll, nil
 }
 
-// generateUploadsPipeline generates a mongo pipeline for transforming
-// an `Upload` or `Download` struct into the respective
-// `<Up/Down>loadResponse` struct.
+// generateUploadsPipeline generates a mongo pipeline for transforming an
+// `Upload` struct into the respective `UploadResponse` struct. The returned
+// pipeline should be aggregated on the skylinks collection.
 //
 // The Mongo query we want to ultimately execute is:
 //	db.downloads.aggregate([
@@ -266,21 +267,14 @@ func ensureCollection(ctx context.Context, db *mongo.Database, collName string) 
 //		{ $project: { fromSkylinks: 0 } }
 //	])
 //
-// This query will get all downloads by the current user, skip $skip of them
-// and then fetch $limit of them, allowing us to paginate. It will then
-// join with the `skylinks` collection in order to fetch some additional
-// data about each download.
+// This query will get all uploads by the current user, skip $skip of them
+// and then fetch $limit of them, allowing us to paginate.
 func generateUploadsPipeline(matchStage bson.D, opts FindSkylinksOptions) mongo.Pipeline {
 	var sortDirection = -1 // desc
 	if opts.OrderAsc {
 		sortDirection = 1 // asc
 	}
-	var sortStage bson.D
-	if opts.OrderByField == "textScore" {
-		sortStage = bson.D{{"$sort", bson.D{{"score", bson.D{{"$meta", "textScore"}}}}}}
-	} else {
-		sortStage = bson.D{{"$sort", bson.D{{opts.OrderByField, sortDirection}}}}
-	}
+	sortStage := bson.D{{"$sort", bson.D{{opts.OrderByField, sortDirection}}}}
 	skipStage := bson.D{{"$skip", opts.Offset}}
 	limitStage := bson.D{{"$limit", opts.PageSize}}
 	lookupStage := bson.D{
@@ -295,15 +289,95 @@ func generateUploadsPipeline(matchStage bson.D, opts FindSkylinksOptions) mongo.
 		{"$replaceRoot", bson.D{
 			{"newRoot", bson.D{
 				{"$mergeObjects", bson.A{
-					bson.D{{"$arrayElemAt", bson.A{"$fromSkylinks", 0}}}, "$$ROOT"},
+					bson.D{{"$arrayElemAt", bson.A{"$fromSkylinks", 0}}},
+					"$$ROOT"}},
+			}},
+		}},
+	}
+	projectStage := bson.D{{"$project", bson.D{{"fromSkylinks", 0}}}}
+	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+}
+
+// generateUploadsPipelineText does bla.
+func generateUploadsPipelineText(matchStage bson.D, opts FindSkylinksOptions) mongo.Pipeline {
+	var sortDirection = -1 // desc
+	if opts.OrderAsc {
+		sortDirection = 1 // asc
+	}
+	var sortStage bson.D
+	if opts.OrderByField == "text" {
+		sortStage = bson.D{{"$sort", bson.D{{"score", bson.D{{"$meta", "textScore"}}}}}}
+	} else {
+		sortStage = bson.D{{"$sort", bson.D{{opts.OrderByField, sortDirection}}}}
+	}
+
+	/**
+
+	[
+	    { $match: {
+	        user_id: ObjectId("627233b47611b87631648360"),
+	        unpinned: false,
+	        $text: { $search: "test skylink" },
+	        }
+	    },
+	    { $sort: { score: { $meta: "textScore" } } },
+	    { $lookup: {
+	        from: "uploads",
+	        localField: "_id",
+	        foreignField: "skylink_id",
+	        as: "fromUploads"
+	      }
+	    },
+	    { $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$fromUploads", 0 ] }, "$$ROOT" ] } } },
+	    { $project: { "fromUploads": 0 } },
+	    { $skip: 0},
+	    { $limit: 10},
+	]
+
+
+	db.skylinks.explain().aggregate([
+	    { $match: {
+	        user_id: ObjectId("605325e9afc2f60129d1d109"),
+	        unpinned: {$ne: true},
+	        $text: { $search: "profile" },
+	        }
+	    },
+	    { $lookup: {
+	        from: "uploads",
+	        localField: "_id",
+	        foreignField: "skylink_id",
+	        as: "fromUploads"
+	      }
+	    },
+	    { $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$fromUploads", 0 ] }, "$$ROOT" ] } } },
+	    { $project: { "fromUploads": 0 } },
+	    { $sort: { score: { $meta: "textScore" } } },
+	    { $skip: 0},
+	    { $limit: 10},
+	])
+	*/
+
+	skipStage := bson.D{{"$skip", opts.Offset}}
+	limitStage := bson.D{{"$limit", opts.PageSize}}
+	lookupStage := bson.D{
+		{"$lookup", bson.D{
+			{"from", collUploads},
+			{"localField", "_id"},          // field in the skylinks collection
+			{"foreignField", "skylink_id"}, // field in the uploads collection
+			{"as", "fromUploads"},
+		}},
+	}
+	replaceStage := bson.D{
+		{"$replaceRoot", bson.D{
+			{"newRoot", bson.D{
+				{"$mergeObjects", bson.A{
+					bson.D{{"$arrayElemAt", bson.A{"$fromUploads", 0}}}, "$$ROOT"},
 				},
 			}},
 		}},
 	}
-	projectStage := bson.D{{"$project", bson.D{
-		{"fromSkylinks", 0},
-	}}}
-	return mongo.Pipeline{matchStage, sortStage, skipStage, limitStage, lookupStage, replaceStage, projectStage}
+	projectStage := bson.D{{"$project", bson.D{{"fromUploads", 0}}}}
+	return mongo.Pipeline{matchStage, sortStage, lookupStage, replaceStage, projectStage, skipStage, limitStage}
 }
 
 // generateDownloadsPipeline is similar to generateUploadsPipeline. The only
@@ -317,7 +391,7 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 	lookupStage := bson.D{
 		{"$lookup", bson.D{
 			{"from", "skylinks"},
-			{"localField", "skylink_id"}, // field in the downloads collection
+			{"localField", "skylink_id"}, // field in the (up/down)loads collection
 			{"foreignField", "_id"},      // field in the skylinks collection
 			{"as", "fromSkylinks"},
 		}},
@@ -356,7 +430,46 @@ func generateDownloadsPipeline(matchStage bson.D, offset, pageSize int) mongo.Pi
 // count returns the number of documents in the given collection that match the
 // given matchStage.
 func (db *DB) count(ctx context.Context, coll *mongo.Collection, matchStage bson.D) (int64, error) {
-	pipeline := mongo.Pipeline{matchStage, bson.D{{"$count", "count"}}}
+	// Detect whether the match stage uses text search. If it does, we need to
+	// join the uploads collection and the skylinks collection in order to
+	// utilise the text index there.
+	textSearch := false
+	lookupStage := bson.D{
+		{"$lookup", bson.D{
+			{"from", "skylinks"},
+			{"localField", "skylink_id"}, // field in the (up/down)loads collection
+			{"foreignField", "_id"},      // field in the skylinks collection
+			{"as", "fromSkylinks"},
+		}},
+	}
+	replaceStage := bson.D{
+		{"$replaceRoot", bson.D{
+			{"newRoot", bson.D{
+				{"$mergeObjects", bson.A{
+					bson.D{{"$arrayElemAt", bson.A{"$fromSkylinks", 0}}}, "$$ROOT"},
+				},
+			}},
+		}},
+	}
+OUTER:
+	for _, field := range matchStage {
+		// Ignoring the error on purpose - we just want to ski the field if we
+		// cannot serialize it.
+		b, _ := json.Marshal(field.Value)
+		if strings.Contains(string(b), "$search") {
+			textSearch = true
+			break OUTER
+		}
+	}
+	var pipeline []bson.D
+	if textSearch {
+		pipeline = mongo.Pipeline{matchStage, lookupStage, replaceStage, bson.D{{"$count", "count"}}}
+		fmt.Println(">>>>>>>> USING LOOKUP FOR COUNT!")
+		fmt.Printf("pipeline: %+v\n\n", pipeline)
+	} else {
+		pipeline = mongo.Pipeline{matchStage, bson.D{{"$count", "count"}}}
+	}
+
 	c, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
 		return 0, errors.AddContext(err, "DB query failed")

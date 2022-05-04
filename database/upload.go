@@ -2,12 +2,15 @@ package database
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Upload ...
@@ -138,11 +141,9 @@ func (db *DB) UploadsByUser(ctx context.Context, user User, opts FindSkylinksOpt
 		}
 	} else {
 		matchStage = bson.D{{"$match", bson.D{
-			{"$text", bson.D{
-				{"$search", opts.SearchTerms},
-			}},
 			{"user_id", user.ID},
 			{"unpinned", false},
+			{"$text", bson.D{{"$search", opts.SearchTerms}}},
 		}}}
 		// If the client didn't specifically select ordering, we'll order by
 		// the most relevant result.
@@ -159,24 +160,56 @@ func (db *DB) UploadsByUser(ctx context.Context, user User, opts FindSkylinksOpt
 // It also reports the total number of records in the list.
 func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, opts FindSkylinksOptions) ([]UploadResponse, int, error) {
 	opts.Offset, opts.PageSize = validOffsetPageSize(opts.Offset, opts.PageSize)
-	cnt, err := db.count(ctx, db.staticUploads, matchStage)
-	if err != nil || cnt == 0 {
-		return []UploadResponse{}, 0, err
+	cnt := 10 // TODO Re-enable the actual count
+	// cnt, err := db.count(ctx, db.staticUploads, matchStage)
+	// if err != nil || cnt == 0 {
+	// 	return []UploadResponse{}, 0, err
+	// }
+
+	var c *mongo.Cursor
+	var err error
+	if opts.OrderByField == "textScore" {
+		c, err = db.uploadsAggregateText(ctx, matchStage, opts)
+	} else {
+		c, err = db.uploadsAggregateGeneral(ctx, matchStage, opts)
 	}
-	c, err := db.staticUploads.Aggregate(ctx, generateUploadsPipeline(matchStage, opts))
 	if err != nil {
 		return nil, 0, err
 	}
-
 	uploads := make([]UploadResponse, opts.PageSize)
+	// uploads := make([]interface{}, opts.PageSize)
 	err = c.All(ctx, &uploads)
 	if err != nil {
 		return nil, 0, err
 	}
-	for ix := range uploads {
-		uploads[ix].RawStorage = skynet.RawStorageUsed(uploads[ix].Size)
+	fmt.Printf(" >  uploads %+v\n", uploads)
+	for idx := range uploads {
+		uploads[idx].RawStorage = skynet.RawStorageUsed(uploads[idx].Size)
 	}
 	return uploads, int(cnt), nil
+}
+
+func (db *DB) uploadsAggregateGeneral(ctx context.Context, matchStage bson.D, opts FindSkylinksOptions) (*mongo.Cursor, error) {
+	pipeline := generateUploadsPipeline(matchStage, opts)
+	fmt.Printf(" >  pipeline %+v\n", pipeline)
+	return db.staticUploads.Aggregate(ctx, pipeline)
+}
+
+func (db *DB) uploadsAggregateText(ctx context.Context, matchStage bson.D, opts FindSkylinksOptions) (*mongo.Cursor, error) {
+	pipeline := generateUploadsPipelineText(matchStage, opts)
+	c, e := db.staticSkylinks.Indexes().List(ctx)
+	if e != nil {
+		panic(e)
+	}
+	idxs := make([]interface{}, 1000)
+	e = c.All(ctx, &idxs)
+	if e != nil {
+		panic(e)
+	}
+	fmt.Printf("\n\n > Indexes: %+v\n\n", idxs)
+	pp, _ := json.Marshal(pipeline)
+	fmt.Printf(" >  pipeline %+v\n", string(pp))
+	return db.staticSkylinks.Aggregate(ctx, pipeline)
 }
 
 // validOffsetPageSize returns valid values for offset and page size. If the

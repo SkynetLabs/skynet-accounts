@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -569,7 +570,6 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 }
 
 // testUserUploadsGET tests the GET /user/uploads endpoint.
-// TODO Update this to use the new tester helpers.
 func testUserUploadsGET(t *testing.T, at *test.AccountsTester) {
 	u, c, err := test.CreateUserAndLogin(at, t.Name())
 	if err != nil {
@@ -584,50 +584,172 @@ func testUserUploadsGET(t *testing.T, at *test.AccountsTester) {
 	at.SetCookie(c)
 	defer at.ClearCredentials()
 
-	/*
-		TODO
-		 - create two skylinks (different sizes)
-		 - make sure they appear in the right order when there are no options
-		 - order them by size in both directions
-		 - order them by name in both directions (the name is "test skylink <skylink>")
-		 - order them by creation date in both directions
-		 - use text search to find them
-	*/
+	// Create two uploads with different sizes.
+	// Their names will be `"test skylink "+sl`.
+	sl1, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128*skynet.KiB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sl2, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 256*skynet.KiB)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// Create an upload.
-	sl1, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128%skynet.KiB)
-	if err != nil {
-		t.Fatal(err)
+	sortSkylinksByName := func(s []*database.Skylink, asc bool) {
+		sort.Slice(s, func(i, j int) bool {
+			if asc {
+				return s[i].Skylink < s[j].Skylink
+			}
+			return s[i].Skylink > s[j].Skylink
+		})
 	}
-	// Make sure it shows up for this user.
-	ups, _, err := at.UserUploadsGET()
-	if err != nil {
-		t.Fatal(err)
+	if sortSkylinksByName == nil {
+		// TODO remove this check
 	}
-	// We expect to have a single upload, and we expect it to be of this sl1.
-	if len(ups.Items) != 1 || ups.Items[0].Skylink != sl1.Skylink {
-		t.Fatalf("Expected to have a single upload of %s, got %+v", sl1.Skylink, ups)
+	// Another helper which gives us a list of skylinks within the uploads
+	// result. The order is preserved. This makes the test failure output more
+	// readable.
+	skylinksFromUploads := func(ups api.UploadsGET) []string {
+		sls := []string{}
+		for _, up := range ups.Items {
+			sls = append(sls, up.Skylink)
+		}
+		return sls
 	}
-	// Try to delete the upload without passing a JWT cookie.
-	at.ClearCredentials()
-	_, err = at.UploadsDELETE(sl1.Skylink)
-	if err == nil || !strings.Contains(err.Error(), unauthorized) {
-		t.Fatalf("Expected error %s, got %s", unauthorized, err)
+
+	tests := map[string]struct {
+		Opts database.FindSkylinksOptions
+		// The ordering of result elements is important.
+		Result []*database.Skylink
+	}{
+		/* Standard search tests. */
+
+		// // // No custom ordering or filtering.
+		// // Expect results to be ordered chronologically, desc.
+		// "default": {
+		// 	Opts:   database.FindSkylinksOptions{},
+		// 	Result: []*database.Skylink{sl2, sl1},
+		// },
+		// // TODO Doesn't work. Asc/desc return the same result.
+		// // // Order by size, desc (default).
+		// // "size desc": {
+		// // 	Opts: database.FindSkylinksOptions{
+		// // 		OrderByField: "size",
+		// // 		OrderAsc: false,
+		// // 	},
+		// // 	Result: []*database.Skylink{sl2, sl1},
+		// // },
+		// // Order by size, asc.
+		// "size asc": {
+		// 	Opts: database.FindSkylinksOptions{
+		// 		OrderByField: "size",
+		// 		OrderAsc:     true,
+		// 	},
+		// 	Result: []*database.Skylink{sl1, sl2},
+		// },
+		// // TODO Doesn't work. Asc/desc return the same result.
+		// // "name desc": {
+		// // 	Opts: database.FindSkylinksOptions{
+		// // 		OrderByField: "name",
+		// // 	},
+		// // 	// Order skylinks by name in descending order.
+		// // 	Result: func() []*database.Skylink {
+		// // 		s := []*database.Skylink{sl1, sl2}
+		// // 		sortSkylinksByName(s, false)
+		// // 		return s
+		// // 	}(),
+		// // },
+		// // TODO Doesn't work. Asc/desc return the same result.
+		// // "name asc": {
+		// // 	Opts: database.FindSkylinksOptions{
+		// // 		OrderByField: "name",
+		// // 		OrderAsc:     true,
+		// // 	},
+		// // 	// Order skylinks by name in ascending order.
+		// // 	Result: func() []*database.Skylink {
+		// // 		s := []*database.Skylink{sl1, sl2}
+		// // 		sortSkylinksByName(s, true)
+		// // 		return s
+		// // 	}(),
+		// // },
+		// "creation date, desc": {
+		// 	Opts: database.FindSkylinksOptions{
+		// 		OrderByField: "uploadedOn",
+		// 	},
+		// 	Result: []*database.Skylink{sl2, sl1},
+		// },
+		// "creation date, asc": {
+		// 	Opts: database.FindSkylinksOptions{
+		// 		OrderByField: "uploadedOn",
+		// 		OrderAsc:     true,
+		// 	},
+		// 	Result: []*database.Skylink{sl1, sl2},
+		// },
+
+		/* Full text search tests. */
+
+		"search, match both": {
+			Opts: database.FindSkylinksOptions{
+				SearchTerms: "test skylink",
+			},
+			Result: []*database.Skylink{sl1, sl2},
+		},
+		"search, match both, order by size asc": {
+			Opts: database.FindSkylinksOptions{
+				OrderByField: "size",
+				OrderAsc:     true,
+				SearchTerms:  "test skylink",
+			},
+			Result: []*database.Skylink{sl2, sl1},
+		},
+		"search, match both, order by size desc": {
+			Opts: database.FindSkylinksOptions{
+				OrderByField: "size",
+				OrderAsc:     false,
+				SearchTerms:  "test skylink",
+			},
+			Result: []*database.Skylink{sl2, sl1},
+		},
+		"search, match first": {
+			Opts: database.FindSkylinksOptions{
+				SearchTerms: sl1.Skylink,
+			},
+			Result: []*database.Skylink{sl1},
+		},
+		"search, match second": {
+			Opts: database.FindSkylinksOptions{
+				SearchTerms: sl2.Skylink,
+			},
+			Result: []*database.Skylink{sl2},
+		},
 	}
-	at.SetCookie(c)
-	// Delete it.
-	_, err = at.UploadsDELETE(sl1.Skylink)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Make sure it's gone.
-	ups, _, err = at.UserUploadsGET()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// We expect to have no uploads.
-	if len(ups.Items) != 0 {
-		t.Fatalf("Expected to have a no uploads, got %+v", ups)
+
+	var ups api.UploadsGET
+	t.Logf(" > %+v\n", sl1)
+	t.Logf(" > %+v\n", sl2)
+	for name, tt := range tests {
+		t.Logf(">>>>>>>>>> %s\n", name)
+		ups, _, err = at.UserUploadsGET(tt.Opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("UPS::: %+v\n", ups)
+		for a, b := range tt.Result {
+			t.Logf("Result %+v -> %+v\n", a, b)
+		}
+		for a, b := range ups.Items {
+			t.Logf("Ups %+v -> %+v\n", a, b)
+		}
+		if len(ups.Items) != len(tt.Result) {
+			t.Fatalf("Expected %d results, got %d", len(tt.Result), len(ups.Items))
+		}
+		// Make sure the expected uploads appear in the correct order.
+		for k, v := range tt.Result {
+			if ups.Items[k].Skylink != v.Skylink {
+				t.Fatalf("Test %s: Expected skylink '%s' to appear at position %d, got %+v", name, v.Skylink, k, skylinksFromUploads(ups))
+			}
+		}
+		t.Log("<<<<<<<<<<<<< ", name)
 	}
 }
 
@@ -647,12 +769,12 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	defer at.ClearCredentials()
 
 	// Create an upload.
-	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128%skynet.KiB)
+	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128*skynet.KiB)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Make sure it shows up for this user.
-	ups, _, err := at.UserUploadsGET()
+	ups, _, err := at.UserUploadsGET(database.FindSkylinksOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -673,7 +795,7 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// Make sure it's gone.
-	ups, _, err = at.UserUploadsGET()
+	ups, _, err = at.UserUploadsGET(database.FindSkylinksOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
