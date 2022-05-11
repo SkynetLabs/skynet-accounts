@@ -25,6 +25,31 @@ info:
     url: 'https://opensource.org/licenses/MIT'
 paths:
   /login:
+    get:
+      tags:
+        - User
+      summary: login with a challenge
+      operationId: loginGet
+      description: Responds with a login challenge.
+      security:
+        - { } # No authentication needed.
+      parameters:
+        - in: query
+          name: pubkey
+          schema:
+            $ref: '#/components/schemas/PubKey'
+          required: true
+      responses:
+        '200':
+          description: a login challenge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Challenge'
+        '400':
+          description: invalid input
+        '500':
+          description: internal server error
     post:
       summary: creates a user session
       operationId: login
@@ -38,11 +63,13 @@ paths:
       security:
         - { } # No authentication needed
       requestBody:
+        description: Login credentials.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Credentials'
-        description: Login credentials.
+              oneOf:
+                - $ref: '#/components/schemas/ChallengeResponse'
+                - $ref: '#/components/schemas/Credentials'
       responses:
         '204':
           description: login successful
@@ -83,6 +110,63 @@ paths:
               schema:
                 type: string
               description: Sets an encrypted cookie that contains the user's JWT.
+        '500':
+          description: internal server error
+  /register:
+    get:
+      tags:
+        - User
+      summary: register a new user
+      operationId: registerGet
+      description: Responds with a registration challenge.
+      security:
+        - { } # No authentication needed.
+      parameters:
+        - in: query
+          name: pubkey
+          schema:
+            $ref: '#/components/schemas/PubKey'
+          required: true
+      responses:
+        '200':
+          description: a registration challenge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Challenge'
+        '400':
+          description: invalid input
+        '500':
+          description: internal server error
+    post:
+      tags:
+        - User
+      summary: register a new user
+      operationId: registerPost
+      description: |
+        Allows user registration, either via challenge-response or with a set of
+        credentials.
+      security:
+        - { } # No authentication needed.
+      requestBody:
+        description: |
+          The request body should contain either a response to a challenge or 
+          a set of credentials.
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ChallengeResponse'
+                - $ref: '#/components/schemas/Credentials'
+      responses:
+        '200':
+          description: user limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Challenge'
+        '400':
+          description: invalid input
         '500':
           description: internal server error
   /user:
@@ -347,3 +431,28 @@ components:
           example: [ "AAAKvcU4_Jhzd907PyU2Tnup7INBQCh-RNr6PmvQQ0lTzQ", "_A3dyZt5FAD4Trdn800eTxAPuZVZsvQalmK-vL-l14KIsg" ]
         createdAt:
           $ref: '#/components/schemas/Timestamp'
+    PubKey:
+      type: string
+      description: The public key of the user.
+      format: hex
+      example: 9fd15482c4d10c581db5314ef00aa51c35e2b144c79c9f12c31b430cc045f886
+    Challenge:
+      type: object
+      properties:
+        challenge:
+          type: string
+          description: the challenge that needs to be solved
+          example: 818e7c0e2a3de6fbd71bebd53117dcc3959e069ffaf573724d5b27c1bc5357b4
+    ChallengeResponse:
+      type: object
+      properties:
+        response:
+          type: string
+          description: solution to the challege
+          example: 818e7c0e2a3de6fbd71bebd53117dcc3959e069ffaf573724d5b27c1bc5357b4736b796e65742d706f7274616c2d7265676973746572736961736b792e78797a
+        signature:
+          type: string
+          description: |
+            signature of the response signed with the private key of the user
+          example: f5469214e0195de537737cee0b47f2178c0e5fcb5fa3d2f1ea0cfc08c07ff5517d4424fe9f24ae9d9e6735bd1e6ff545042c23bb827d799873293c25681f9e03
+
