@@ -62,10 +62,28 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     if: ${{ (needs.changes.outputs.updates == 'true' && github.event_name == 'schedule') || github.event_name == 'workflow_dispatch' }}
+    outputs:
+      new_version: ${{ steps.version.outputs.new-version }}
     steps:
       - uses: actions/checkout@v3
       - name: Version Release
+        id: version
         uses: SkynetLabs/.github/.github/actions/version-release@master
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
-          version-bump: ${{inputs.version}}
+          version-bump: ${{github.event.inputs.version}}
+
+  docker:
+    needs: release
+    name: Build and Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v3
+
+      - uses: SkynetLabs/.github/.github/actions/docker-publish@master
+        with:
+          docker_username: ${{ secrets.DOCKER_USERNAME}}
+          docker_password: ${{ secrets.DOCKER_PASSWORD}}
+          docker_repository: skynetlabs/accounts
+          semver_version: ${{ needs.release.outputs.new_version }}
