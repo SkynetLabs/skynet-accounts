@@ -123,6 +123,9 @@ func testStripePricesGET(t *testing.T, at *test.AccountsTester) {
 	testPrices := api.StripePrices()
 	left := len(testPrices)
 	for _, p := range ps {
+		if p.Description == "" {
+			t.Errorf("Empty description for price %s", p.ID)
+		}
 		if _, exist := testPrices[p.ID]; exist {
 			left--
 		}
