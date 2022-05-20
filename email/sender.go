@@ -3,7 +3,6 @@ package email
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
