@@ -2,10 +2,13 @@ package email
 
 import (
 	"testing"
+
+	"gitlab.com/NebulousLabs/errors"
 )
 
 // TestConfig ensures that config properly parses email connection URIs.
 func TestConfig(t *testing.T) {
+	// Valid URI with skip_ssl_verify.
 	s := "smtps://test:test1@mailslurper:1025/?skip_ssl_verify=true"
 	c, err := config(s)
 	if err != nil {
@@ -14,7 +17,7 @@ func TestConfig(t *testing.T) {
 	if c.Server != "mailslurper" || c.Port != 1025 || c.User != "test" || c.Pass != "test1" || !c.InsecureSkipVerify {
 		t.Fatal("Unexpected result.")
 	}
-
+	// Valid URI without skip_ssl_verify.
 	s = "smtps://asdf:fdsa@mail.siasky.net:999"
 	c, err = config(s)
 	if err != nil {
@@ -22,6 +25,12 @@ func TestConfig(t *testing.T) {
 	}
 	if c.Server != "mail.siasky.net" || c.Port != 999 || c.User != "asdf" || c.Pass != "fdsa" || c.InsecureSkipVerify {
 		t.Fatal("Unexpected result.")
+	}
+	// Invalid URI (missing port).
+	s = "smtps://asdf:fdsa@mail.siasky.net"
+	c, err = config(s)
+	if err == nil || !errors.Contains(err, ErrInvalidEmailConfiguration) {
+		t.Fatalf("Expected error '%s', got '%s'", ErrInvalidEmailConfiguration, err)
 	}
 }
 
