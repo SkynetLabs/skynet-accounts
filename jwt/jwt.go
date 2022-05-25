@@ -6,12 +6,12 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/SkynetLabs/skyd/build"
 )
 
 var (

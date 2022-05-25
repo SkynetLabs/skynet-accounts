@@ -29,7 +29,7 @@ endif
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./ ./api ./build ./database ./email ./hash ./jwt ./lib ./metafetcher ./skynet
+pkgs = ./ ./api ./database ./email ./hash ./jwt ./lib ./metafetcher ./skynet
 
 # integration-pkgs defines the packages which contain integration tests
 integration-pkgs = ./test ./test/api ./test/database ./test/email

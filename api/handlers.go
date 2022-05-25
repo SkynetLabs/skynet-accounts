@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/hash"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
@@ -23,6 +22,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	jwt2 "github.com/lestrrat-go/jwx/jwt"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/SkynetLabs/skyd/build"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -40,6 +40,15 @@ var (
 	// flow fails. This error is sent instead of whatever internal error we had
 	// before in order to prevent an attacker from listing our users.
 	ErrInvalidCredentials = errors.New("invalid credentials")
+
+	// MyskyAllowlist contains skylinks we need to make available in order for
+	// users to be able to use MySky on all portals, including ones that require
+	// user authentication.
+	MyskyAllowlist = map[string]interface{}{
+		"AQCsSOIwqwn7lLCT0t110ImQJaI39HxrSrJ-GVNSltfUAQ": struct{}{}, // skynet-mysky
+		"AQBIMqRcHbGWXy4rlIwGW4Aa4v0w0xLb6JvUonnXazfxiw": struct{}{}, // skynet-mysky-dev
+		"AQASyOUdaov383UggiDN7izfcCH8k-3Z0FlPjtNyem1qMg": struct{}{}, // sandbridge
+	}
 )
 
 type (
@@ -496,7 +505,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 //
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
-func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) userLimitsSkylinkGET(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// inBytes is a flag indicating that the caller wants all bandwidth limits
 	// to be presented in bytes per second. The default behaviour is to present
 	// them in bits per second.
@@ -504,9 +513,16 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	respAnon := userLimitsGetFromTier("", database.TierAnonymous, false, inBytes)
 	// Validate the skylink.
 	skylink := ps.ByName("skylink")
-	if !database.ValidSkylinkHash(skylink) {
+	if !database.ValidSkylink(skylink) {
 		api.staticLogger.Tracef("Invalid skylink: '%s'", skylink)
 		api.WriteJSON(w, respAnon)
+		return
+	}
+	// For all links that belong to MySky we return the first paid tier, so
+	// anyone can access them, even on portals which require authentication or
+	// premium accounts.
+	if _, ok := MyskyAllowlist[skylink]; ok {
+		api.WriteJSON(w, userLimitsGetFromTier("", database.TierPremium5, false, inBytes))
 		return
 	}
 	// Try to fetch an API attached to the request.
@@ -514,7 +530,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	if errors.Contains(err, ErrNoAPIKey) {
 		// We failed to fetch an API key from this request but the request might
 		// be authenticated in another way, so we'll defer to userLimitsGET.
-		api.userLimitsGET(u, w, req, ps)
+		api.userLimitsGET(nil, w, req, ps)
 		return
 	}
 	if err != nil {
@@ -1209,7 +1225,7 @@ func (api *API) trackRegistryWritePOST(_ *database.User, w http.ResponseWriter, 
 // userUploadsDELETE unpins all uploads of a skylink uploaded by the user.
 func (api *API) userUploadsDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sl := ps.ByName("skylink")
-	if !database.ValidSkylinkHash(sl) {
+	if !database.ValidSkylink(sl) {
 		api.WriteError(w, database.ErrInvalidSkylink, http.StatusBadRequest)
 		return
 	}

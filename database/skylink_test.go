@@ -2,9 +2,9 @@ package database
 
 import "testing"
 
-// TestExtractSkylinkHash ensures ExtractSkylinkHash properly returns the
+// TestExtractSkylink ensures ExtractSkylink properly returns the
 // skylink hash.
-func TestExtractSkylinkHash(t *testing.T) {
+func TestExtractSkylink(t *testing.T) {
 	tests := []struct {
 		name  string
 		in    string
@@ -90,7 +90,7 @@ func TestExtractSkylinkHash(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		out, err := ExtractSkylinkHash(tt.in)
+		out, err := ExtractSkylink(tt.in)
 		if tt.valid && err != nil {
 			t.Fatalf("%s: expected %s to be valid, got error %s", tt.name, tt.in, err)
 		}
@@ -103,8 +103,8 @@ func TestExtractSkylinkHash(t *testing.T) {
 	}
 }
 
-// TestValidSkylinkHash ensures ValidSkylinkHash works properly.
-func TestValidSkylinkHash(t *testing.T) {
+// TestValidSkylink ensures ValidSkylink works properly.
+func TestValidSkylink(t *testing.T) {
 	tests := []struct {
 		name  string
 		in    string
@@ -133,7 +133,7 @@ func TestValidSkylinkHash(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		valid := ValidSkylinkHash(tt.in)
+		valid := ValidSkylink(tt.in)
 		if valid != tt.valid {
 			t.Fatalf("%s: expected %s to return %t, got %t", tt.name, tt.in, tt.valid, valid)
 		}

@@ -58,7 +58,7 @@ func (utc *userTierCache) Set(key string, u *database.User) {
 		Sub:           u.Sub,
 		Tier:          u.Tier,
 		QuotaExceeded: u.QuotaExceeded,
-		ExpiresAt:     time.Now().UTC().Add(userTierCacheTTL),
+		ExpiresAt:     time.Now().UTC().Add(userTierCacheTTL).Truncate(time.Millisecond),
 	}
 	utc.mu.Unlock()
 }

@@ -254,6 +254,8 @@ func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http
 			Limit: &stripePageSize,
 		},
 	}
+	product := "data.product"
+	params.Expand = []*string{&product}
 	params.Filters.AddFilter("limit", "", fmt.Sprint(stripePageSize))
 	i := price.List(params)
 	for i.Next() {

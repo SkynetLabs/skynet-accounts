@@ -52,7 +52,7 @@ func (db *DB) UploadCreate(ctx context.Context, user User, ip string, skylink Sk
 		UserID:     user.ID,
 		UploaderIP: ip,
 		SkylinkID:  skylink.ID,
-		Timestamp:  time.Now().UTC(),
+		Timestamp:  time.Now().UTC().Truncate(time.Millisecond),
 	}
 	ior, err := db.staticUploads.InsertOne(ctx, up)
 	if err != nil {

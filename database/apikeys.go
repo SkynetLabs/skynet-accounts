@@ -156,7 +156,7 @@ func (db *DB) APIKeyCreate(ctx context.Context, user User, name string, public b
 		Public:    public,
 		Key:       NewAPIKey(),
 		Skylinks:  skylinks,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
 	ior, err := db.staticAPIKeys.InsertOne(ctx, akr)
 	if err != nil {
@@ -240,7 +240,7 @@ func (db *DB) APIKeyUpdate(ctx context.Context, user User, akID primitive.Object
 	}
 	// Validate all given skylinks.
 	for _, s := range skylinks {
-		if !ValidSkylinkHash(s) {
+		if !ValidSkylink(s) {
 			return errors.AddContext(ErrInvalidSkylink, "offending skylink: "+s)
 		}
 	}
@@ -269,7 +269,7 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 	}
 	// Validate all given skylinks.
 	for _, s := range append(addSkylinks, removeSkylinks...) {
-		if !ValidSkylinkHash(s) {
+		if !ValidSkylink(s) {
 			return errors.AddContext(ErrInvalidSkylink, "offending skylink: "+s)
 		}
 	}

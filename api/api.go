@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
+	"gitlab.com/SkynetLabs/skyd/build"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"

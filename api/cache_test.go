@@ -13,8 +13,8 @@ func TestUserTierCache(t *testing.T) {
 	u := &database.User{
 		Sub:             t.Name(),
 		Tier:            database.TierPremium5,
-		CreatedAt:       time.Now().UTC(),
-		SubscribedUntil: time.Now().UTC().Add(100 * time.Hour),
+		CreatedAt:       time.Now().UTC().Truncate(time.Millisecond),
+		SubscribedUntil: time.Now().UTC().Add(100 * time.Hour).Truncate(time.Millisecond),
 		QuotaExceeded:   false,
 	}
 	// Get the user from the empty cache.
@@ -52,7 +52,7 @@ func TestUserTierCache(t *testing.T) {
 	}
 	// Set the user's end-of-month to be within 1 hour.
 	timeToMonthRollover := 30 * time.Minute
-	u.SubscribedUntil = time.Now().UTC().Add(timeToMonthRollover)
+	u.SubscribedUntil = time.Now().UTC().Add(timeToMonthRollover).Truncate(time.Millisecond)
 	// Update the cache.
 	cache.Set(u.Sub, u)
 	// Expect the cache entry's ExpiresAt to be after 30 minutes.

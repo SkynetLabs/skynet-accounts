@@ -18,8 +18,7 @@ var (
 	// Note: It's important that we match the base32 first because base32 is a
 	// subset of base64, so the base64 regex will match part of the base32 and
 	// return partial data which will be useless.
-	extractSkylinkRE      = regexp.MustCompile("^.*([a-z0-9]{55})|([a-zA-Z0-9-_]{46}).*$")
-	validateSkylinkHashRE = regexp.MustCompile("(^[a-z0-9]{55}$)|(^[a-zA-Z0-9-_]{46}$)")
+	extractSkylinkRE = regexp.MustCompile("^.*([a-z0-9]{55})|([a-zA-Z0-9-_]{46}).*$")
 )
 
 // Skylink represents a skylink object in the DB.
@@ -32,25 +31,25 @@ type Skylink struct {
 // Skylink gets the DB object for the given skylink.
 // If it doesn't exist it creates it.
 func (db *DB) Skylink(ctx context.Context, skylink string) (*Skylink, error) {
-	skylinkHash, err := ExtractSkylinkHash(skylink)
+	skylinkStr, err := ExtractSkylink(skylink)
 	if err != nil {
 		return nil, ErrInvalidSkylink
 	}
 	// Normalise the skylink. We want skylinks to appear in the same format in
 	// the DB, regardless of them being passed as base32 or base64.
 	var sl skymodules.Skylink
-	err = sl.LoadString(skylinkHash)
+	err = sl.LoadString(skylinkStr)
 	if err != nil {
 		return nil, ErrInvalidSkylink
 	}
-	skylinkHash = sl.String()
+	skylinkStr = sl.String()
 	// Provisional skylink object.
 	skylinkRec := Skylink{
-		Skylink: skylinkHash,
+		Skylink: skylinkStr,
 	}
 	// Try to find the skylink in the database.
-	filter := bson.M{"skylink": skylinkHash}
-	upsert := bson.M{"$setOnInsert": bson.M{"skylink": skylinkHash}}
+	filter := bson.M{"skylink": skylinkStr}
+	upsert := bson.M{"$setOnInsert": bson.M{"skylink": skylinkStr}}
 	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
 	sr := db.staticSkylinks.FindOneAndUpdate(ctx, filter, upsert, opts)
 	err = sr.Decode(&skylinkRec)
@@ -103,9 +102,9 @@ func (db *DB) SkylinkDownloadsUpdate(ctx context.Context, id primitive.ObjectID,
 	return nil
 }
 
-// ExtractSkylinkHash extracts the skylink hash from the given skylink that might
+// ExtractSkylink extracts the skylink from the given skylink URL that might
 // have protocol, path, etc. within it.
-func ExtractSkylinkHash(skylink string) (string, error) {
+func ExtractSkylink(skylink string) (string, error) {
 	m := extractSkylinkRE.FindStringSubmatch(skylink)
 	if len(m) < 3 || (m[1] == "" && m[2] == "") {
 		return "", errors.New("no valid skylink found in string " + skylink)
@@ -116,7 +115,9 @@ func ExtractSkylinkHash(skylink string) (string, error) {
 	return m[2], nil
 }
 
-// ValidSkylinkHash returns true if the given string is a valid skylink hash.
-func ValidSkylinkHash(skylink string) bool {
-	return validateSkylinkHashRE.Match([]byte(skylink))
+// ValidSkylink returns true if the given string is a valid skylink.
+func ValidSkylink(skylink string) bool {
+	var sl skymodules.Skylink
+	err := sl.LoadString(skylink)
+	return err == nil
 }
