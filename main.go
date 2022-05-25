@@ -143,6 +143,8 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 			` and it's not sharing its DB with other nodes.`, envServerDomain, config.ServerLockID)
 	}
 
+	logger.Warningf(`Stripe env var: '%s'`, envStripeAPIKey)
+	logger.Warningf(`Stripe api key: '%s'`, os.Getenv(envStripeAPIKey))
 	if sk := os.Getenv(envStripeAPIKey); sk != "" {
 		config.StripeKey = sk
 		config.StripeTestMode = !strings.HasPrefix(sk, "sk_live_")
