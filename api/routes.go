@@ -77,7 +77,9 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/user/recover/request", api.WithDBSession(api.noAuth(api.userRecoverRequestPOST)))
 	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noAuth(api.userRecoverPOST)))
 
-	api.staticRouter.GET("/stripe/billing", api.WithDBSession(api.withAuth(api.stripeBillingGET, false)))
+	api.staticRouter.GET("/stripe/billing", api.WithDBSession(api.withAuth(api.stripeBillingHANDLER, false)))
+	// `POST /stripe/billing` is deprecated. Please use `GET /stripe/billing`.
+	api.staticRouter.POST("/stripe/billing", api.WithDBSession(api.withAuth(api.stripeBillingHANDLER, false)))
 	api.staticRouter.POST("/stripe/checkout", api.WithDBSession(api.withAuth(api.stripeCheckoutPOST, false)))
 	api.staticRouter.GET("/stripe/prices", api.noAuth(api.stripePricesGET))
 	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noAuth(api.stripeWebhookPOST)))

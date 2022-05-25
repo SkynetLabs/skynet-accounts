@@ -152,10 +152,10 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	return err
 }
 
-// stripeBillingGET creates a new billing session for the user and redirects
+// stripeBillingHANDLER creates a new billing session for the user and redirects
 // them to it. If the user does not yet have a Stripe customer, one is
 // registered for them.
-func (api *API) stripeBillingGET(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *API) stripeBillingHANDLER(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	if u.StripeID == "" {
 		id, err := api.stripeCreateCustomer(req.Context(), u)
 		if err != nil {
