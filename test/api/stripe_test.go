@@ -35,7 +35,7 @@ func TestStripe(t *testing.T) {
 	api.StripeTestMode = true
 
 	tests := map[string]func(t *testing.T, at *test.AccountsTester){
-		"post billing":  testStripeBillingPOST,
+		"post billing":  testStripeBillingGET,
 		"get prices":    testStripePricesGET,
 		"post checkout": testStripeCheckoutPOST,
 	}
@@ -52,8 +52,8 @@ func TestStripe(t *testing.T) {
 	}
 }
 
-// testStripeBillingPOST ensures that we can create a new billing session.
-func testStripeBillingPOST(t *testing.T, at *test.AccountsTester) {
+// testStripeBillingGET ensures that we can create a new billing session.
+func testStripeBillingGET(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	r, _, err := at.UserPOST(name+"@siasky.net", name+"pass")
 	if err != nil {
@@ -65,7 +65,7 @@ func testStripeBillingPOST(t *testing.T, at *test.AccountsTester) {
 
 	// Try to start a billing session without valid user auth.
 	at.ClearCredentials()
-	_, s, err := at.StripeBillingPOST()
+	_, s, err := at.StripeBillingGET()
 	if err == nil || s != http.StatusUnauthorized {
 		t.Fatalf("Expected 401 Unauthorized, got %d %s", s, err)
 	}
@@ -73,7 +73,7 @@ func testStripeBillingPOST(t *testing.T, at *test.AccountsTester) {
 	// fail case, we expect that to happen. In production we'll follow that
 	// redirect.
 	at.SetCookie(c)
-	h, s, err := at.StripeBillingPOST()
+	h, s, err := at.StripeBillingGET()
 	if err != nil || s != http.StatusTemporaryRedirect {
 		t.Fatalf("Expected %d and no error, got %d '%s'", http.StatusTemporaryRedirect, s, err)
 	}
