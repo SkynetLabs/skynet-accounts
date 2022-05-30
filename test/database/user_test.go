@@ -265,7 +265,7 @@ func TestUserConfirmEmail(t *testing.T) {
 		t.Fatal("Failed to generate a token.")
 	}
 	// Set the expiration of the token in the past.
-	u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(-time.Minute)
+	u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 	err = db.UserSave(ctx, u)
 	if err != nil {
 		t.Fatal("Failed to save the user:", err)

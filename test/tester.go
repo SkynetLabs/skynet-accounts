@@ -668,6 +668,17 @@ func (at *AccountsTester) UploadInfo(sl string) ([]api.UploadInfo, int, error) {
 
 /*** Stripe helpers ***/
 
+// StripeBillingGET performs a `GET /stripe/billing`
+func (at *AccountsTester) StripeBillingGET() (http.Header, int, error) {
+	r, err := at.Request(http.MethodGet, "/stripe/billing", nil, nil, nil, nil)
+	// We ignore the temporary redirect error because it's the expected
+	// behaviour of this endpoint.
+	if err != nil && !strings.Contains(err.Error(), "307 Temporary Redirect") {
+		return nil, r.StatusCode, err
+	}
+	return r.Header, r.StatusCode, nil
+}
+
 // StripeBillingPOST performs a `POST /stripe/billing`
 func (at *AccountsTester) StripeBillingPOST() (http.Header, int, error) {
 	r, err := at.Request(http.MethodPost, "/stripe/billing", nil, nil, nil, nil)
