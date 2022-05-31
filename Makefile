@@ -1,9 +1,9 @@
 # These variables get inserted into ./build/commit.go
-BUILD_TIME=$(shell date)
+BUILD_TIME=$(shell date -u)
 GIT_REVISION=$(shell git rev-parse --short HEAD)
 GIT_DIRTY=$(shell git diff-index --quiet HEAD -- || echo "✗-")
 
-ldflags= -X github.com/SkynetLabs/skynet-accounts/build.GitRevision=${GIT_DIRTY}${GIT_REVISION} \
+ldflags= -X "github.com/SkynetLabs/skynet-accounts/build.GitRevision=${GIT_DIRTY}${GIT_REVISION}" \
 -X "github.com/SkynetLabs/skynet-accounts/build.BuildTime=${BUILD_TIME}"
 
 racevars= history_size=3 halt_on_error=1 atexit_sleep_ms=2000
@@ -124,7 +124,7 @@ dev-race:
 
 # release builds and installs release binaries.
 release:
-	go install -tags='netgo' -ldflags='-s -w $(ldflags)' $(release-pkgs)
+	go install -tags='netgo dev' -ldflags='-s -w $(ldflags)' $(release-pkgs)
 release-race:
 	GORACE='$(racevars)' go install -race -tags='netgo' -ldflags='-s -w $(ldflags)' $(release-pkgs)
 release-util:
