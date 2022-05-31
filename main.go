@@ -264,6 +264,6 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
-	fmt.Printf("Starting Accounts.\nGitRevision: %v (built %v)\n", build.GitRevision, build.BuildTime)
+	log.Printf("Starting Accounts.\nGitRevision: %v (built %v)\n", build.GitRevision, build.BuildTime)
 	logger.Fatal(server.ListenAndServe(3000))
 }
