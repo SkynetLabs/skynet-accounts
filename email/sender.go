@@ -23,6 +23,9 @@ const (
 )
 
 var (
+	// ErrInvalidEmailConfiguration is returned when  the email URI given in the
+	// environment (ACCOUNTS_EMAIL_URI) is either empty or otherwise invalid.
+	ErrInvalidEmailConfiguration = errors.New("missing or invalid email configuration field ACCOUNTS_EMAIL_URI")
 	// From is the address we send emails from. It defaults to the user
 	// from DefaultConnectionURI but can be overridden by the ACCOUNTS_EMAIL_FROM
 	// environment variable.
@@ -202,6 +205,9 @@ func (s Sender) sendMultiple(m ...*mail.Message) error {
 // values from it.
 func config(connURI string) (emailConfig, error) {
 	match := matchPattern.FindStringSubmatch(connURI)
+	if len(match) == 0 {
+		return emailConfig{}, ErrInvalidEmailConfiguration
+	}
 	result := make(map[string]string)
 	for i, name := range matchPattern.SubexpNames() {
 		if i != 0 && name != "" {
@@ -216,14 +222,14 @@ func config(connURI string) (emailConfig, error) {
 	// These fields are obligatory, so we return an error if any of them are
 	// missing.
 	if !(e1 && e2 && e3 && e4) {
-		return emailConfig{}, errors.New("missing obligatory email configuration field. One of server, port, user, or password is missing")
+		return emailConfig{}, ErrInvalidEmailConfiguration
 	}
 	user, err1 := url.QueryUnescape(user)
 	password, err2 := url.QueryUnescape(password)
 	port, err3 := strconv.Atoi(portStr)
 	err := errors.Compose(err1, err2, err3)
 	if err != nil {
-		return emailConfig{}, errors.AddContext(err, "invalid value for username, password, or port in email connection string")
+		return emailConfig{}, errors.Compose(err, ErrInvalidEmailConfiguration)
 	}
 	skip := result["skip_ssl_verify"]
 	return emailConfig{

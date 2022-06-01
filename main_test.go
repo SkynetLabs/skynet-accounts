@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 )
@@ -143,7 +144,7 @@ func TestParseConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = parseConfiguration(logger)
-	if err == nil || !strings.Contains(err.Error(), envEmailURI+" is empty") {
+	if err == nil || !errors.Contains(err, email.ErrInvalidEmailConfiguration) {
 		t.Fatal("Failed to error out on empty", envEmailURI)
 	}
 	// Invalid ACCOUNTS_EMAIL_URI
@@ -152,7 +153,7 @@ func TestParseConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = parseConfiguration(logger)
-	if err == nil || !strings.Contains(err.Error(), "invalid email URI") {
+	if err == nil || !errors.Contains(err, email.ErrInvalidEmailConfiguration) {
 		t.Log(err)
 		t.Fatal("Failed to error out on invalid", envEmailURI)
 	}

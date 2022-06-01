@@ -171,12 +171,12 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 	config.EmailURI = os.Getenv(envEmailURI)
 	{
 		if config.EmailURI == "" {
-			return ServiceConfig{}, errors.New(envEmailURI + " is empty")
+			return ServiceConfig{}, email.ErrInvalidEmailConfiguration
 		}
 		// Validate the given URI.
 		uri, err := url.Parse(config.EmailURI)
 		if err != nil || uri.Host == "" || uri.User == nil {
-			return ServiceConfig{}, errors.New("invalid email URI given in " + envEmailURI)
+			return ServiceConfig{}, email.ErrInvalidEmailConfiguration
 		}
 		// Set the FROM address to outgoing emails. This can be overridden by
 		// the ACCOUNTS_EMAIL_FROM optional environment variable.
