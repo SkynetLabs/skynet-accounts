@@ -53,10 +53,8 @@ var (
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
 		TierAnonymous: {
-			TierName:        "anonymous",
-			UploadBandwidth: 5 * mbpsToBytesPerSecond,
-			// TODO: temporarily lowered the download bandwidth on the anon tier
-			// from 20mbps to 5mbps
+			TierName:          "anonymous",
+			UploadBandwidth:   5 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 5 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  0,
