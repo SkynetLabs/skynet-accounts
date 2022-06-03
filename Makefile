@@ -167,4 +167,4 @@ docker-generate: clean
 	sleep 3
 	@docker stop genenv || true && docker rm --force genenv
 
-.PHONY: all fmt install release clean check test test-int test-long test-single start-mongo stop-mongo docker-generate
+.PHONY: all fmt install release clean check test test-long test-single start-mongo stop-mongo docker-generate
