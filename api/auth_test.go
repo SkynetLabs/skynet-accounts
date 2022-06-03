@@ -10,6 +10,7 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
@@ -47,7 +48,7 @@ func TestTokenFromRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := jwt.TokenForUser(t.Name()+"@siasky.net", t.Name()+"_sub")
+	tk, err := jwt.TokenForUser(types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"_sub")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,7 @@ func TestTokenFromRequest(t *testing.T) {
 
 	// Token from request with a header and a cookie. Expect the header to take
 	// precedence.
-	tk2, err := jwt.TokenForUser(t.Name()+"2@siasky.net", t.Name()+"2_sub")
+	tk2, err := jwt.TokenForUser(types.NewEmail(t.Name()+"2@siasky.net"), t.Name()+"2_sub")
 	if err != nil {
 		t.Fatal(err)
 	}

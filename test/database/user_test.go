@@ -11,6 +11,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -27,7 +28,7 @@ func TestUserByEmail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	email := t.Name() + "@siasky.net"
+	email := types.NewEmail(t.Name() + "@siasky.net")
 	pass := t.Name() + "password"
 	sub := t.Name() + "sub"
 	// Ensure we don't have a user with this email and the method handles that
@@ -122,7 +123,7 @@ func TestUserByPubKey(t *testing.T) {
 	}
 
 	// Create a user with this pubkey.
-	u, err := db.UserCreatePK(ctx, name+"@siasky.net", name+"pass", name+"sub", pk, database.TierFree)
+	u, err := db.UserCreatePK(ctx, types.NewEmail(name+"@siasky.net"), name+"pass", name+"sub", pk, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +173,7 @@ func TestUserByStripeID(t *testing.T) {
 		t.Fatalf("Expected error %v, got %v.\n", database.ErrUserNotFound, err)
 	}
 	// Create a test user with the respective StripeID.
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +249,7 @@ func TestUserConfirmEmail(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to connect to the DB:", err)
 	}
-	emailAddr := t.Name() + "@siasky.net"
+	emailAddr := types.NewEmail(t.Name() + "@siasky.net")
 	// Create a user with this email.
 	u, err := db.UserCreate(ctx, emailAddr, "password", "sub", database.TierFree)
 	if err != nil {
@@ -287,7 +288,7 @@ func TestUserCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	email := t.Name() + "@siasky.net"
+	email := types.NewEmail(t.Name() + "@siasky.net")
 	pass := t.Name() + "pass"
 	sub := t.Name() + "sub"
 
@@ -315,7 +316,7 @@ func TestUserCreate(t *testing.T) {
 	if fu == nil {
 		t.Fatal("Expected to find a user but didn't.")
 	}
-	newEmail := t.Name() + "_new@siasky.net"
+	newEmail := types.NewEmail(t.Name() + "_new@siasky.net")
 	newPass := t.Name() + "pass_new"
 	newSub := t.Name() + "sub_new"
 	// Try to create a user with an email which is already in use.
@@ -338,7 +339,7 @@ func TestUserCreateEmailConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +409,7 @@ func TestUserSave(t *testing.T) {
 	username := t.Name()
 	// Case: save a user that doesn't exist in the DB.
 	u := &database.User{
-		Email: username + "@siasky.net",
+		Email: types.NewEmail(username + "@siasky.net"),
 		Sub:   t.Name() + "sub",
 		Tier:  database.TierFree,
 	}
@@ -424,7 +425,7 @@ func TestUserSave(t *testing.T) {
 		t.Fatalf("Expected user id %s, got %s.", u.ID.Hex(), u1.ID.Hex())
 	}
 	// Case: save a user that does exist in the DB.
-	u.Email = username + "_changed@siasky.net"
+	u.Email = types.NewEmail(username + "_changed@siasky.net")
 	u.Tier = database.TierPremium80
 	err = db.UserSave(ctx, u)
 	if err != nil {
@@ -453,7 +454,7 @@ func TestUserSetStripeID(t *testing.T) {
 
 	stripeID := t.Name() + "stripeid"
 	// Create a test user with the respective StripeID.
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +486,7 @@ func TestUserPubKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Create a test user.
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,7 +570,7 @@ func TestUserSetTier(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Create a test user with the respective StripeID.
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
