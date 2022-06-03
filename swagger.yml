@@ -24,6 +24,42 @@ info:
     name: MIT
     url: 'https://opensource.org/licenses/MIT'
 paths:
+  /health:
+    get:
+      tags:
+        - Server
+      summary: server health
+      operationId: healthGet
+      description: Get the current server health.
+      security:
+        - { } # No authentication needed.
+      responses:
+        '200':
+          description: server health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '500':
+          description: internal server error
+  /limits:
+    get:
+      tags:
+        - Portal
+      summary: tier limits
+      operationId: limitsGet
+      description: Get the tier limits applied by this portal.
+      security:
+        - { } # No authentication needed.
+      responses:
+        '200':
+          description: tier limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Limits'
+        '500':
+          description: internal server error
   /login:
     get:
       tags:
@@ -169,6 +205,98 @@ paths:
           description: invalid input
         '500':
           description: internal server error
+  /track/upload/{skylink}:
+    post:
+      tags:
+        - Track
+      summary: Track an upload.
+      description: Track an upload.
+      operationId: trackUpload
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+        - { }
+      parameters:
+        - in: path
+          name: skylink
+          required: true
+          schema:
+            $ref: '#/components/schemas/Skylink'
+        - in: query # TODO is this in the query?
+          name: ip
+          required: true
+          schema:
+            $ref: '#/components/schemas/IP'
+      responses:
+        '204':
+          description: no content
+        '400':
+          description: bad request
+        '500':
+          description: internal server error
+  /track/download/{skylink}:
+    post:
+      tags:
+        - Track
+      summary: Track a download.
+      description: Track a download.
+      operationId: trackDownload
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      parameters:
+        - in: path
+          name: skylink
+          required: true
+          schema:
+            $ref: '#/components/schemas/Skylink'
+      responses:
+        '204':
+          description: no content
+        '400':
+          description: bad request
+        '401':
+          description: unauthorized
+        '500':
+          description: internal server error
+  /track/registry/read:
+    post:
+      tags:
+        - Track
+      summary: ( NOOP ) Track a registry read.
+      description: ( NOOP ) Track a registry read.
+      operationId: trackRegRead
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '204':
+          description: no content
+        '400':
+          description: bad request
+        '500':
+          description: internal server error
+  /track/registry/write:
+    post:
+      tags:
+        - Track
+      summary: ( NOOP ) Track a registry write.
+      description: ( NOOP ) Track a registry write.
+      operationId: trackRegWrite
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '204':
+          description: no content
+        '400':
+          description: bad request
+        '500':
+          description: internal server error
   /user:
     get:
       tags:
@@ -223,7 +351,7 @@ paths:
               description: Sets an encrypted cookie that contains the user's JWT.
               example: skynet-jwt=abcde12345; Path=/; HttpOnly; Secure
         '400':
-          description: invalid input
+          description: bad request
         '500':
           description: internal server error
   /user/limits:
@@ -302,6 +430,58 @@ components:
       in: cookie
       name: skynet-jwt
   schemas:
+    Health:
+      type: object
+      description: The health status of the current server.
+      properties:
+        DBAlive:
+          type: boolean
+    Limits:
+      type: object
+      description: The limits this portal puts on accounts based on their tier.
+      properties:
+        UserLimits:
+          type: array
+          items:
+            $ref: '#/components/schemas/TierLimit'
+    TierLimit:
+      type: object
+      description: The limits applied to account of a given tier.
+      properties:
+        tierName:
+          type: string
+          example: extreme
+        uploadBandwidth:
+          type: number
+          description: The allowed upload speed in bits per second.
+          example: 83886080
+        downloadBandwidth:
+          type: number
+          description: The allowed download speed in bits per second.
+          example: 335544320
+        maxUploadSize:
+          type: number
+          description: The maximum allowed upload size in bytes.
+          example: 10995116277760
+        maxNumberUploads:
+          type: number
+          description: |
+            The maximum allowed number of individual uploads, i.e. uploaded
+            skylinks. If the user exceeds this, their speed limits will be 
+            brought down to `anonymous` level.
+          example: 500000
+        registryDelay:
+          type: number
+          description: |
+            The delay the user suffers when interacting with the registry.
+          example: 0
+        storageLimit:
+          type: number
+          description: |
+            The maximum allowed storage (in bytes) the used can use before being
+            penalized. If the user exceeds this, their speed limits will be 
+            brought down to `anonymous` level.
+          example: 21990232555520
     Credentials:
       type: object
       required:
@@ -312,6 +492,14 @@ components:
           $ref: '#/components/schemas/Email'
         password:
           $ref: '#/components/schemas/Password'
+    IP:
+      type: string
+      description: The IP address of the user.
+      example: 192.168.0.1
+    Skylink:
+      type: string
+      description: Skylink - a unique identifier of the uploaded content.
+      example: XAB_xFb-zDRG0YWHbr_vmc47phAvF6b8LQM-V_mh7Ts-Kw
     Email:
       type: string
       format: email
@@ -455,4 +643,3 @@ components:
           description: |
             signature of the response signed with the private key of the user
           example: f5469214e0195de537737cee0b47f2178c0e5fcb5fa3d2f1ea0cfc08c07ff5517d4424fe9f24ae9d9e6735bd1e6ff545042c23bb827d799873293c25681f9e03
-
