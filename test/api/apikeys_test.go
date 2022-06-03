@@ -331,7 +331,7 @@ func testAPIKeysAcceptance(t *testing.T, at *test.AccountsTester) {
 	// Stop using the cookie, use the public API key instead.
 	at.SetAPIKey(pakWithKey.Key.String())
 
-	// Call all routes that shouldn't accept API keys and make sure they return
+	// Call all routes that should NOT accept API keys and make sure they return
 	// the right error.
 	tests := []struct {
 		verb     string
@@ -348,12 +348,6 @@ func testAPIKeysAcceptance(t *testing.T, at *test.AccountsTester) {
 		{verb: http.MethodGet, endpoint: "/user/uploads"},
 		{verb: http.MethodDelete, endpoint: "/user/uploads/someSkylink"},
 		{verb: http.MethodGet, endpoint: "/user/downloads"},
-		{verb: http.MethodPost, endpoint: "/user/apikeys"},
-		{verb: http.MethodGet, endpoint: "/user/apikeys"},
-		{verb: http.MethodGet, endpoint: "/user/apikeys/someId"},
-		{verb: http.MethodPut, endpoint: "/user/apikeys/someId"},
-		{verb: http.MethodPatch, endpoint: "/user/apikeys/someId"},
-		{verb: http.MethodDelete, endpoint: "/user/apikeys/someId"},
 		{verb: http.MethodPost, endpoint: "/user/reconfirm"},
 	}
 
@@ -361,6 +355,31 @@ func testAPIKeysAcceptance(t *testing.T, at *test.AccountsTester) {
 		r, err = at.Request(tt.verb, tt.endpoint, nil, nil, nil, nil)
 		if err == nil || r.StatusCode != http.StatusUnauthorized || !strings.Contains(err.Error(), api.ErrAPIKeyNotAllowed.Error()) {
 			t.Errorf("Expected error '%s' with status %d, got '%s' with status %d. Endpoint %s %s", api.ErrAPIKeyNotAllowed, http.StatusUnauthorized, err, r.StatusCode, tt.verb, tt.endpoint)
+		}
+	}
+
+	// Call all routes that SHOULD accept API keys and make sure they don't
+	// return an API key acceptance error.
+	tests = []struct {
+		verb     string
+		endpoint string
+	}{
+		{verb: http.MethodPost, endpoint: "/track/upload/:skylink"},
+		{verb: http.MethodPost, endpoint: "/track/download/:skylink"},
+		{verb: http.MethodPost, endpoint: "/track/registry/read"},
+		{verb: http.MethodPost, endpoint: "/track/registry/write"},
+		{verb: http.MethodPost, endpoint: "/user/apikeys"},
+		{verb: http.MethodGet, endpoint: "/user/apikeys"},
+		{verb: http.MethodGet, endpoint: "/user/apikeys/someId"},
+		{verb: http.MethodPut, endpoint: "/user/apikeys/someId"},
+		{verb: http.MethodPatch, endpoint: "/user/apikeys/someId"},
+		{verb: http.MethodDelete, endpoint: "/user/apikeys/someId"},
+	}
+
+	for _, tt := range tests {
+		r, err = at.Request(tt.verb, tt.endpoint, nil, nil, nil, nil)
+		if err != nil && strings.Contains(err.Error(), api.ErrAPIKeyNotAllowed.Error()) {
+			t.Errorf("Unexpected error '%s'. Endpoint %s %s", err, tt.verb, tt.endpoint)
 		}
 	}
 }
