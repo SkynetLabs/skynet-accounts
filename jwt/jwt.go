@@ -6,21 +6,21 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/SkynetLabs/skyd/build"
 )
 
 var (
 	// AccountsJWKS is the public RS key set used by accounts for JWT signing.
-	AccountsJWKS jwk.Set = nil
+	AccountsJWKS jwk.Set
 
 	// AccountsPublicJWKS is a verification-only version of the JWKS.
 	// We cannot use the full version of the JWKS for verification.
-	AccountsPublicJWKS jwk.Set = nil
+	AccountsPublicJWKS jwk.Set
 
 	// AccountsJWKSFile defines where to look for the JWKS file.
 	// Can be overridden by the ACCOUNTS_JWKS_FILE environment variable.

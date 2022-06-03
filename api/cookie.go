@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/gorilla/securecookie"
 	"github.com/joho/godotenv"
+	"gitlab.com/SkynetLabs/skyd/build"
 )
 
 const (

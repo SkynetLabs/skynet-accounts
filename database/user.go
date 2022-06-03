@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/hash"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/SkynetLabs/skyd/build"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -34,30 +34,27 @@ const (
 	// TierMaxReserved is a guard value that helps us validate tier values.
 	TierMaxReserved
 
-	// mbpsToBytesPerSecond is a multiplier to get from megabits per second to
-	// bytes per second.
-	mbpsToBytesPerSecond = 1024 * 1024 / 8
-
-	// filesAllowedPerTB defines a limit of number of uploaded files we impose
-	// on users. While we define it per TB, we impose it based on their entire
+	// filesAllowedPerTiB defines a limit of number of uploaded files we impose
+	// on users. While we define it per TiB, we impose it based on their entire
 	// quota, so an Extreme user will be able to upload up to 400_000 files
 	// before being hit with a speed limit.
-	filesAllowedPerTB = 25_000
+	filesAllowedPerTiB = 25_000
+
+	// mbpsToBytesPerSecond is a multiplier to get from mebibits per second to
+	// bytes per second.
+	mbpsToBytesPerSecond = 1024 * 1024 / 8
 )
 
 var (
-	// True is a helper for when we need to pass a *bool to MongoDB.
-	True = true
-	// False is a helper for when we need to pass a *bool to MongoDB.
-	False = false
+	// AnonUser is a helper struct that we can use when we don't have a relevant
+	// user, e.g. when an upload is made by an anonymous user.
+	AnonUser = User{}
 	// UserLimits defines the speed limits for each tier.
 	// RegistryDelay delay is in ms.
 	UserLimits = map[int]TierLimits{
 		TierAnonymous: {
-			TierName:        "anonymous",
-			UploadBandwidth: 5 * mbpsToBytesPerSecond,
-			// TODO: temporarily lowered the download bandwidth on the anon tier
-			// from 20mbps to 5mpbs
+			TierName:          "anonymous",
+			UploadBandwidth:   5 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 5 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.GiB,
 			MaxNumberUploads:  0,
@@ -69,7 +66,7 @@ var (
 			UploadBandwidth:   10 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 40 * mbpsToBytesPerSecond,
 			MaxUploadSize:     100 * skynet.GiB,
-			MaxNumberUploads:  0.1 * filesAllowedPerTB,
+			MaxNumberUploads:  0.1 * filesAllowedPerTiB,
 			RegistryDelay:     125,
 			Storage:           100 * skynet.GiB,
 		},
@@ -78,7 +75,7 @@ var (
 			UploadBandwidth:   20 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 80 * mbpsToBytesPerSecond,
 			MaxUploadSize:     1 * skynet.TiB,
-			MaxNumberUploads:  1 * filesAllowedPerTB,
+			MaxNumberUploads:  1 * filesAllowedPerTiB,
 			RegistryDelay:     0,
 			Storage:           1 * skynet.TiB,
 		},
@@ -87,7 +84,7 @@ var (
 			UploadBandwidth:   40 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 160 * mbpsToBytesPerSecond,
 			MaxUploadSize:     4 * skynet.TiB,
-			MaxNumberUploads:  4 * filesAllowedPerTB,
+			MaxNumberUploads:  4 * filesAllowedPerTiB,
 			RegistryDelay:     0,
 			Storage:           4 * skynet.TiB,
 		},
@@ -96,7 +93,7 @@ var (
 			UploadBandwidth:   80 * mbpsToBytesPerSecond,
 			DownloadBandwidth: 320 * mbpsToBytesPerSecond,
 			MaxUploadSize:     10 * skynet.TiB,
-			MaxNumberUploads:  20 * filesAllowedPerTB,
+			MaxNumberUploads:  20 * filesAllowedPerTiB,
 			RegistryDelay:     0,
 			Storage:           20 * skynet.TiB,
 		},
@@ -128,10 +125,7 @@ type (
 		SubscriptionCancelAtPeriodEnd    bool               `bson:"subscription_cancel_at_period_end" json:"subscriptionCancelAtPeriodEnd"`
 		StripeID                         string             `bson:"stripe_id" json:"stripeCustomerId"`
 		QuotaExceeded                    bool               `bson:"quota_exceeded" json:"quotaExceeded"`
-		// The currently active (or default) key is going to be the first one in
-		// the list. If we want to activate a new pubkey, we'll just move it to
-		// the first position in the list.
-		PubKeys []PubKey `bson:"pub_keys" json:"-"`
+		PubKeys                          []PubKey           `bson:"pub_keys" json:"-"`
 	}
 	// UserStats contains statistical information about the user.
 	UserStats struct {
@@ -171,8 +165,7 @@ func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error) {
 
 // UserByID finds a user by their ID.
 func (db *DB) UserByID(ctx context.Context, id primitive.ObjectID) (*User, error) {
-	filter := bson.D{{"_id", id}}
-	c, err := db.staticUsers.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, bson.M{"_id": id})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
@@ -219,8 +212,7 @@ func (db *DB) UserByRecoveryToken(ctx context.Context, token string) (*User, err
 
 // UserByStripeID finds a user by their Stripe customer id.
 func (db *DB) UserByStripeID(ctx context.Context, id string) (*User, error) {
-	filter := bson.D{{"stripe_id", id}}
-	c, err := db.staticUsers.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, bson.M{"stripe_id": id})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to Find")
 	}
@@ -334,8 +326,18 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
+		RecoveryToken:                    "",
 		Sub:                              sub,
 		Tier:                             tier,
+		CreatedAt:                        time.Now().UTC().Truncate(time.Millisecond),
+		MigratedAt:                       time.Time{},
+		SubscribedUntil:                  time.Time{},
+		SubscriptionStatus:               "",
+		SubscriptionCancelAt:             time.Time{},
+		SubscriptionCancelAtPeriodEnd:    false,
+		StripeID:                         "",
+		QuotaExceeded:                    false,
+		PubKeys:                          make([]PubKey, 0),
 	}
 	// TODO This part can race and create multiple accounts with the same email, unless we add DB-level uniqueness restriction.
 	// Insert the user.
@@ -349,6 +351,29 @@ func (db *DB) UserCreate(ctx context.Context, emailAddr, pass, sub string, tier 
 	}
 	u.ID = ir.InsertedID.(primitive.ObjectID)
 	return u, nil
+}
+
+// UserCreateEmailConfirmation creates a new email confirmation record for this
+// user.
+func (db *DB) UserCreateEmailConfirmation(ctx context.Context, uID primitive.ObjectID) (string, error) {
+	exp := time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond)
+	tk, err := lib.GenerateUUID()
+	if err != nil {
+		return "", err
+	}
+	filter := bson.M{"_id": uID}
+	update := bson.M{
+		"$set": bson.M{
+			"email_confirmation_token":            tk,
+			"email_confirmation_token_expiration": exp,
+		},
+	}
+	opts := options.Update().SetUpsert(false)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return "", err
+	}
+	return tk, nil
 }
 
 // UserCreatePK creates a new user with a pubkey in the DB.
@@ -404,8 +429,17 @@ func (db *DB) UserCreatePK(ctx context.Context, emailAddr, pass, sub string, pk 
 		EmailConfirmationToken:           emailConfToken,
 		EmailConfirmationTokenExpiration: time.Now().UTC().Add(EmailConfirmationTokenTTL).Truncate(time.Millisecond),
 		PasswordHash:                     string(passHash),
+		RecoveryToken:                    "",
 		Sub:                              sub,
 		Tier:                             tier,
+		CreatedAt:                        time.Now().UTC().Truncate(time.Millisecond),
+		MigratedAt:                       time.Time{},
+		SubscribedUntil:                  time.Time{},
+		SubscriptionStatus:               "",
+		SubscriptionCancelAt:             time.Time{},
+		SubscriptionCancelAtPeriodEnd:    false,
+		StripeID:                         "",
+		QuotaExceeded:                    false,
 		PubKeys:                          []PubKey{pk},
 	}
 	// Insert the user.
@@ -427,7 +461,7 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 		return errors.AddContext(ErrUserNotFound, "user struct not fully initialised")
 	}
 	// Delete all data associated with this user.
-	filter := bson.D{{"user_id", u.ID}}
+	filter := bson.M{"user_id": u.ID}
 	_, err := db.staticDownloads.DeleteMany(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user downloads")
@@ -448,12 +482,12 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user API keys")
 	}
-	_, err = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.D{{"sub", u.Sub}})
+	_, err = db.staticUnconfirmedUserUpdates.DeleteMany(ctx, bson.M{"sub": u.Sub})
 	if err != nil {
 		return errors.AddContext(err, "failed to delete user unconfirmed updates")
 	}
 	// Delete the actual user.
-	filter = bson.D{{"_id", u.ID}}
+	filter = bson.M{"_id": u.ID}
 	dr, err := db.staticUsers.DeleteOne(ctx, filter)
 	if err != nil {
 		return errors.AddContext(err, "failed to Delete")
@@ -467,14 +501,52 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 // UserSave saves the user to the DB.
 func (db *DB) UserSave(ctx context.Context, u *User) error {
 	filter := bson.M{"_id": u.ID}
-	opts := &options.ReplaceOptions{
-		Upsert: &True,
-	}
+	opts := options.Replace().SetUpsert(true)
 	_, err := db.staticUsers.ReplaceOne(ctx, filter, u, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
 	}
 	return nil
+}
+
+// UserPubKeyAdd adds a new PubKey to the given user's set.
+func (db *DB) UserPubKeyAdd(ctx context.Context, u User, pk PubKey) (err error) {
+	filter := bson.M{"_id": u.ID}
+	// This update is so complicated because we can't use mutation operations
+	// like $push, $addToSet and so on if the target field is null. That's why
+	// here we check if the field is an array and then merge the key in. If the
+	// field is not an array (i.e. it's null) we set it to an empty array before
+	// performing the merge.
+	update := bson.A{
+		bson.M{
+			"$set": bson.M{
+				"pub_keys": bson.M{
+					"$cond": bson.A{
+						bson.M{"$eq": bson.A{bson.M{"$type": "$pub_keys"}, "array"}},
+						bson.M{"$setUnion": bson.A{"$pub_keys", bson.A{pk}}},
+						bson.A{pk},
+					}},
+			},
+		},
+	}
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update)
+	return err
+}
+
+// UserPubKeyRemove removes a PubKey from the given user's set.
+func (db *DB) UserPubKeyRemove(ctx context.Context, u User, pk PubKey) error {
+	filter := bson.M{
+		"_id":      u.ID,
+		"pub_keys": bson.M{"$ne": nil},
+	}
+	update := bson.M{
+		"$pull": bson.M{"pub_keys": pk},
+	}
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
+	if err == nil && ur.ModifiedCount == 0 {
+		err = mongo.ErrNoDocuments
+	}
+	return err
 }
 
 // UserSetStripeID changes the user's stripe id in the DB.
@@ -521,8 +593,7 @@ func (db *DB) Ping(ctx context.Context) error {
 // managedUsersByField finds all users that have a given field value.
 // The calling method is responsible for the validation of the value.
 func (db *DB) managedUsersByField(ctx context.Context, fieldName, fieldValue string) ([]*User, error) {
-	filter := bson.M{fieldName: fieldValue}
-	c, err := db.staticUsers.Find(ctx, filter)
+	c, err := db.staticUsers.Find(ctx, bson.M{fieldName: fieldValue})
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to find user")
 	}
@@ -744,7 +815,7 @@ func (db *DB) userDownloadStats(ctx context.Context, id primitive.ObjectID, mont
 		}},
 	}
 	// This stage checks if the download has a non-zero `bytes` field and if so,
-	// it takes it as the download's size. Otherwise it reports the full
+	// it takes it as the download's size. Otherwise, it reports the full
 	// skylink's size as download's size.
 	projectStage := bson.D{{"$project", bson.D{
 		{"size", bson.D{
@@ -825,22 +896,47 @@ func (u User) HasKey(pk PubKey) bool {
 
 // monthStart returns the start of the user's subscription month.
 // Users get their bandwidth quota reset at the start of the month.
+//
+// This function follows the behaviour of Stripe:
+// If a month doesn't have the anchor day, the subscription will be billed on
+// the last day of the month. For example, a subscription starting on 31 January
+// bills on 28 February (or 29 February in a leap year), then 31 March, 30
+// April, and so on.
+//
+// See: https://stripe.com/docs/billing/subscriptions/billing-cycle
+//
+// NOTE: This function ignores the time (hour and minutes) of the sub expiration
+// - all quotas reset at midnight UTC.
 func monthStart(subscribedUntil time.Time) time.Time {
-	now := time.Now().UTC()
-	// Check how many days are left until the end of the user's subscription
-	// month. Then calculate when the last subscription month started. We don't
-	// care if the user is no longer subscribed and their sub expired 3 months
-	// ago, all we care about here is the day of the month on which that
-	// happened because that is the day from which we count their statistics for
-	// the month. If they were never subscribed we use Jan 1st 1970 for
-	// SubscribedUntil.
-	daysDelta := subscribedUntil.Day() - now.Day()
-	monthsDelta := 0
-	if daysDelta > 0 {
-		// The end of sub day is after the current date, so the start of month
-		// is in the previous month.
-		monthsDelta = -1
+	return monthStartWithTime(subscribedUntil, time.Now().UTC())
+}
+
+// monthStartWithTime returns the start of the user's subscription month in
+// relation to the given `now` value. This function exists only for testing
+// purposes and implements the desired behaviour of monthStart.
+func monthStartWithTime(subscribedUntil time.Time, current time.Time) time.Time {
+	// Normalize the day of month. Subs ending on 31st should end on the last
+	// day of the month when the month doesn't have 31 days.
+	dayOfMonth := normalizeDayOfMonth(current.Year(), current.Month(), subscribedUntil.Day())
+	// If we're past the reset day this month, use the current day of the month.
+	if current.Day() >= dayOfMonth {
+		return time.Date(current.Year(), current.Month(), dayOfMonth, 0, 0, 0, 0, time.UTC)
 	}
-	d := now.AddDate(0, monthsDelta, daysDelta)
-	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+	// If we haven't reached the reset day this month, use last month's day.
+	dayOfMonth = normalizeDayOfMonth(current.Year(), current.Month()-1, subscribedUntil.Day())
+	return time.Date(current.Year(), current.Month()-1, dayOfMonth, 0, 0, 0, 0, time.UTC)
+}
+
+// normalizeDayOfMonth checks whether the current month has the given day and if
+// it doesn't, it returns the last day the current month has.
+//
+// Example:
+// In February normalizeDayOfMonth(31) will return 28 or 29.
+func normalizeDayOfMonth(year int, month time.Month, day int) int {
+	t := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	if t.Month() > month {
+		// This month doesn't have this day. Return the last day of the month.
+		t = time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC)
+	}
+	return t.Day()
 }

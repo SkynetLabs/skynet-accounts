@@ -29,7 +29,7 @@ endif
 count = 1
 # pkgs changes which packages the makefile calls operate on. run changes which
 # tests are run during testing.
-pkgs = ./ ./api ./build ./database ./email ./hash ./jwt ./lib ./metafetcher ./skynet
+pkgs = ./ ./api ./database ./email ./hash ./jwt ./lib ./metafetcher ./skynet
 
 # integration-pkgs defines the packages which contain integration tests
 integration-pkgs = ./test ./test/api ./test/database ./test/email
@@ -51,10 +51,9 @@ markdown-spellcheck:
 	pip install codespell 1>/dev/null 2>&1
 	git ls-files "*.md" :\!:"vendor/**" | xargs codespell --check-filenames
 
-# lint runs golangci-lint (which includes golint, a spellcheck of the codebase,
+# lint runs golangci-lint (which includes revive, a spellcheck of the codebase,
 # and other linters), the custom analyzers, and also a markdown spellchecker.
 lint: fmt markdown-spellcheck vet
-	golint ./...
 	golangci-lint run -c .golangci.yml
 	go mod tidy
 	analyze -lockcheck -- $(pkgs)

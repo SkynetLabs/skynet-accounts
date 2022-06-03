@@ -2,10 +2,10 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/hash"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
@@ -21,7 +20,9 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/julienschmidt/httprouter"
+	jwt2 "github.com/lestrrat-go/jwx/jwt"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/SkynetLabs/skyd/build"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -32,6 +33,22 @@ const (
 	// LimitBodySizeLarge defines a size limit for requests that we expect to
 	// contain a lot of data.
 	LimitBodySizeLarge = 4 * skynet.MiB
+)
+
+var (
+	// ErrInvalidCredentials is a generic user-facing error, used when the login
+	// flow fails. This error is sent instead of whatever internal error we had
+	// before in order to prevent an attacker from listing our users.
+	ErrInvalidCredentials = errors.New("invalid credentials")
+
+	// MyskyAllowlist contains skylinks we need to make available in order for
+	// users to be able to use MySky on all portals, including ones that require
+	// user authentication.
+	MyskyAllowlist = map[string]interface{}{
+		"AQCsSOIwqwn7lLCT0t110ImQJaI39HxrSrJ-GVNSltfUAQ": struct{}{}, // skynet-mysky
+		"AQBIMqRcHbGWXy4rlIwGW4Aa4v0w0xLb6JvUonnXazfxiw": struct{}{}, // skynet-mysky-dev
+		"AQASyOUdaov383UggiDN7izfcCH8k-3Z0FlPjtNyem1qMg": struct{}{}, // sandbridge
+	}
 )
 
 type (
@@ -87,6 +104,7 @@ type (
 	// The returned speeds might be in bits or bytes per second, depending on
 	// the client's request.
 	UserLimitsGET struct {
+		Sub               string `json:"sub"`
 		TierID            int    `json:"tierID"`
 		TierName          string `json:"tierName"`
 		UploadBandwidth   int    `json:"upload"`        // bits or bytes per second
@@ -146,11 +164,11 @@ func (api *API) loginGET(_ *database.User, w http.ResponseWriter, req *http.Requ
 	}
 	_, err = api.staticDB.UserByPubKey(req.Context(), pk)
 	if err != nil && !errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, err, http.StatusInternalServerError)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusInternalServerError)
 		return
 	}
 	if errors.Contains(err, database.ErrUserNotFound) {
-		api.WriteError(w, errors.New("no user with this pubkey"), http.StatusBadRequest)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusBadRequest)
 		return
 	}
 	ch, err := api.staticDB.NewChallenge(req.Context(), pk, database.ChallengeTypeLogin)
@@ -206,7 +224,7 @@ func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Requ
 	}
 	u, err := api.staticDB.UserByPubKey(ctx, pk)
 	if err != nil {
-		api.WriteError(w, err, http.StatusUnauthorized)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
 	api.loginUser(w, u, false)
@@ -217,14 +235,14 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 	// Fetch the user with that email, if they exist.
 	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if err != nil {
-		api.staticLogger.Debugf("Error fetching a user with email '%s': %+v\n", email, err)
-		api.WriteError(w, err, http.StatusUnauthorized)
+		api.staticLogger.Debugf("Error fetching a user with email '%s': %v\n", email, err)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
 	// Check if the password matches.
 	err = hash.Compare(password, []byte(u.PasswordHash))
 	if err != nil {
-		api.WriteError(w, errors.New("password mismatch"), http.StatusUnauthorized)
+		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
 	api.loginUser(w, u, false)
@@ -266,7 +284,7 @@ func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bo
 	// Generate a JWT.
 	tk, err := jwt.TokenForUser(u.Email, u.Sub)
 	if err != nil {
-		api.staticLogger.Debugf("Error creating a token for user: %+v\n", err)
+		api.staticLogger.Debugf("Error creating a token for user: %v", err)
 		err = errors.AddContext(err, "failed to create a token for user")
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -413,15 +431,15 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	// to be presented in bytes per second. The default behaviour is to present
 	// them in bits per second.
 	inBytes := strings.EqualFold(req.FormValue("unit"), "byte")
-	respAnon := userLimitsGetFromTier(database.TierAnonymous, false, inBytes)
+	respAnon := userLimitsGetFromTier("", database.TierAnonymous, false, inBytes)
 	// First check for an API key.
 	ak, err := apiKeyFromRequest(req)
 	if err == nil {
 		// Check the cache before going any further.
-		tier, qe, ok := api.staticUserTierCache.Get(ak.String())
+		ce, ok := api.staticUserTierCache.Get(ak.String())
 		if ok {
 			api.staticLogger.Traceln("Fetching user limits from cache by API key.")
-			api.WriteJSON(w, userLimitsGetFromTier(tier, qe, inBytes))
+			api.WriteJSON(w, userLimitsGetFromTier(ce.Sub, ce.Tier, ce.QuotaExceeded, inBytes))
 			return
 		}
 		// Get the API key.
@@ -445,7 +463,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 		}
 		// Cache the user under the API key they used.
 		api.staticUserTierCache.Set(ak.String(), u)
-		api.WriteJSON(w, userLimitsGetFromTier(u.Tier, u.QuotaExceeded, inBytes))
+		api.WriteJSON(w, userLimitsGetFromTier(u.Sub, u.Tier, u.QuotaExceeded, inBytes))
 		return
 	}
 	// Next check for a token.
@@ -463,7 +481,7 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 	sub := s.(string)
 	// If the user is not cached, or they were cached too long ago we'll fetch
 	// their data from the DB.
-	tier, qe, ok := api.staticUserTierCache.Get(sub)
+	ce, ok := api.staticUserTierCache.Get(sub)
 	if !ok {
 		u, err := api.staticDB.UserBySub(req.Context(), sub)
 		if err != nil {
@@ -474,12 +492,12 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 		api.staticUserTierCache.Set(u.Sub, u)
 		// Populate the tier and qe values, while simultaneously making sure
 		// that we can read the record from the cache.
-		tier, qe, ok = api.staticUserTierCache.Get(u.Sub)
+		ce, ok = api.staticUserTierCache.Get(u.Sub)
 		if !ok {
 			build.Critical("Failed to fetch user from UserTierCache right after setting it.")
 		}
 	}
-	api.WriteJSON(w, userLimitsGetFromTier(tier, qe, inBytes))
+	api.WriteJSON(w, userLimitsGetFromTier(ce.Sub, ce.Tier, ce.QuotaExceeded, inBytes))
 }
 
 // userLimitsSkylinkGET returns the speed limits which apply to a GET call to
@@ -487,17 +505,24 @@ func (api *API) userLimitsGET(_ *database.User, w http.ResponseWriter, req *http
 //
 // NOTE: This handler needs to use the noAuth middleware in order to be able to
 // optimise its calls to the DB and the use of caching.
-func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) userLimitsSkylinkGET(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	// inBytes is a flag indicating that the caller wants all bandwidth limits
 	// to be presented in bytes per second. The default behaviour is to present
 	// them in bits per second.
 	inBytes := strings.EqualFold(req.FormValue("unit"), "byte")
-	respAnon := userLimitsGetFromTier(database.TierAnonymous, false, inBytes)
+	respAnon := userLimitsGetFromTier("", database.TierAnonymous, false, inBytes)
 	// Validate the skylink.
 	skylink := ps.ByName("skylink")
-	if !database.ValidSkylinkHash(skylink) {
+	if !database.ValidSkylink(skylink) {
 		api.staticLogger.Tracef("Invalid skylink: '%s'", skylink)
 		api.WriteJSON(w, respAnon)
+		return
+	}
+	// For all links that belong to MySky we return the first paid tier, so
+	// anyone can access them, even on portals which require authentication or
+	// premium accounts.
+	if _, ok := MyskyAllowlist[skylink]; ok {
+		api.WriteJSON(w, userLimitsGetFromTier("", database.TierPremium5, false, inBytes))
 		return
 	}
 	// Try to fetch an API attached to the request.
@@ -505,7 +530,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	if errors.Contains(err, ErrNoAPIKey) {
 		// We failed to fetch an API key from this request but the request might
 		// be authenticated in another way, so we'll defer to userLimitsGET.
-		api.userLimitsGET(u, w, req, ps)
+		api.userLimitsGET(nil, w, req, ps)
 		return
 	}
 	if err != nil {
@@ -514,10 +539,10 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 		return
 	}
 	// Check the cache before hitting the database.
-	tier, qe, ok := api.staticUserTierCache.Get(ak.String() + skylink)
+	ce, ok := api.staticUserTierCache.Get(ak.String() + skylink)
 	if ok {
 		api.staticLogger.Traceln("Fetching user limits from cache by API key.")
-		api.WriteJSON(w, userLimitsGetFromTier(tier, qe, inBytes))
+		api.WriteJSON(w, userLimitsGetFromTier(ce.Sub, ce.Tier, ce.QuotaExceeded, inBytes))
 		return
 	}
 	// Get the API key.
@@ -541,7 +566,7 @@ func (api *API) userLimitsSkylinkGET(u *database.User, w http.ResponseWriter, re
 	}
 	// Store the user in the cache with a custom key.
 	api.staticUserTierCache.Set(ak.String()+skylink, user)
-	api.WriteJSON(w, userLimitsGetFromTier(user.Tier, user.QuotaExceeded, inBytes))
+	api.WriteJSON(w, userLimitsGetFromTier(user.Sub, user.Tier, user.QuotaExceeded, inBytes))
 }
 
 // userStatsGET returns statistics about an existing user.
@@ -733,7 +758,7 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 }
 
 // userPubKeyDELETE removes a given pubkey from the list of pubkeys associated
-// with this user. It does not require a challenge-response because the used
+// with this user. It does not require a challenge-response because the user
 // does not need to prove the key is theirs.
 func (api *API) userPubKeyDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	ctx := req.Context()
@@ -748,20 +773,11 @@ func (api *API) userPubKeyDELETE(u *database.User, w http.ResponseWriter, req *h
 		api.WriteError(w, errors.New("the given pubkey is not associated with this user"), http.StatusBadRequest)
 		return
 	}
-	// Find the position of the pubkey in the list.
-	keyIdx := -1
-	for i, k := range u.PubKeys {
-		if subtle.ConstantTimeCompare(pk[:], k[:]) == 1 {
-			keyIdx = i
-			break
-		}
+	err = api.staticDB.UserPubKeyRemove(ctx, *u, pk)
+	if errors.Contains(err, mongo.ErrNoDocuments) {
+		api.WriteError(w, err, http.StatusNotFound)
+		return
 	}
-	if keyIdx == -1 {
-		build.Critical("Reaching this should be impossible. It would indicate a concurrent change of the user struct.")
-	}
-	// Remove the pubkey.
-	u.PubKeys = append(u.PubKeys[:keyIdx], u.PubKeys[keyIdx+1:]...)
-	err = api.staticDB.UserSave(ctx, u)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -852,8 +868,12 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 		api.WriteError(w, errors.New("user's sub doesn't match update sub"), http.StatusBadRequest)
 		return
 	}
-	u.PubKeys = append(u.PubKeys, pk)
-	err = api.staticDB.UserSave(ctx, u)
+	err = api.staticDB.UserPubKeyAdd(ctx, *u, pk)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	updatedUser, err := api.staticDB.UserByID(ctx, u.ID)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -863,7 +883,7 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.loginUser(w, u, true)
+	api.loginUser(w, updatedUser, true)
 }
 
 // userUploadsGET returns all uploads made by the current user.
@@ -945,18 +965,12 @@ func (api *API) userConfirmGET(_ *database.User, w http.ResponseWriter, req *htt
 // The user needs to be logged in.
 func (api *API) userReconfirmPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	var err error
-	u.EmailConfirmationTokenExpiration = time.Now().UTC().Add(database.EmailConfirmationTokenTTL).Truncate(time.Millisecond)
-	u.EmailConfirmationToken, err = lib.GenerateUUID()
-	if err != nil {
-		api.WriteError(w, errors.AddContext(err, "failed to generate a token"), http.StatusInternalServerError)
-		return
-	}
-	err = api.staticDB.UserSave(req.Context(), u)
+	tk, err := api.staticDB.UserCreateEmailConfirmation(req.Context(), u.ID)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to generate a new confirmation token"), http.StatusInternalServerError)
 		return
 	}
-	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, u.EmailConfirmationToken)
+	err = api.staticMailer.SendAddressConfirmationEmail(req.Context(), u.Email, tk)
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to send the new confirmation token"), http.StatusInternalServerError)
 		return
@@ -1013,11 +1027,6 @@ func (api *API) userRecoverRequestPOST(_ *database.User, w http.ResponseWriter, 
 	}
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to fetch the user with this email"), http.StatusInternalServerError)
-		return
-	}
-	// Verify that the user's email is confirmed.
-	if u.EmailConfirmationToken != "" {
-		api.WriteError(w, errors.New("user's email is not confirmed. it cannot be used for account recovery"), http.StatusBadRequest)
 		return
 	}
 	// Generate a new recovery token and add it to the user's account.
@@ -1100,7 +1109,7 @@ func (api *API) userRecoverPOST(_ *database.User, w http.ResponseWriter, req *ht
 }
 
 // trackUploadPOST registers a new upload in the system.
-func (api *API) trackUploadPOST(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) trackUploadPOST(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sl := ps.ByName("skylink")
 	if sl == "" {
 		api.WriteError(w, errors.New("missing parameter 'skylink'"), http.StatusBadRequest)
@@ -1115,7 +1124,13 @@ func (api *API) trackUploadPOST(u *database.User, w http.ResponseWriter, req *ht
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	_, err = api.staticDB.UploadCreate(req.Context(), *u, *skylink)
+	u, _, _ := api.userFromRequest(req, true)
+	if u == nil {
+		// This will be tracked as an anonymous request.
+		u = &database.AnonUser
+	}
+	ip := validateIP(req.FormValue("ip"))
+	_, err = api.staticDB.UploadCreate(req.Context(), *u, ip, *skylink)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -1134,7 +1149,9 @@ func (api *API) trackUploadPOST(u *database.User, w http.ResponseWriter, req *ht
 	// administrative details, such as user's quotas check.
 	// Note that this call is not affected by the request's context, so we use
 	// a separate one.
-	go api.checkUserQuotas(context.Background(), u)
+	if u != nil && !u.ID.IsZero() {
+		go api.checkUserQuotas(context.Background(), u)
+	}
 }
 
 // trackDownloadPOST registers a new download in the system.
@@ -1174,7 +1191,7 @@ func (api *API) trackDownloadPOST(u *database.User, w http.ResponseWriter, req *
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
+	_, err = api.staticDB.DownloadCreate(req.Context(), *u, *skylink, downloadedBytes)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
@@ -1194,29 +1211,21 @@ func (api *API) trackDownloadPOST(u *database.User, w http.ResponseWriter, req *
 }
 
 // trackRegistryReadPOST registers a new registry read in the system.
-func (api *API) trackRegistryReadPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	_, err := api.staticDB.RegistryReadCreate(req.Context(), *u)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+func (api *API) trackRegistryReadPOST(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	// Tracking registry reads is disabled.
 	api.WriteSuccess(w)
 }
 
 // trackRegistryWritePOST registers a new registry write in the system.
-func (api *API) trackRegistryWritePOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	_, err := api.staticDB.RegistryWriteCreate(req.Context(), *u)
-	if err != nil {
-		api.WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+func (api *API) trackRegistryWritePOST(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	// Tracking registry writes is disabled.
 	api.WriteSuccess(w)
 }
 
 // userUploadsDELETE unpins all uploads of a skylink uploaded by the user.
 func (api *API) userUploadsDELETE(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sl := ps.ByName("skylink")
-	if !database.ValidSkylinkHash(sl) {
+	if !database.ValidSkylink(sl) {
 		api.WriteError(w, database.ErrInvalidSkylink, http.StatusBadRequest)
 		return
 	}
@@ -1261,6 +1270,30 @@ func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 		}
 		api.staticUserTierCache.Set(u.Sub, u)
 	}
+}
+
+// userFromRequest checks the requests for various forms of authentication (API
+// key, cookie, authorization header) and returns user information based on
+// those.
+func (api *API) userFromRequest(req *http.Request, allowsAPIKey bool) (*database.User, jwt2.Token, error) {
+	// Check for a token.
+	u, tk, err := api.userAndTokenByRequestToken(req)
+	if err == nil {
+		return u, tk, nil
+	}
+	// Check for an API key.
+	ak, err := apiKeyFromRequest(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !allowsAPIKey {
+		return nil, nil, ErrAPIKeyNotAllowed
+	}
+	u, tk, err = api.userAndTokenByAPIKey(req, *ak)
+	if err != nil {
+		return nil, nil, err
+	}
+	return u, tk, err
 }
 
 // wellKnownJWKSGET returns our public JWKS, so people can use that to verify
@@ -1311,7 +1344,7 @@ func parseRequestBodyJSON(body io.ReadCloser, maxBodySize int64, v interface{}) 
 // userLimitsGetFromTier is a helper that lets us succinctly translate
 // from the database DTO to the API DTO. The `inBytes` parameter determines
 // whether the returned speeds will be in Bps or bps.
-func userLimitsGetFromTier(tierID int, quotaExceeded, inBytes bool) *UserLimitsGET {
+func userLimitsGetFromTier(sub string, tierID int, quotaExceeded, inBytes bool) *UserLimitsGET {
 	t, ok := database.UserLimits[tierID]
 	if !ok {
 		build.Critical("userLimitsGetFromTier was called with non-existent tierID: " + strconv.Itoa(tierID))
@@ -1328,15 +1361,25 @@ func userLimitsGetFromTier(tierID int, quotaExceeded, inBytes bool) *UserLimitsG
 		bpsMul = 1
 	}
 	return &UserLimitsGET{
-		TierID:   tierID,
-		TierName: t.TierName,
-		Storage:  t.Storage,
-		// If the user exceeds their quota, there will be brought down to
+		Sub:              sub,
+		TierID:           tierID,
+		TierName:         t.TierName,
+		Storage:          t.Storage,
+		MaxUploadSize:    t.MaxUploadSize,
+		MaxNumberUploads: t.MaxNumberUploads,
+		// If the user exceeds their quota, their speed will be brought down to
 		// anonymous levels.
 		UploadBandwidth:   limitsTier.UploadBandwidth * bpsMul,
 		DownloadBandwidth: limitsTier.DownloadBandwidth * bpsMul,
-		MaxUploadSize:     limitsTier.MaxUploadSize,
-		MaxNumberUploads:  limitsTier.MaxNumberUploads,
 		RegistryDelay:     limitsTier.RegistryDelay,
 	}
+}
+
+// validateIP is a simple pass-through helper that returns valid IPs as they are
+// and returns an empty string for invalid IPs.
+func validateIP(ip string) string {
+	if parsedIP := net.ParseIP(ip); parsedIP != nil {
+		return parsedIP.String()
+	}
+	return ""
 }

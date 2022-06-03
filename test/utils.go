@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
@@ -81,7 +80,7 @@ func DBTestCredentials() database.DBCredentials {
 // CreateUser is a helper method which simplifies the creation of test users
 func CreateUser(at *AccountsTester, emailAddr, password string) (*User, error) {
 	// Create a user.
-	_, _, err := at.CreateUserPost(emailAddr, password)
+	_, _, err := at.UserPOST(emailAddr, password)
 	if err != nil {
 		return nil, errors.AddContext(err, "user creation failed")
 	}
@@ -106,10 +105,7 @@ func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, e
 		return nil, nil, err
 	}
 	// Log in with that user in order to make sure it exists.
-	bodyParams := url.Values{}
-	bodyParams.Set("email", email)
-	bodyParams.Set("password", password)
-	r, _, err := at.Post("/login", nil, bodyParams)
+	r, _, err := at.LoginCredentialsPOST(email, password)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -123,7 +119,7 @@ func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, e
 
 // CreateTestUpload creates a new skyfile and uploads it under the given user's
 // account. Returns the skylink, the upload's id and error.
-func CreateTestUpload(ctx context.Context, db *database.DB, user *database.User, size int64) (*database.Skylink, primitive.ObjectID, error) {
+func CreateTestUpload(ctx context.Context, db *database.DB, user database.User, size int64) (*database.Skylink, primitive.ObjectID, error) {
 	// Create a skylink record for which to register an upload
 	sl := RandomSkylink()
 	skylink, err := db.Skylink(ctx, sl)
@@ -156,8 +152,8 @@ func RandomSkylink() string {
 
 // RegisterTestUpload registers an upload of the given skylink by the given user.
 // Returns the skylink, the upload's id and error.
-func RegisterTestUpload(ctx context.Context, db *database.DB, user *database.User, skylink *database.Skylink) (*database.Skylink, primitive.ObjectID, error) {
-	up, err := db.UploadCreate(ctx, *user, *skylink)
+func RegisterTestUpload(ctx context.Context, db *database.DB, user database.User, skylink *database.Skylink) (*database.Skylink, primitive.ObjectID, error) {
+	up, err := db.UploadCreate(ctx, user, "", *skylink)
 	if err != nil {
 		return nil, primitive.ObjectID{}, errors.AddContext(err, "failed to register an upload")
 	}

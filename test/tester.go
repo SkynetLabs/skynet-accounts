@@ -3,11 +3,14 @@ package test
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
@@ -25,18 +28,25 @@ var (
 	testPortalAddr = "http://127.0.0.1"
 	testPortalPort = "6000"
 	pathToJWKSFile = "../../jwt/fixtures/jwks.json"
+
+	// dontFollowRedirectsCheckRedirectFn is a function that instructs http.Client
+	// to return with the last user response, instead of following a redirect.
+	dontFollowRedirectsCheckRedirectFn = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 )
 
 type (
 	// AccountsTester is a simple testing kit for accounts. It starts a testing
 	// instance of the service and provides simplified ways to call the handlers.
 	AccountsTester struct {
-		Ctx    context.Context
-		DB     *database.DB
-		Logger *logrus.Logger
-		APIKey string
-		Cookie *http.Cookie
-		Token  string
+		Ctx             context.Context
+		DB              *database.DB
+		Logger          *logrus.Logger
+		APIKey          string
+		Cookie          *http.Cookie
+		Token           string
+		FollowRedirects bool
 
 		cancel context.CancelFunc
 	}
@@ -53,12 +63,16 @@ func ExtractCookie(r *http.Response) *http.Cookie {
 	return nil
 }
 
+// NewDatabase returns a new DB connection based on the passed parameters.
+func NewDatabase(ctx context.Context, dbName string) (*database.DB, error) {
+	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDiscardLogger())
+}
+
 // NewAccountsTester creates and starts a new AccountsTester service.
 // Use the Close method for a graceful shutdown.
 func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	ctx := context.Background()
-	logger := logrus.New()
-	logger.Out = ioutil.Discard
+	logger := NewDiscardLogger()
 
 	// Initialise the environment.
 	jwt.PortalName = testPortalAddr
@@ -69,7 +83,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	}
 
 	// Connect to the database.
-	db, err := database.NewCustomDB(ctx, dbName, DBTestCredentials(), logger)
+	db, err := NewDatabase(ctx, dbName)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to connect to the DB")
 	}
@@ -110,10 +124,11 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	}()
 
 	at := &AccountsTester{
-		Ctx:    ctxWithCancel,
-		DB:     db,
-		Logger: logger,
-		cancel: cancel,
+		Ctx:             ctxWithCancel,
+		DB:              db,
+		FollowRedirects: true,
+		Logger:          logger,
+		cancel:          cancel,
 	}
 	// Wait for the accounts tester to be fully ready.
 	err = build.Retry(50, time.Millisecond, func() error {
@@ -124,6 +139,27 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 		return nil, errors.AddContext(err, "failed to start accounts tester in the given time")
 	}
 	return at, nil
+}
+
+// NewDiscardLogger returns a new logger that sends all output to ioutil.Discard.
+func NewDiscardLogger() *logrus.Logger {
+	logger := logrus.New()
+	logger.Out = ioutil.Discard
+	return logger
+}
+
+// SanitizeName sanitizes the input for all kinds of unwanted characters and
+// replaces those with underscores.
+// See https://docs.mongodb.com/manual/reference/limits/#naming-restrictions
+func SanitizeName(s string) string {
+	re := regexp.MustCompile(`[/\\.\s"$*<>:|?]`)
+	cleanDBName := re.ReplaceAllString(s, "_")
+	// 64 characters is MongoDB's limit on database names.
+	// See https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Length-of-Database-Names
+	if len(cleanDBName) > 64 {
+		cleanDBName = cleanDBName[:64]
+	}
+	return cleanDBName
 }
 
 // ClearCredentials removes any credentials stored by this tester, such as a
@@ -167,25 +203,16 @@ func (at *AccountsTester) SetToken(t string) {
 	at.Token = t
 }
 
-// Get executes a GET request against the test service.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Get(endpoint string, params url.Values) (*http.Response, []byte, error) {
-	return at.request(http.MethodGet, endpoint, params, nil, nil)
+// SetFollowRedirects configures the tester to either follow HTTP redirects or
+// not. The default is to follow them.
+func (at *AccountsTester) SetFollowRedirects(f bool) {
+	at.FollowRedirects = f
 }
 
-// Delete executes a DELETE request against the test service.
+// post executes a POST Request against the test service.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Delete(endpoint string, params url.Values) (*http.Response, []byte, error) {
-	return at.request(http.MethodDelete, endpoint, params, nil, nil)
-}
-
-// Post executes a POST request against the test service.
-//
-// NOTE: The Body of the returned response is already read and closed.
-// TODO Remove the url.Values in favour of a simple map.
-func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
+func (at *AccountsTester) post(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
 	if params == nil {
 		params = url.Values{}
 	}
@@ -209,84 +236,55 @@ func (at *AccountsTester) Post(endpoint string, params url.Values, bodyParams ur
 	return at.executeRequest(req)
 }
 
-// Put executes a PUT request against the test service.
+// Request is a helper method that puts together and executes an HTTP
+// Request. It attaches the current cookie, if one exists.
 //
 // NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Put(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
-	b, err := json.Marshal(bodyParams)
-	if err != nil {
-		return &http.Response{}, nil, errors.AddContext(err, "failed to marshal the body JSON")
-	}
-	return at.request(http.MethodPut, endpoint, params, b, nil)
-}
-
-// Patch executes a PATCH request against the test service.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) Patch(endpoint string, params url.Values, bodyParams url.Values) (*http.Response, []byte, error) {
-	b, err := json.Marshal(bodyParams)
-	if err != nil {
-		return &http.Response{}, nil, errors.AddContext(err, "failed to marshal the body JSON")
-	}
-	return at.request(http.MethodPatch, endpoint, params, b, nil)
-}
-
-// CreateUserPost is a helper method that creates a new user.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) CreateUserPost(emailAddr, password string) (*http.Response, []byte, error) {
-	params := url.Values{}
-	params.Set("email", emailAddr)
-	params.Set("password", password)
-	return at.Post("/user", nil, params)
-}
-
-// UserPUT is a helper.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) UserPUT(email, password, stipeID string) (*http.Response, []byte, error) {
-	serviceURL := testPortalAddr + ":" + testPortalPort + "/user"
-	b, err := json.Marshal(map[string]string{
-		"email":            email,
-		"password":         password,
-		"stripeCustomerId": stipeID,
-	})
-	if err != nil {
-		return &http.Response{}, nil, errors.AddContext(err, "failed to marshal the body JSON")
-	}
-	req, err := http.NewRequest(http.MethodPut, serviceURL, bytes.NewBuffer(b))
-	if err != nil {
-		return &http.Response{}, nil, err
-	}
-	return at.executeRequest(req)
-}
-
-// request is a helper method that puts together and executes an HTTP
-// request. It attaches the current cookie, if one exists.
-//
-// NOTE: The Body of the returned response is already read and closed.
-func (at *AccountsTester) request(method string, endpoint string, queryParams url.Values, body []byte, headers map[string]string) (*http.Response, []byte, error) {
+func (at *AccountsTester) Request(method string, endpoint string, queryParams url.Values, body []byte, headers map[string]string, obj interface{}) (*http.Response, error) {
 	if queryParams == nil {
 		queryParams = url.Values{}
 	}
 	serviceURL := testPortalAddr + ":" + testPortalPort + endpoint + "?" + queryParams.Encode()
 	req, err := http.NewRequest(method, serviceURL, bytes.NewBuffer(body))
 	if err != nil {
-		return &http.Response{}, nil, err
+		return &http.Response{StatusCode: http.StatusInternalServerError}, err
 	}
 	for name, val := range headers {
 		req.Header.Set(name, val)
 	}
-	return at.executeRequest(req)
+	r, b, err := at.executeRequest(req)
+	// Define a list of response codes we assume are "good". We are going to
+	// return an error if the response returns a code that's not on this list.
+	acceptedResponseCodes := map[int]bool{
+		http.StatusOK:                true,
+		http.StatusNoContent:         true,
+		http.StatusTemporaryRedirect: true,
+		http.StatusPermanentRedirect: true,
+	}
+	// Use the response's body as error response on bad response codes.
+	if !acceptedResponseCodes[r.StatusCode] {
+		if err == nil {
+			return r, errors.New(string(b))
+		}
+		return r, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode == http.StatusOK {
+		// Process the body
+		err = json.Unmarshal(b, &obj)
+		if err != nil {
+			return r, errors.AddContext(err, "failed to marshal the body JSON")
+		}
+	}
+	return r, err
 }
 
-// executeRequest is a helper method which executes a test request and processes
+// executeRequest is a helper method which executes a test Request and processes
 // the response by extracting the body from it and handling non-OK status codes.
 //
 // NOTE: The Body of the returned response is already read and closed.
 func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []byte, error) {
 	if req == nil {
-		return &http.Response{}, nil, errors.New("invalid request")
+		return &http.Response{}, nil, errors.New("invalid Request")
 	}
 	if at.APIKey != "" {
 		req.Header.Set(api.APIKeyHeader, at.APIKey)
@@ -298,118 +296,14 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 		req.Header.Set("Authorization", "Bearer "+at.Token)
 	}
 	client := http.Client{}
+	if !at.FollowRedirects {
+		client.CheckRedirect = dontFollowRedirectsCheckRedirectFn
+	}
 	r, err := client.Do(req)
 	if err != nil {
 		return &http.Response{}, nil, err
 	}
 	return processResponse(r)
-}
-
-// HealthGet executes a GET /health.
-func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
-	r, b, err := at.request(http.MethodGet, "/health", nil, nil, nil)
-	if err != nil {
-		return api.HealthGET{}, r.StatusCode, err
-	}
-	var resp api.HealthGET
-	err = json.Unmarshal(b, &resp)
-	if err != nil {
-		return api.HealthGET{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
-	}
-	return resp, r.StatusCode, nil
-}
-
-// UserAPIKeysDELETE performs a `DELETE /user/apikeys/:id` request.
-func (at *AccountsTester) UserAPIKeysDELETE(id primitive.ObjectID) (int, error) {
-	r, _, err := at.request(http.MethodDelete, "/user/apikeys/"+id.Hex(), nil, nil, nil)
-	return r.StatusCode, err
-}
-
-// UserAPIKeysGET performs a `GET /user/apikeys/:id` request.
-func (at *AccountsTester) UserAPIKeysGET(id primitive.ObjectID) (api.APIKeyResponse, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/apikeys/"+id.Hex(), nil, nil, nil)
-	if err != nil {
-		return api.APIKeyResponse{}, r.StatusCode, err
-	}
-	if r.StatusCode != http.StatusOK {
-		return api.APIKeyResponse{}, r.StatusCode, errors.New(string(b))
-	}
-	var result api.APIKeyResponse
-	err = json.Unmarshal(b, &result)
-	if err != nil {
-		return api.APIKeyResponse{}, 0, errors.AddContext(err, "failed to parse response")
-	}
-	return result, r.StatusCode, nil
-}
-
-// UserAPIKeysLIST performs a `GET /user/apikeys` request.
-func (at *AccountsTester) UserAPIKeysLIST() ([]api.APIKeyResponse, int, error) {
-	r, b, err := at.request(http.MethodGet, "/user/apikeys", nil, nil, nil)
-	if err != nil {
-		return nil, r.StatusCode, err
-	}
-	if r.StatusCode != http.StatusOK {
-		return nil, r.StatusCode, errors.New(string(b))
-	}
-	result := make([]api.APIKeyResponse, 0)
-	err = json.Unmarshal(b, &result)
-	if err != nil {
-		return nil, 0, errors.AddContext(err, "failed to parse response")
-	}
-	return result, r.StatusCode, nil
-}
-
-// UserAPIKeysPOST performs a `POST /user/apikeys` request.
-func (at *AccountsTester) UserAPIKeysPOST(body api.APIKeyPOST) (api.APIKeyResponseWithKey, int, error) {
-	bb, err := json.Marshal(body)
-	if err != nil {
-		return api.APIKeyResponseWithKey{}, http.StatusBadRequest, err
-	}
-	r, b, err := at.request(http.MethodPost, "/user/apikeys", nil, bb, nil)
-	if err != nil {
-		return api.APIKeyResponseWithKey{}, r.StatusCode, err
-	}
-	if r.StatusCode != http.StatusOK {
-		return api.APIKeyResponseWithKey{}, r.StatusCode, errors.New(string(b))
-	}
-	var result api.APIKeyResponseWithKey
-	err = json.Unmarshal(b, &result)
-	if err != nil {
-		return api.APIKeyResponseWithKey{}, 0, errors.AddContext(err, "failed to parse response")
-	}
-	return result, r.StatusCode, nil
-}
-
-// UserAPIKeysPUT performs a `PUT /user/apikeys` request.
-func (at *AccountsTester) UserAPIKeysPUT(akID primitive.ObjectID, body api.APIKeyPUT) (int, error) {
-	bb, err := json.Marshal(body)
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-	r, b, err := at.request(http.MethodPut, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
-	if err != nil {
-		return r.StatusCode, err
-	}
-	if r.StatusCode != http.StatusNoContent {
-		return r.StatusCode, errors.New(string(b))
-	}
-	return r.StatusCode, nil
-}
-
-// UserAPIKeysPATCH performs a `PATH /user/apikeys` request.
-func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.APIKeyPATCH) (int, error) {
-	bb, err := json.Marshal(body)
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-	r, b, err := at.request(http.MethodPatch, "/user/apikeys/"+akID.Hex(), nil, bb, nil)
-	if err != nil {
-		return r.StatusCode, err
-	}
-	if r.StatusCode != http.StatusNoContent {
-		return r.StatusCode, errors.New(string(b))
-	}
-	return r.StatusCode, nil
 }
 
 // processResponse is a helper method which extracts the body from the response
@@ -427,73 +321,399 @@ func processResponse(r *http.Response) (*http.Response, []byte, error) {
 	return r, body, err
 }
 
-// TrackDownload performs a `POST /track/download/:skylink` request.
+// HealthGet executes a GET /health.
+func (at *AccountsTester) HealthGet() (api.HealthGET, int, error) {
+	var resp api.HealthGET
+	r, err := at.Request(http.MethodGet, "/health", nil, nil, nil, &resp)
+	return resp, r.StatusCode, err
+}
+
+/*** Login and logout helpers ***/
+
+// LoginCredentialsPOST logs the user in and returns a response.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) LoginCredentialsPOST(emailAddr, password string) (*http.Response, []byte, error) {
+	params := url.Values{}
+	params.Set("email", emailAddr)
+	params.Set("password", password)
+	return at.post("/login", nil, params)
+}
+
+// LoginPubKeyGET performs `GET /login`
+func (at *AccountsTester) LoginPubKeyGET(pk database.PubKey) (api.ChallengePublic, int, error) {
+	params := url.Values{}
+	if pk != nil {
+		params.Set("pubKey", hex.EncodeToString(pk[:]))
+	}
+	var resp api.ChallengePublic
+	r, err := at.Request(http.MethodGet, "/login", params, nil, nil, &resp)
+	return resp, r.StatusCode, err
+}
+
+// LoginPubKeyPOST performs `POST /login`
+func (at *AccountsTester) LoginPubKeyPOST(response, signature []byte, emailStr string) (*http.Response, []byte, error) {
+	bodyParams := url.Values{}
+	bodyParams.Set("response", hex.EncodeToString(response))
+	bodyParams.Set("signature", hex.EncodeToString(signature))
+	bodyParams.Set("email", emailStr)
+	return at.post("/login", nil, bodyParams)
+}
+
+// LogoutPOST performs `POST /logout`
+func (at *AccountsTester) LogoutPOST() (*http.Response, []byte, error) {
+	return at.post("/logout", nil, nil)
+}
+
+/*** Registration helpers ***/
+
+// RegisterGET performs `GET /register`
+func (at *AccountsTester) RegisterGET(pk database.PubKey) (api.ChallengePublic, int, error) {
+	query := url.Values{}
+	if pk != nil {
+		query.Set("pubKey", hex.EncodeToString(pk[:]))
+	}
+	var resp api.ChallengePublic
+	r, err := at.Request(http.MethodGet, "/register", query, nil, nil, &resp)
+	return resp, r.StatusCode, err
+}
+
+// RegisterPOST performs `POST /register`
+func (at *AccountsTester) RegisterPOST(response, signature []byte, email string) (api.UserGET, int, error) {
+	bodyParams := url.Values{}
+	bodyParams.Set("response", hex.EncodeToString(response))
+	bodyParams.Set("signature", hex.EncodeToString(signature))
+	bodyParams.Set("email", email)
+	r, b, err := at.post("/register", nil, bodyParams)
+	if err != nil {
+		return api.UserGET{}, r.StatusCode, errors.AddContext(err, string(b))
+	}
+	if r.StatusCode != http.StatusOK {
+		return api.UserGET{}, r.StatusCode, errors.New(string(b))
+	}
+	var result api.UserGET
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		return api.UserGET{}, 0, errors.AddContext(err, "failed to parse response")
+	}
+	return result, r.StatusCode, nil
+}
+
+/*** Track helpers ***/
+
+// TrackDownload performs a `POST /track/download/:skylink` Request.
 func (at *AccountsTester) TrackDownload(skylink string, bytes int64) (int, error) {
 	form := url.Values{}
 	form.Set("bytes", fmt.Sprint(bytes))
-	r, _, err := at.request(http.MethodPost, "/track/download/"+skylink, form, nil, nil)
+	r, err := at.Request(http.MethodPost, "/track/download/"+skylink, form, nil, nil, nil)
 	return r.StatusCode, err
 }
 
-// TrackUpload performs a `POST /track/upload/:skylink` request.
-func (at *AccountsTester) TrackUpload(skylink string) (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/upload/"+skylink, nil, nil, nil)
+// TrackUpload performs a `POST /track/upload/:skylink` Request.
+func (at *AccountsTester) TrackUpload(skylink string, ip string) (int, error) {
+	form := url.Values{}
+	form.Set("ip", ip)
+	r, err := at.Request(http.MethodPost, "/track/upload/"+skylink, form, nil, nil, nil)
 	return r.StatusCode, err
 }
 
-// TrackRegistryRead performs a `POST /track/registry/read` request.
+// TrackRegistryRead performs a `POST /track/registry/read` Request.
 func (at *AccountsTester) TrackRegistryRead() (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/registry/read", nil, nil, nil)
+	r, err := at.Request(http.MethodPost, "/track/registry/read", nil, nil, nil, nil)
 	return r.StatusCode, err
 }
 
-// TrackRegistryWrite performs a `POST /track/registry/write` request.
+// TrackRegistryWrite performs a `POST /track/registry/write` Request.
 func (at *AccountsTester) TrackRegistryWrite() (int, error) {
-	r, _, err := at.request(http.MethodPost, "/track/registry/write", nil, nil, nil)
+	r, err := at.Request(http.MethodPost, "/track/registry/write", nil, nil, nil, nil)
 	return r.StatusCode, err
 }
 
-// UserLimits performs a `GET /user/limits` request.
+/*** User helpers ***/
+
+// UserDELETE performs `DELETE /user`
+func (at *AccountsTester) UserDELETE() (int, error) {
+	r, err := at.Request(http.MethodDelete, "/user", nil, nil, nil, nil)
+	return r.StatusCode, err
+}
+
+// UserGET performs `GET /user`
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) UserGET() (api.UserGET, int, error) {
+	var resp api.UserGET
+	r, err := at.Request(http.MethodGet, "/user", nil, nil, nil, &resp)
+	return resp, r.StatusCode, err
+}
+
+// UserConfirmGET performs `GET /user/confirm`
+func (at *AccountsTester) UserConfirmGET(confirmationToken string) (int, error) {
+	qp := url.Values{}
+	qp.Set("token", confirmationToken)
+	r, err := at.Request(http.MethodGet, "/user/confirm", qp, nil, nil, nil)
+	return r.StatusCode, err
+}
+
+// UserPOST is a helper method that creates a new user.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) UserPOST(emailAddr, password string) (*http.Response, []byte, error) {
+	params := url.Values{}
+	params.Set("email", emailAddr)
+	params.Set("password", password)
+	return at.post("/user", nil, params)
+}
+
+// UserPUT is a helper method which updates the entire user record.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) UserPUT(email, password, stipeID string) (api.UserGET, int, error) {
+	b, err := json.Marshal(map[string]string{
+		"email":            email,
+		"password":         password,
+		"stripeCustomerId": stipeID,
+	})
+	if err != nil {
+		return api.UserGET{}, http.StatusBadRequest, err
+	}
+	var resp api.UserGET
+	r, err := at.Request(http.MethodPut, "/user", nil, b, nil, &resp)
+	return resp, r.StatusCode, err
+}
+
+// UserReconfirmPOST performs `POST /user/reconfirm`
+func (at *AccountsTester) UserReconfirmPOST() (*http.Response, []byte, error) {
+	return at.post("/user/reconfirm", nil, nil)
+}
+
+// UserUploadsGET performs `GET /user/uploads`
+func (at *AccountsTester) UserUploadsGET() (api.UploadsGET, int, error) {
+	var result api.UploadsGET
+	r, err := at.Request(http.MethodGet, "/user/uploads", nil, nil, nil, &result)
+	return result, r.StatusCode, err
+}
+
+/*** User API keys helpers ***/
+
+// UserAPIKeysDELETE performs a `DELETE /user/apikeys/:id` Request.
+func (at *AccountsTester) UserAPIKeysDELETE(id primitive.ObjectID) (int, error) {
+	r, err := at.Request(http.MethodDelete, "/user/apikeys/"+id.Hex(), nil, nil, nil, nil)
+	return r.StatusCode, err
+}
+
+// UserAPIKeysGET performs a `GET /user/apikeys/:id` Request.
+func (at *AccountsTester) UserAPIKeysGET(id primitive.ObjectID) (api.APIKeyResponse, int, error) {
+	var result api.APIKeyResponse
+	r, err := at.Request(http.MethodGet, "/user/apikeys/"+id.Hex(), nil, nil, nil, &result)
+	return result, r.StatusCode, err
+}
+
+// UserAPIKeysLIST performs a `GET /user/apikeys` Request.
+func (at *AccountsTester) UserAPIKeysLIST() ([]api.APIKeyResponse, int, error) {
+	result := make([]api.APIKeyResponse, 0)
+	r, err := at.Request(http.MethodGet, "/user/apikeys", nil, nil, nil, &result)
+	return result, r.StatusCode, err
+}
+
+// UserAPIKeysPOST performs a `POST /user/apikeys` Request.
+func (at *AccountsTester) UserAPIKeysPOST(body api.APIKeyPOST) (api.APIKeyResponseWithKey, int, error) {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return api.APIKeyResponseWithKey{}, http.StatusBadRequest, err
+	}
+	var result api.APIKeyResponseWithKey
+	r, err := at.Request(http.MethodPost, "/user/apikeys", nil, b, nil, &result)
+	return result, r.StatusCode, err
+}
+
+// UserAPIKeysPUT performs a `PUT /user/apikeys` Request.
+func (at *AccountsTester) UserAPIKeysPUT(akID primitive.ObjectID, body api.APIKeyPUT) (int, error) {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	r, err := at.Request(http.MethodPut, "/user/apikeys/"+akID.Hex(), nil, b, nil, nil)
+	return r.StatusCode, err
+}
+
+// UserAPIKeysPATCH performs a `PATCH /user/apikeys` Request.
+func (at *AccountsTester) UserAPIKeysPATCH(akID primitive.ObjectID, body api.APIKeyPATCH) (int, error) {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	r, err := at.Request(http.MethodPatch, "/user/apikeys/"+akID.Hex(), nil, b, nil, nil)
+	return r.StatusCode, err
+}
+
+/*** User limits helpers ***/
+
+// UserLimits performs a `GET /user/limits` Request.
 func (at *AccountsTester) UserLimits(unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
 	queryParams := url.Values{}
-	if unit != "" {
-		queryParams.Set("unit", unit)
-	}
-	r, b, err := at.request(http.MethodGet, "/user/limits", queryParams, nil, headers)
-	if err != nil {
-		return api.UserLimitsGET{}, r.StatusCode, err
-	}
-	if r.StatusCode != http.StatusOK {
-		return api.UserLimitsGET{}, r.StatusCode, errors.New(string(b))
+	queryParams.Set("unit", unit)
+	var resp api.UserLimitsGET
+	r, err := at.Request(http.MethodGet, "/user/limits", queryParams, nil, headers, &resp)
+	return resp, r.StatusCode, err
+}
+
+// UserLimitsSkylink performs a `GET /user/limits/:skylink` Request.
+func (at *AccountsTester) UserLimitsSkylink(sl string, unit, apikey string, headers map[string]string) (api.UserLimitsGET, int, error) {
+	queryParams := url.Values{}
+	queryParams.Set("unit", unit)
+	queryParams.Set("apiKey", apikey)
+	if !database.ValidSkylink(sl) {
+		return api.UserLimitsGET{}, 0, database.ErrInvalidSkylink
 	}
 	var resp api.UserLimitsGET
-	err = json.Unmarshal(b, &resp)
+	r, err := at.Request(http.MethodGet, "/user/limits/"+sl, queryParams, nil, headers, &resp)
+	return resp, r.StatusCode, err
+}
+
+/*** User pubkeys helpers ***/
+
+// UserPubkeyDELETE performs `DELETE /user/pubkey/:pubKey`
+func (at *AccountsTester) UserPubkeyDELETE(pk database.PubKey) (int, error) {
+	r, err := at.Request(http.MethodDelete, "/user/pubkey/"+hex.EncodeToString(pk[:]), nil, nil, nil, nil)
+	return r.StatusCode, err
+}
+
+// UserPubkeyRegisterGET performs a `GET /user/pubkey/register` Request.
+func (at *AccountsTester) UserPubkeyRegisterGET(pubKey string) (api.ChallengePublic, int, error) {
+	query := url.Values{}
+	query.Add("pubKey", pubKey)
+	var result api.ChallengePublic
+	r, err := at.Request(http.MethodGet, "/user/pubkey/register", query, nil, nil, &result)
+	return result, r.StatusCode, err
+}
+
+// UserPubkeyRegisterPOST performs a `POST /user/pubkey/register` Request.
+func (at *AccountsTester) UserPubkeyRegisterPOST(response, signature []byte) (api.UserGET, int, error) {
+	body := database.ChallengeResponseRequest{
+		Response:  hex.EncodeToString(response),
+		Signature: hex.EncodeToString(signature),
+	}
+	b, err := json.Marshal(body)
 	if err != nil {
-		return api.UserLimitsGET{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+		return api.UserGET{}, http.StatusBadRequest, err
+	}
+	var result api.UserGET
+	r, err := at.Request(http.MethodPost, "/user/pubkey/register", nil, b, nil, &result)
+	return result, r.StatusCode, err
+}
+
+/*** User recovery helpers ***/
+
+// UserRecoverPOST performs `POST /user/recover`
+func (at *AccountsTester) UserRecoverPOST(tk, pw, confirmPW string) (int, error) {
+	body := url.Values{}
+	body.Set("token", tk)
+	body.Set("password", pw)
+	body.Set("confirmPassword", confirmPW)
+	r, _, err := at.post("/user/recover", nil, body)
+	if err != nil {
+		return r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusNoContent {
+		return r.StatusCode, errors.New("unexpected status code")
+	}
+	return r.StatusCode, nil
+}
+
+// UserRecoverRequestPOST performs `POST /user/recover/Request`
+func (at *AccountsTester) UserRecoverRequestPOST(email string) (int, error) {
+	body := url.Values{}
+	body.Set("email", email)
+	r, _, err := at.post("/user/recover/Request", nil, body)
+	if err != nil {
+		return r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusNoContent {
+		return r.StatusCode, errors.New("unexpected status code")
+	}
+	return r.StatusCode, nil
+}
+
+/*** Uploads and downloads helpers ***/
+
+// UploadsDELETE performs `DELETE /user/uploads/:skylink`
+func (at *AccountsTester) UploadsDELETE(skylink string) (int, error) {
+	r, err := at.Request(http.MethodDelete, "/user/uploads/"+skylink, nil, nil, nil, nil)
+	return r.StatusCode, err
+}
+
+/*** Various user helpers ***/
+
+// UserStats performs a `GET /user/stats` Request.
+func (at *AccountsTester) UserStats(unit string, headers map[string]string) (database.UserStats, int, error) {
+	queryParams := url.Values{}
+	queryParams.Set("unit", unit)
+	var resp database.UserStats
+	r, err := at.Request(http.MethodGet, "/user/stats", queryParams, nil, headers, &resp)
+	return resp, r.StatusCode, err
+}
+
+// UploadInfo performs a `GET /uploadinfo/:skylink` request.
+func (at *AccountsTester) UploadInfo(sl string) ([]api.UploadInfo, int, error) {
+	if !database.ValidSkylink(sl) {
+		return nil, http.StatusBadRequest, database.ErrInvalidSkylink
+	}
+	var resp []api.UploadInfo
+	r, err := at.Request(http.MethodGet, "/uploadinfo/"+sl, nil, nil, nil, &resp)
+	if err != nil {
+		return nil, r.StatusCode, err
 	}
 	return resp, r.StatusCode, nil
 }
 
-// UserLimitsSkylink performs a `GET /user/limits/:skylink` request.
-func (at *AccountsTester) UserLimitsSkylink(sl string, unit string, headers map[string]string) (api.UserLimitsGET, int, error) {
-	queryParams := url.Values{}
-	if unit != "" {
-		queryParams.Set("unit", unit)
+/*** Stripe helpers ***/
+
+// StripeBillingGET performs a `GET /stripe/billing`
+func (at *AccountsTester) StripeBillingGET() (http.Header, int, error) {
+	r, err := at.Request(http.MethodGet, "/stripe/billing", nil, nil, nil, nil)
+	// We ignore the temporary redirect error because it's the expected
+	// behaviour of this endpoint.
+	if err != nil && !strings.Contains(err.Error(), "307 Temporary Redirect") {
+		return nil, r.StatusCode, err
 	}
-	if !database.ValidSkylinkHash(sl) {
-		return api.UserLimitsGET{}, 0, database.ErrInvalidSkylink
+	return r.Header, r.StatusCode, nil
+}
+
+// StripeBillingPOST performs a `POST /stripe/billing`
+func (at *AccountsTester) StripeBillingPOST() (http.Header, int, error) {
+	r, err := at.Request(http.MethodPost, "/stripe/billing", nil, nil, nil, nil)
+	// We ignore the temporary redirect error because it's the expected
+	// behaviour of this endpoint.
+	if err != nil && !strings.Contains(err.Error(), "307 Temporary Redirect") {
+		return nil, r.StatusCode, err
 	}
-	r, b, err := at.request(http.MethodGet, "/user/limits/"+sl, queryParams, nil, headers)
+	return r.Header, r.StatusCode, nil
+}
+
+// StripeCheckoutPOST performs a `POST /stripe/checkout`
+func (at *AccountsTester) StripeCheckoutPOST(price string) (string, int, error) {
+	body := struct {
+		Price string
+	}{
+		price,
+	}
+	bodyBytes, err := json.Marshal(body)
 	if err != nil {
-		return api.UserLimitsGET{}, r.StatusCode, err
+		return "", http.StatusBadRequest, errors.AddContext(err, "failed to serialize request body")
 	}
-	if r.StatusCode != http.StatusOK {
-		return api.UserLimitsGET{}, r.StatusCode, errors.New(string(b))
-	}
-	var resp api.UserLimitsGET
-	err = json.Unmarshal(b, &resp)
+	resp := struct {
+		SessionID string
+	}{}
+	r, err := at.Request(http.MethodPost, "/stripe/checkout", nil, bodyBytes, nil, &resp)
+	return resp.SessionID, r.StatusCode, err
+}
+
+// StripePricesGET performs a `GET /stripe/prices`
+func (at *AccountsTester) StripePricesGET() ([]api.StripePrice, int, error) {
+	resp := make([]api.StripePrice, 0)
+	r, err := at.Request(http.MethodGet, "/stripe/prices", nil, nil, nil, &resp)
 	if err != nil {
-		return api.UserLimitsGET{}, 0, errors.AddContext(err, "failed to marshal the body JSON")
+		return nil, r.StatusCode, err
 	}
 	return resp, r.StatusCode, nil
 }

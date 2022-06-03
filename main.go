@@ -10,13 +10,13 @@ import (
 	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
-	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/joho/godotenv"
-	"github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v72"
+	"gitlab.com/SkynetLabs/skyd/build"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/sirupsen/logrus"
@@ -171,12 +171,12 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 	config.EmailURI = os.Getenv(envEmailURI)
 	{
 		if config.EmailURI == "" {
-			return ServiceConfig{}, errors.New(envEmailURI + " is empty")
+			return ServiceConfig{}, email.ErrInvalidEmailConfiguration
 		}
 		// Validate the given URI.
 		uri, err := url.Parse(config.EmailURI)
 		if err != nil || uri.Host == "" || uri.User == nil {
-			return ServiceConfig{}, errors.New("invalid email URI given in " + envEmailURI)
+			return ServiceConfig{}, email.ErrInvalidEmailConfiguration
 		}
 		// Set the FROM address to outgoing emails. This can be overridden by
 		// the ACCOUNTS_EMAIL_FROM optional environment variable.
@@ -228,6 +228,7 @@ func main() {
 	database.PortalName = config.PortalName
 	jwt.PortalName = config.PortalName
 	email.PortalAddressAccounts = config.PortalAddressAccounts
+	api.DashboardURL = config.PortalAddressAccounts
 	email.ServerLockID = config.ServerLockID
 	stripe.Key = config.StripeKey
 	api.StripeTestMode = config.StripeTestMode

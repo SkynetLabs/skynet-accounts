@@ -29,7 +29,7 @@ func (db *DB) RegistryReadCreate(ctx context.Context, user User) (*RegistryRead,
 	}
 	rr := RegistryRead{
 		UserID:    user.ID,
-		Timestamp: time.Now().UTC(),
+		Timestamp: time.Now().UTC().Truncate(time.Millisecond),
 	}
 	ior, err := db.staticRegistryReads.InsertOne(ctx, rr)
 	if err != nil {
@@ -46,7 +46,7 @@ func (db *DB) RegistryWriteCreate(ctx context.Context, user User) (*RegistryWrit
 	}
 	rw := RegistryWrite{
 		UserID:    user.ID,
-		Timestamp: time.Now().UTC(),
+		Timestamp: time.Now().UTC().Truncate(time.Millisecond),
 	}
 	ior, err := db.staticRegistryWrites.InsertOne(ctx, rw)
 	if err != nil {

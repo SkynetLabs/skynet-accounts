@@ -49,8 +49,10 @@ func TestUserGETFromUser(t *testing.T) {
 func TestUserLimitsGetFromTier(t *testing.T) {
 	tests := []struct {
 		name                  string
+		sub                   string
 		tier                  int
 		quotaExceeded         bool
+		expectedSub           string
 		expectedTier          int
 		expectedStorage       int64
 		expectedUploadBW      int
@@ -59,8 +61,10 @@ func TestUserLimitsGetFromTier(t *testing.T) {
 	}{
 		{
 			name:                  "anon",
+			sub:                   "",
 			tier:                  database.TierAnonymous,
 			quotaExceeded:         false,
+			expectedSub:           "",
 			expectedTier:          database.TierAnonymous,
 			expectedStorage:       database.UserLimits[database.TierAnonymous].Storage,
 			expectedUploadBW:      database.UserLimits[database.TierAnonymous].UploadBandwidth,
@@ -69,8 +73,10 @@ func TestUserLimitsGetFromTier(t *testing.T) {
 		},
 		{
 			name:                  "plus, quota not exceeded",
+			sub:                   "this is a plus sub",
 			tier:                  database.TierPremium5,
 			quotaExceeded:         false,
+			expectedSub:           "this is a plus sub",
 			expectedTier:          database.TierPremium5,
 			expectedStorage:       database.UserLimits[database.TierPremium5].Storage,
 			expectedUploadBW:      database.UserLimits[database.TierPremium5].UploadBandwidth,
@@ -79,8 +85,10 @@ func TestUserLimitsGetFromTier(t *testing.T) {
 		},
 		{
 			name:                  "plus, quota exceeded",
+			sub:                   "this is a plus sub",
 			tier:                  database.TierPremium5,
 			quotaExceeded:         true,
+			expectedSub:           "this is a plus sub",
 			expectedTier:          database.TierPremium5,
 			expectedStorage:       database.UserLimits[database.TierPremium5].Storage,
 			expectedUploadBW:      database.UserLimits[database.TierAnonymous].UploadBandwidth,
@@ -90,7 +98,10 @@ func TestUserLimitsGetFromTier(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		ul := userLimitsGetFromTier(tt.tier, tt.quotaExceeded, true)
+		ul := userLimitsGetFromTier(tt.sub, tt.tier, tt.quotaExceeded, true)
+		if ul.Sub != tt.expectedSub {
+			t.Errorf("Test '%s': expected sub '%s', got '%s'", tt.name, tt.expectedSub, ul.Sub)
+		}
 		if ul.TierID != tt.expectedTier {
 			t.Errorf("Test '%s': expected tier %d, got %d", tt.name, tt.expectedTier, ul.TierID)
 		}
@@ -121,7 +132,7 @@ func TestUserLimitsGetFromTier(t *testing.T) {
 			}
 		}()
 		// The call that we expect to log a critical.
-		_ = userLimitsGetFromTier(math.MaxInt, false, true)
+		_ = userLimitsGetFromTier("", math.MaxInt, false, true)
 		return
 	}()
 	if err != nil {
