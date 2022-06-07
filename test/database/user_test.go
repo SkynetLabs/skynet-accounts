@@ -607,12 +607,6 @@ func TestUserStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *database.User) {
-		err := db.UserDelete(ctx, user)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}(u)
 
 	testUploadSizeSmall := int64(1 + fastrand.Intn(4*skynet.MiB-1))
 	testUploadSizeBig := int64(4*skynet.MiB + 1 + fastrand.Intn(4*skynet.MiB))
@@ -631,12 +625,20 @@ func TestUserStats(t *testing.T) {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
 	if stats.NumUploads != 1 {
-		t.Fatalf("Expected a total of %d uploads, got %d.", 1, stats.NumUploads)
+		t.Fatalf("Expected %d uploads, got %d.", 1, stats.NumUploads)
+	}
+	if stats.NumUploadsTotal != 1 {
+		t.Fatalf("Expected a total of %d uploads, got %d.", 1, stats.NumUploadsTotal)
 	}
 	if stats.BandwidthUploads != expectedUploadBandwidth {
 		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
 			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB,
 			stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+	}
+	if stats.BandwidthUploadsTotal != expectedUploadBandwidth {
+		t.Fatalf("Expected total upload bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB,
+			stats.BandwidthUploadsTotal, stats.BandwidthUploadsTotal/skynet.MiB)
 	}
 
 	// Create a big upload.
@@ -651,7 +653,10 @@ func TestUserStats(t *testing.T) {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
 	if stats.NumUploads != 2 {
-		t.Fatalf("Expected a total of %d uploads, got %d.", 2, stats.NumUploads)
+		t.Fatalf("Expected %d uploads, got %d.", 2, stats.NumUploads)
+	}
+	if stats.NumUploadsTotal != 2 {
+		t.Fatalf("Expected a total of %d uploads, got %d.", 2, stats.NumUploadsTotal)
 	}
 	if stats.BandwidthUploads != expectedUploadBandwidth {
 		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
@@ -672,12 +677,20 @@ func TestUserStats(t *testing.T) {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
 	if stats.NumDownloads != 1 {
-		t.Fatalf("Expected a total of %d downloads, got %d.", 1, stats.NumDownloads)
+		t.Fatalf("Expected %d downloads, got %d.", 1, stats.NumDownloads)
+	}
+	if stats.NumDownloadsTotal != 1 {
+		t.Fatalf("Expected a total of %d downloads, got %d.", 1, stats.NumDownloadsTotal)
 	}
 	if stats.BandwidthDownloads != expectedDownloadBandwidth {
 		t.Fatalf("Expected download bandwidth of %d (%d MiB), got %d (%d MiB).",
 			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MiB,
 			stats.BandwidthDownloads, stats.BandwidthDownloads/skynet.MiB)
+	}
+	if stats.BandwidthDownloadsTotal != expectedDownloadBandwidth {
+		t.Fatalf("Expected total download bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MiB,
+			stats.BandwidthDownloadsTotal, stats.BandwidthDownloadsTotal/skynet.MiB)
 	}
 	// Register a big download.
 	bigDownload := int64(100*skynet.MiB + fastrand.Intn(4*skynet.MiB))

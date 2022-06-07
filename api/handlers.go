@@ -91,7 +91,7 @@ type (
 		Items    []database.UploadResponse `json:"items"`
 		Offset   int                       `json:"offset"`
 		PageSize int                       `json:"pageSize"`
-		Count    int                       `json:"count"`
+		Count    int64                     `json:"count"`
 	}
 	// UserGET defines a representation of the User struct returned by all
 	// handlers. This allows us to tweak the fields of the struct before
@@ -1255,13 +1255,13 @@ func (api *API) userUploadsDELETE(u *database.User, w http.ResponseWriter, req *
 // and sets the QuotaExceeded flag on their account if they exceed any.
 func (api *API) checkUserQuotas(ctx context.Context, u *database.User) {
 	startOfTime := time.Time{}
-	numUploads, storageUsed, _, _, err := api.staticDB.UserUploadStats(ctx, u.ID, startOfTime)
+	upStats, err := api.staticDB.UserStatsUpload(ctx, u.ID, startOfTime)
 	if err != nil {
 		api.staticLogger.Debugln("Failed to get user's upload bandwidth used:", err)
 		return
 	}
 	quota := database.UserLimits[u.Tier]
-	quotaExceeded := numUploads > quota.MaxNumberUploads || storageUsed > quota.Storage
+	quotaExceeded := upStats.CountTotal > int64(quota.MaxNumberUploads) || upStats.SizeTotal > quota.Storage
 	if quotaExceeded != u.QuotaExceeded {
 		u.QuotaExceeded = quotaExceeded
 		err = api.staticDB.UserSave(ctx, u)

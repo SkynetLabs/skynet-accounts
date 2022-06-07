@@ -874,8 +874,11 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	// Adjust the expectations. We won't adjust anything based on size because
 	// the metafetcher won't be running during testing.
 	expectedStats.NumUploads++
+	expectedStats.NumUploadsTotal++
 	expectedStats.BandwidthUploads += skynet.BandwidthUploadCost(0)
+	expectedStats.BandwidthUploadsTotal += skynet.BandwidthUploadCost(0)
 	expectedStats.RawStorageUsed += skynet.RawStorageUsed(0)
+	expectedStats.RawStorageUsedTotal += skynet.RawStorageUsed(0)
 
 	// Call trackDownload without a cookie. Expect this to fail.
 	at.ClearCredentials()
@@ -901,7 +904,11 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	}
 	// Adjust the expectations.
 	expectedStats.NumDownloads++
+	expectedStats.NumDownloadsTotal++
 	expectedStats.BandwidthDownloads += skynet.BandwidthDownloadCost(200)
+	expectedStats.BandwidthDownloadsTotal += skynet.BandwidthDownloadCost(200)
+	expectedStats.DownloadsSize += 200
+	expectedStats.DownloadsSizeTotal += 200
 	expectedStats.TotalDownloadsSize += 200
 
 	// Call userStats without a cookie.
