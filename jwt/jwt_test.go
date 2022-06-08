@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwt"
 	"github.com/sirupsen/logrus"
@@ -19,7 +20,7 @@ func TestJWT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	email := t.Name() + "@siasky.net"
+	email := types.NewEmail(t.Name() + "@siasky.net")
 	sub := "this is a sub"
 	fakeSub := "fake sub"
 	tk, err := TokenForUser(email, sub)
@@ -59,7 +60,7 @@ func TestValidateToken_Expired(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	email := t.Name() + "@siasky.net"
+	email := types.NewEmail(t.Name() + "@siasky.net")
 	sub := "this is a sub"
 	// Fetch the tools we need in order to craft a custom token.
 	key, found := AccountsJWKS.Get(0)
@@ -81,7 +82,7 @@ func TestValidateToken_Expired(t *testing.T) {
 		Active: true,
 		Identity: tokenIdentity{
 			Traits: tokenTraits{
-				Email: email,
+				Email: email.String(),
 			},
 		},
 	}

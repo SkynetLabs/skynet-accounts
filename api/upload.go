@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -14,7 +15,7 @@ type (
 	// UploaderInfo gives information about a user who created an upload.
 	UploaderInfo struct {
 		UserID   primitive.ObjectID
-		Email    string
+		Email    types.Email
 		Sub      string
 		StripeID string
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"github.com/julienschmidt/httprouter"
 	jwt2 "github.com/lestrrat-go/jwx/jwt"
 	"gitlab.com/NebulousLabs/errors"
@@ -125,16 +126,16 @@ type (
 
 	// credentialsPOST defines the standard credentials package we expect.
 	credentialsPOST struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email    types.Email `json:"email"`
+		Password string      `json:"password"`
 	}
 
 	// userUpdatePUT defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
 	userUpdatePUT struct {
-		Email    string `json:"email,omitempty"`
-		Password string `json:"password,omitempty"`
-		StripeID string `json:"stripeCustomerId,omitempty"`
+		Email    types.Email `json:"email,omitempty"`
+		Password string      `json:"password,omitempty"`
+		StripeID string      `json:"stripeCustomerId,omitempty"`
 	}
 )
 
@@ -231,7 +232,7 @@ func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Requ
 }
 
 // loginPOSTCredentials is a helper that handles logins with credentials.
-func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email, password string) {
+func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email types.Email, password string) {
 	// Fetch the user with that email, if they exist.
 	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if err != nil {
@@ -388,8 +389,8 @@ func (api *API) registerPOST(_ *database.User, w http.ResponseWriter, req *http.
 		api.WriteError(w, errors.AddContext(err, "failed to parse request body"), http.StatusBadRequest)
 		return
 	}
-	parsed, err := mail.ParseAddress(payload.Email)
-	if err != nil || payload.Email != parsed.Address {
+	parsed, err := mail.ParseAddress(payload.Email.String())
+	if err != nil || payload.Email.String() != parsed.Address {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
@@ -616,8 +617,8 @@ func (api *API) userPOST(_ *database.User, w http.ResponseWriter, req *http.Requ
 		api.WriteError(w, errors.New("email is required"), http.StatusBadRequest)
 		return
 	}
-	parsed, err := mail.ParseAddress(payload.Email)
-	if err != nil || payload.Email != parsed.Address {
+	parsed, err := mail.ParseAddress(payload.Email.String())
+	if err != nil || payload.Email.String() != parsed.Address {
 		api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 		return
 	}
@@ -714,8 +715,8 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 
 	var changedEmail bool
 	if payload.Email != "" {
-		parsed, err := mail.ParseAddress(payload.Email)
-		if err != nil || payload.Email != parsed.Address {
+		parsed, err := mail.ParseAddress(payload.Email.String())
+		if err != nil || payload.Email.String() != parsed.Address {
 			api.WriteError(w, errors.New("invalid email provided"), http.StatusBadRequest)
 			return
 		}
@@ -995,10 +996,10 @@ func (api *API) userRecoverRequestPOST(_ *database.User, w http.ResponseWriter, 
 		return
 	}
 
-	// Read and parse the request body.
-	var payload struct {
-		Email string `json:"email"`
-	}
+	// Read and parse the request body. We do not expect a password but we want
+	// to use the same email parsing approach in all cases where we get an email
+	// address from the user.
+	var payload credentialsPOST
 	err = parseRequestBodyJSON(req.Body, LimitBodySizeSmall, &payload)
 	if err != nil {
 		err = errors.AddContext(err, "failed to parse request body")

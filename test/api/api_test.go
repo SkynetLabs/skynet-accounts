@@ -11,6 +11,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/build"
 
@@ -33,9 +34,9 @@ func TestWithDBSession(t *testing.T) {
 		t.Fatal("Failed to instantiate API.", err)
 	}
 
-	emailSuccess := t.Name() + "success@siasky.net"
-	emailSuccessJSON := t.Name() + "success_json@siasky.net"
-	emailFailure := t.Name() + "failure@siasky.net"
+	emailSuccess := types.NewEmail(t.Name() + "success@siasky.net")
+	emailSuccessJSON := types.NewEmail(t.Name() + "success_json@siasky.net")
+	emailFailure := types.NewEmail(t.Name() + "failure@siasky.net")
 
 	// This handler successfully creates a user in the DB and exits with
 	// a success status code. We expect the user to exist in the DB after
@@ -52,7 +53,7 @@ func TestWithDBSession(t *testing.T) {
 			t.Fatal("Failed to fetch user from DB.", err)
 		}
 		if u.Email != emailSuccess {
-			t.Fatalf("Expected email %s, got %s.", emailSuccess, u.Email)
+			t.Fatalf("Expected email '%v', got '%v'.", emailSuccess, u.Email)
 		}
 		testAPI.WriteSuccess(w)
 	}
@@ -147,7 +148,7 @@ func TestUserTierCache(t *testing.T) {
 		}
 	}()
 
-	emailAddr := test.DBNameForTest(t.Name()) + "@siasky.net"
+	emailAddr := types.NewEmail(test.DBNameForTest(t.Name()) + "@siasky.net")
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	u, err := test.CreateUser(at, emailAddr, password)
 	if err != nil {
@@ -165,7 +166,7 @@ func TestUserTierCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, _, err := at.LoginCredentialsPOST(emailAddr, password)
+	r, _, err := at.LoginCredentialsPOST(emailAddr.String(), password)
 	if err != nil {
 		t.Fatal(err)
 	}

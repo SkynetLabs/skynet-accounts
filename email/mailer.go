@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/types"
 )
 
 /**
@@ -35,15 +36,15 @@ func (em Mailer) Send(ctx context.Context, m database.EmailMessage) error {
 
 // SendAddressConfirmationEmail sends a new email to the given email address
 // with a link to confirm the ownership of the address.
-func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email, token string) error {
-	m := confirmEmailEmail(email, token)
+func (em Mailer) SendAddressConfirmationEmail(ctx context.Context, email types.Email, token string) error {
+	m := confirmEmailEmail(email.String(), token)
 	return em.Send(ctx, *m)
 }
 
 // SendRecoverAccountEmail sends a new email to the given email address
 // with a link to recover the account.
-func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email, token string) error {
-	m := recoverAccountEmail(email, token)
+func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email types.Email, token string) error {
+	m := recoverAccountEmail(email.String(), token)
 	return em.Send(ctx, *m)
 }
 
@@ -52,7 +53,7 @@ func (em Mailer) SendRecoverAccountEmail(ctx context.Context, email, token strin
 // recover a Skynet account but their email is not in our system. The main
 // reason to do that is because the user might have forgotten which email they
 // used for signing up.
-func (em Mailer) SendAccountAccessAttemptedEmail(ctx context.Context, email string) error {
-	m := accountAccessAttemptedEmail(email)
+func (em Mailer) SendAccountAccessAttemptedEmail(ctx context.Context, email types.Email) error {
+	m := accountAccessAttemptedEmail(email.String())
 	return em.Send(ctx, *m)
 }

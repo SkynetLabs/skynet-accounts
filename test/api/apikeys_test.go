@@ -8,6 +8,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/modules"
 )
@@ -16,7 +17,8 @@ import (
 // API keys.
 func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
-	r, body, err := at.UserPOST(name+"@siasky.net", name+"_pass")
+	email := types.NewEmail(name + "@siasky.net")
+	r, body, err := at.UserPOST(email.String(), name+"_pass")
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
@@ -96,8 +98,8 @@ func testPrivateAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	// Create a test user.
-	email := name + "@siasky.net"
-	r, _, err := at.UserPOST(email, name+"_pass")
+	email := types.NewEmail(name + "@siasky.net")
+	r, _, err := at.UserPOST(email.String(), name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +140,8 @@ func testPrivateAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 // API keys.
 func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
-	r, body, err := at.UserPOST(name+"@siasky.net", name+"_pass")
+	email := types.NewEmail(name + "@siasky.net")
+	r, body, err := at.UserPOST(email.String(), name+"_pass")
 	if err != nil {
 		t.Fatal(err, string(body))
 	}
@@ -234,8 +237,8 @@ func testPublicAPIKeysFlow(t *testing.T, at *test.AccountsTester) {
 func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	// Create a test user.
-	email := name + "@siasky.net"
-	r, _, err := at.UserPOST(email, name+"_pass")
+	email := types.NewEmail(name + "@siasky.net")
+	r, _, err := at.UserPOST(email.String(), name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +321,8 @@ func testPublicAPIKeysUsage(t *testing.T, at *test.AccountsTester) {
 func testAPIKeysAcceptance(t *testing.T, at *test.AccountsTester) {
 	name := test.DBNameForTest(t.Name())
 	// Create a test user.
-	r, _, err := at.UserPOST(name+"@siasky.net", name+"_pass")
+	email := types.NewEmail(name + "@siasky.net")
+	r, _, err := at.UserPOST(email.String(), name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
