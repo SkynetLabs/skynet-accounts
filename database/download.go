@@ -86,9 +86,6 @@ func (db *DB) DownloadsBySkylink(ctx context.Context, skylink Skylink, offset, p
 	if skylink.ID.IsZero() {
 		return nil, 0, ErrInvalidSkylink
 	}
-	if err := validateOffsetPageSize(offset, pageSize); err != nil {
-		return nil, 0, err
-	}
 	matchStage := bson.D{{"$match", bson.D{{"skylink_id", skylink.ID}}}}
 	return db.downloadsBy(ctx, matchStage, offset, pageSize)
 }
@@ -99,9 +96,6 @@ func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize i
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
 	}
-	if err := validateOffsetPageSize(offset, pageSize); err != nil {
-		return nil, 0, err
-	}
 	matchStage := bson.D{{"$match", bson.D{{"user_id", user.ID}}}}
 	return db.downloadsBy(ctx, matchStage, offset, pageSize)
 }
@@ -109,6 +103,7 @@ func (db *DB) DownloadsByUser(ctx context.Context, user User, offset, pageSize i
 // downloadsBy fetches a page of downloads, filtered by an arbitrary match
 // criteria. It also reports the total number of records in the list.
 func (db *DB) downloadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]DownloadResponse, int, error) {
+	offset, pageSize = validOffsetPageSize(offset, pageSize)
 	cnt, err := db.count(ctx, db.staticDownloads, matchStage)
 	if err != nil || cnt == 0 {
 		return []DownloadResponse{}, 0, err

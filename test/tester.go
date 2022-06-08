@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -487,9 +488,17 @@ func (at *AccountsTester) UserReconfirmPOST() (*http.Response, []byte, error) {
 }
 
 // UserUploadsGET performs `GET /user/uploads`
-func (at *AccountsTester) UserUploadsGET() (api.UploadsGET, int, error) {
+func (at *AccountsTester) UserUploadsGET(opts database.FindSkylinksOptions) (api.UploadsGET, int, error) {
+	params := url.Values{}
+	params.Set("search", opts.SearchTerms)
+	params.Set("orderBy", opts.OrderByField)
+	params.Set("pageSize", strconv.Itoa(opts.PageSize))
+	params.Set("offset", strconv.Itoa(opts.Offset))
+	if opts.OrderAsc {
+		params.Set("order", "asc")
+	}
 	var result api.UploadsGET
-	r, err := at.Request(http.MethodGet, "/user/uploads", nil, nil, nil, &result)
+	r, err := at.Request(http.MethodGet, "/user/uploads", params, nil, nil, &result)
 	return result, r.StatusCode, err
 }
 

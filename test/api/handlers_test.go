@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -61,6 +62,7 @@ func TestHandlers(t *testing.T) {
 		{name: "DeletePubKey", test: testUserDeletePubKey},
 		{name: "UserDelete", test: testUserDELETE},
 		{name: "UserLimits", test: testUserLimits},
+		{name: "UserGetUploads", test: testUserUploadsGET},
 		{name: "UserDeleteUploads", test: testUserUploadsDELETE},
 		{name: "UserConfirmReconfirmEmail", test: testUserConfirmReconfirmEmailGET},
 		{name: "UserAccountRecovery", test: testUserAccountRecovery},
@@ -522,13 +524,13 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}
 		if tl.TierID != database.TierFree {
-			return fmt.Errorf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
+			return fmt.Errorf("expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
 		}
 		if tl.TierName != database.UserLimits[database.TierFree].TierName {
-			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
+			return fmt.Errorf("expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
 		}
 		if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
-			return fmt.Errorf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
+			return fmt.Errorf("expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
 		}
 		return nil
 	})
@@ -567,6 +569,190 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 	}
 }
 
+// testUserUploadsGET tests the GET /user/uploads endpoint.
+func testUserUploadsGET(t *testing.T, at *test.AccountsTester) {
+	u, c, err := test.CreateUserAndLogin(at, t.Name())
+	if err != nil {
+		t.Fatal("Failed to create a user and log in:", err)
+	}
+	defer func() {
+		if err = u.Delete(at.Ctx); err != nil {
+			t.Error(errors.AddContext(err, "failed to delete user in defer"))
+		}
+	}()
+
+	at.SetCookie(c)
+	defer at.ClearCredentials()
+
+	// Create two uploads with different sizes.
+	// Their names will be `"test skylink "+sl`.
+	sl1, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128*skynet.KiB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sl2, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 256*skynet.KiB)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sortSkylinksByName := func(s []*database.Skylink, asc bool) {
+		sort.Slice(s, func(i, j int) bool {
+			if asc {
+				return s[i].Skylink < s[j].Skylink
+			}
+			return s[i].Skylink > s[j].Skylink
+		})
+	}
+	if sortSkylinksByName == nil {
+		// TODO remove this check
+	}
+	// Another helper which gives us a list of skylinks within the uploads
+	// result. The order is preserved. This makes the test failure output more
+	// readable.
+	skylinksFromUploads := func(ups api.UploadsGET) []string {
+		sls := []string{}
+		for _, up := range ups.Items {
+			sls = append(sls, up.Skylink)
+		}
+		return sls
+	}
+
+	tests := map[string]struct {
+		Opts database.FindSkylinksOptions
+		// The ordering of result elements is important.
+		Result []*database.Skylink
+	}{
+		/* Standard search tests. */
+
+		// // // No custom ordering or filtering.
+		// // Expect results to be ordered chronologically, desc.
+		// "default": {
+		// 	Opts:   database.FindSkylinksOptions{},
+		// 	Result: []*database.Skylink{sl2, sl1},
+		// },
+		// // TODO Doesn't work. Asc/desc return the same result.
+		// // // Order by size, desc (default).
+		// // "size desc": {
+		// // 	Opts: database.FindSkylinksOptions{
+		// // 		OrderByField: "size",
+		// // 		OrderAsc: false,
+		// // 	},
+		// // 	Result: []*database.Skylink{sl2, sl1},
+		// // },
+		// // Order by size, asc.
+		// "size asc": {
+		// 	Opts: database.FindSkylinksOptions{
+		// 		OrderByField: "size",
+		// 		OrderAsc:     true,
+		// 	},
+		// 	Result: []*database.Skylink{sl1, sl2},
+		// },
+		// // TODO Doesn't work. Asc/desc return the same result.
+		// // "name desc": {
+		// // 	Opts: database.FindSkylinksOptions{
+		// // 		OrderByField: "name",
+		// // 	},
+		// // 	// Order skylinks by name in descending order.
+		// // 	Result: func() []*database.Skylink {
+		// // 		s := []*database.Skylink{sl1, sl2}
+		// // 		sortSkylinksByName(s, false)
+		// // 		return s
+		// // 	}(),
+		// // },
+		// // TODO Doesn't work. Asc/desc return the same result.
+		// // "name asc": {
+		// // 	Opts: database.FindSkylinksOptions{
+		// // 		OrderByField: "name",
+		// // 		OrderAsc:     true,
+		// // 	},
+		// // 	// Order skylinks by name in ascending order.
+		// // 	Result: func() []*database.Skylink {
+		// // 		s := []*database.Skylink{sl1, sl2}
+		// // 		sortSkylinksByName(s, true)
+		// // 		return s
+		// // 	}(),
+		// // },
+		// "creation date, desc": {
+		// 	Opts: database.FindSkylinksOptions{
+		// 		OrderByField: "uploadedOn",
+		// 	},
+		// 	Result: []*database.Skylink{sl2, sl1},
+		// },
+		// "creation date, asc": {
+		// 	Opts: database.FindSkylinksOptions{
+		// 		OrderByField: "uploadedOn",
+		// 		OrderAsc:     true,
+		// 	},
+		// 	Result: []*database.Skylink{sl1, sl2},
+		// },
+
+		/* Full text search tests. */
+
+		"search, match both": {
+			Opts: database.FindSkylinksOptions{
+				SearchTerms: "test skylink",
+			},
+			Result: []*database.Skylink{sl1, sl2},
+		},
+		"search, match both, order by size asc": {
+			Opts: database.FindSkylinksOptions{
+				OrderByField: "size",
+				OrderAsc:     true,
+				SearchTerms:  "test skylink",
+			},
+			Result: []*database.Skylink{sl2, sl1},
+		},
+		"search, match both, order by size desc": {
+			Opts: database.FindSkylinksOptions{
+				OrderByField: "size",
+				OrderAsc:     false,
+				SearchTerms:  "test skylink",
+			},
+			Result: []*database.Skylink{sl2, sl1},
+		},
+		"search, match first": {
+			Opts: database.FindSkylinksOptions{
+				SearchTerms: sl1.Skylink,
+			},
+			Result: []*database.Skylink{sl1},
+		},
+		"search, match second": {
+			Opts: database.FindSkylinksOptions{
+				SearchTerms: sl2.Skylink,
+			},
+			Result: []*database.Skylink{sl2},
+		},
+	}
+
+	var ups api.UploadsGET
+	t.Logf(" > %+v\n", sl1)
+	t.Logf(" > %+v\n", sl2)
+	for name, tt := range tests {
+		t.Logf(">>>>>>>>>> %s\n", name)
+		ups, _, err = at.UserUploadsGET(tt.Opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("UPS::: %+v\n", ups)
+		for a, b := range tt.Result {
+			t.Logf("Result %+v -> %+v\n", a, b)
+		}
+		for a, b := range ups.Items {
+			t.Logf("Ups %+v -> %+v\n", a, b)
+		}
+		if len(ups.Items) != len(tt.Result) {
+			t.Fatalf("Expected %d results, got %d", len(tt.Result), len(ups.Items))
+		}
+		// Make sure the expected uploads appear in the correct order.
+		for k, v := range tt.Result {
+			if ups.Items[k].Skylink != v.Skylink {
+				t.Fatalf("Test %s: Expected skylink '%s' to appear at position %d, got %+v", name, v.Skylink, k, skylinksFromUploads(ups))
+			}
+		}
+		t.Log("<<<<<<<<<<<<< ", name)
+	}
+}
+
 // testUserUploadsDELETE tests the DELETE /user/uploads/:skylink endpoint.
 func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	u, c, err := test.CreateUserAndLogin(at, t.Name())
@@ -583,9 +769,12 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 	defer at.ClearCredentials()
 
 	// Create an upload.
-	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128%skynet.KiB)
+	skylink, _, err := test.CreateTestUpload(at.Ctx, at.DB, *u.User, 128*skynet.KiB)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Make sure it shows up for this user.
-	ups, _, err := at.UserUploadsGET()
+	ups, _, err := at.UserUploadsGET(database.FindSkylinksOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -606,7 +795,7 @@ func testUserUploadsDELETE(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// Make sure it's gone.
-	ups, _, err = at.UserUploadsGET()
+	ups, _, err = at.UserUploadsGET(database.FindSkylinksOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

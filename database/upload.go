@@ -2,12 +2,15 @@ package database
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"gitlab.com/NebulousLabs/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Upload ...
@@ -29,6 +32,28 @@ type UploadResponse struct {
 	Size       int64     `bson:"size" json:"size"`
 	RawStorage int64     `bson:"raw_storage" json:"rawStorage"`
 	Timestamp  time.Time `bson:"timestamp" json:"uploadedOn"`
+}
+
+// UnpinUploads unpins all uploads of this skylink by this user. Returns
+// the number of unpinned uploads.
+func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int64, error) {
+	if skylink.ID.IsZero() {
+		return 0, ErrInvalidSkylink
+	}
+	if user.ID.IsZero() {
+		return 0, errors.New("invalid user")
+	}
+	filter := bson.M{
+		"skylink_id": skylink.ID,
+		"user_id":    user.ID,
+		"unpinned":   false,
+	}
+	update := bson.M{"$set": bson.M{"unpinned": true}}
+	ur, err := db.staticUploads.UpdateMany(ctx, filter, update)
+	if err != nil {
+		return 0, err
+	}
+	return ur.ModifiedCount, nil
 }
 
 // UploadByID fetches a single upload from the DB.
@@ -68,14 +93,15 @@ func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pag
 	if skylink.ID.IsZero() {
 		return nil, 0, ErrInvalidSkylink
 	}
-	if err := validateOffsetPageSize(offset, pageSize); err != nil {
-		return nil, 0, err
-	}
 	matchStage := bson.D{{"$match", bson.D{
 		{"skylink_id", skylink.ID},
 		{"unpinned", false},
 	}}}
-	return db.uploadsBy(ctx, matchStage, offset, pageSize)
+	opts := FindSkylinksOptions{
+		Offset:   offset,
+		PageSize: pageSize,
+	}
+	return db.uploadsBy(ctx, matchStage, opts)
 }
 
 // UploadsBySkylinkID returns all uploads of the given skylink.
@@ -95,78 +121,105 @@ func (db *DB) UploadsBySkylinkID(ctx context.Context, slID primitive.ObjectID) (
 	return uploads, nil
 }
 
-// UnpinUploads unpins all uploads of this skylink by this user. Returns
-// the number of unpinned uploads.
-func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int64, error) {
-	if skylink.ID.IsZero() {
-		return 0, ErrInvalidSkylink
-	}
-	if user.ID.IsZero() {
-		return 0, errors.New("invalid user")
-	}
-	filter := bson.M{
-		"skylink_id": skylink.ID,
-		"user_id":    user.ID,
-		"unpinned":   false,
-	}
-	update := bson.M{"$set": bson.M{"unpinned": true}}
-	ur, err := db.staticUploads.UpdateMany(ctx, filter, update)
-	if err != nil {
-		return 0, err
-	}
-	return ur.ModifiedCount, nil
-}
-
 // UploadsByUser fetches a page of uploads by this user and the total number of
 // such uploads.
-func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int) ([]UploadResponse, int, error) {
+func (db *DB) UploadsByUser(ctx context.Context, user User, opts FindSkylinksOptions) ([]UploadResponse, int, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
 	}
-	if err := validateOffsetPageSize(offset, pageSize); err != nil {
-		return nil, 0, err
+	var matchStage bson.D
+	if len(opts.SearchTerms) == 0 {
+		matchStage = bson.D{{"$match", bson.D{
+			{"user_id", user.ID},
+			{"unpinned", false},
+		}}}
+		// If the client didn't specifically select ordering, we'll order by
+		// timestamp in descending order.
+		if opts.OrderByField == "" {
+			opts.OrderByField = "timestamp"
+			opts.OrderAsc = false
+		}
+	} else {
+		matchStage = bson.D{{"$match", bson.D{
+			{"user_id", user.ID},
+			{"unpinned", false},
+			{"$text", bson.D{{"$search", opts.SearchTerms}}},
+		}}}
+		// If the client didn't specifically select ordering, we'll order by
+		// the most relevant result.
+		if opts.OrderByField == "" {
+			opts.OrderByField = "textScore"
+			opts.OrderAsc = false
+		}
 	}
-	matchStage := bson.D{{"$match", bson.D{
-		{"user_id", user.ID},
-		{"unpinned", false},
-	}}}
-	return db.uploadsBy(ctx, matchStage, offset, pageSize)
+	// db.getCollection('skylinks').find({ $text: { $search: "lines logo" } }, { score: { $meta: "textScore" } }).sort( { score: { $meta: "textScore" } } )
+	return db.uploadsBy(ctx, matchStage, opts)
 }
 
 // uploadsBy fetches a page of uploads, filtered by an arbitrary match criteria.
 // It also reports the total number of records in the list.
-func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]UploadResponse, int, error) {
-	if err := validateOffsetPageSize(offset, pageSize); err != nil {
-		return nil, 0, err
+func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, opts FindSkylinksOptions) ([]UploadResponse, int, error) {
+	opts.Offset, opts.PageSize = validOffsetPageSize(opts.Offset, opts.PageSize)
+	cnt := 10 // TODO Re-enable the actual count
+	// cnt, err := db.count(ctx, db.staticUploads, matchStage)
+	// if err != nil || cnt == 0 {
+	// 	return []UploadResponse{}, 0, err
+	// }
+
+	var c *mongo.Cursor
+	var err error
+	if opts.OrderByField == "textScore" {
+		c, err = db.uploadsAggregateText(ctx, matchStage, opts)
+	} else {
+		c, err = db.uploadsAggregateGeneral(ctx, matchStage, opts)
 	}
-	cnt, err := db.count(ctx, db.staticUploads, matchStage)
-	if err != nil || cnt == 0 {
-		return []UploadResponse{}, 0, err
-	}
-	c, err := db.staticUploads.Aggregate(ctx, generateUploadsPipeline(matchStage, offset, pageSize))
 	if err != nil {
 		return nil, 0, err
 	}
-
-	uploads := make([]UploadResponse, pageSize)
+	uploads := make([]UploadResponse, opts.PageSize)
+	// uploads := make([]interface{}, opts.PageSize)
 	err = c.All(ctx, &uploads)
 	if err != nil {
 		return nil, 0, err
 	}
-	for ix := range uploads {
-		uploads[ix].RawStorage = skynet.RawStorageUsed(uploads[ix].Size)
+	fmt.Printf(" >  uploads %+v\n", uploads)
+	for idx := range uploads {
+		uploads[idx].RawStorage = skynet.RawStorageUsed(uploads[idx].Size)
 	}
 	return uploads, int(cnt), nil
 }
 
-// validateOffsetPageSize returns an error if offset and/or page size are invalid.
-func validateOffsetPageSize(offset, pageSize int) error {
-	var errs []error
+func (db *DB) uploadsAggregateGeneral(ctx context.Context, matchStage bson.D, opts FindSkylinksOptions) (*mongo.Cursor, error) {
+	pipeline := generateUploadsPipeline(matchStage, opts)
+	fmt.Printf(" >  pipeline %+v\n", pipeline)
+	return db.staticUploads.Aggregate(ctx, pipeline)
+}
+
+func (db *DB) uploadsAggregateText(ctx context.Context, matchStage bson.D, opts FindSkylinksOptions) (*mongo.Cursor, error) {
+	pipeline := generateUploadsPipelineText(matchStage, opts)
+	c, e := db.staticSkylinks.Indexes().List(ctx)
+	if e != nil {
+		panic(e)
+	}
+	idxs := make([]interface{}, 1000)
+	e = c.All(ctx, &idxs)
+	if e != nil {
+		panic(e)
+	}
+	fmt.Printf("\n\n > Indexes: %+v\n\n", idxs)
+	pp, _ := json.Marshal(pipeline)
+	fmt.Printf(" >  pipeline %+v\n", string(pp))
+	return db.staticSkylinks.Aggregate(ctx, pipeline)
+}
+
+// validOffsetPageSize returns valid values for offset and page size. If the
+// input values are invalid, it returns defaults.
+func validOffsetPageSize(offset, pageSize int) (int, int) {
 	if offset < 0 {
-		errs = append(errs, errors.New("the offset must be non-negative"))
+		offset = 0
 	}
 	if pageSize < 1 {
-		errs = append(errs, errors.New("the page size needs to be positive"))
+		pageSize = DefaultPageSize
 	}
-	return errors.Compose(errs...)
+	return offset, pageSize
 }
