@@ -10,13 +10,13 @@ import (
 	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
+	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/joho/godotenv"
 	"github.com/stripe/stripe-go/v72"
-	"gitlab.com/SkynetLabs/skyd/build"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/sirupsen/logrus"
@@ -264,5 +264,6 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
+	log.Printf("Starting Accounts.\nGitRevision: %v (built %v)\n", build.GitRevision, build.BuildTime)
 	logger.Fatal(server.ListenAndServe(3000))
 }
