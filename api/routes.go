@@ -64,12 +64,12 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/user/downloads", api.withAuth(api.userDownloadsGET, false))
 
 	// Endpoints for user API keys.
-	api.staticRouter.POST("/user/apikeys", api.WithDBSession(api.withAuth(api.userAPIKeyPOST, false)))
-	api.staticRouter.GET("/user/apikeys", api.withAuth(api.userAPIKeyLIST, false))
-	api.staticRouter.GET("/user/apikeys/:id", api.withAuth(api.userAPIKeyGET, false))
-	api.staticRouter.PUT("/user/apikeys/:id", api.WithDBSession(api.withAuth(api.userAPIKeyPUT, false)))
-	api.staticRouter.PATCH("/user/apikeys/:id", api.WithDBSession(api.withAuth(api.userAPIKeyPATCH, false)))
-	api.staticRouter.DELETE("/user/apikeys/:id", api.withAuth(api.userAPIKeyDELETE, false))
+	api.staticRouter.POST("/user/apikeys", api.WithDBSession(api.withAuth(api.userAPIKeyPOST, true)))
+	api.staticRouter.GET("/user/apikeys", api.withAuth(api.userAPIKeyLIST, true))
+	api.staticRouter.GET("/user/apikeys/:id", api.withAuth(api.userAPIKeyGET, true))
+	api.staticRouter.PUT("/user/apikeys/:id", api.WithDBSession(api.withAuth(api.userAPIKeyPUT, true)))
+	api.staticRouter.PATCH("/user/apikeys/:id", api.WithDBSession(api.withAuth(api.userAPIKeyPATCH, true)))
+	api.staticRouter.DELETE("/user/apikeys/:id", api.withAuth(api.userAPIKeyDELETE, true))
 
 	// Endpoints for email communication with the user.
 	api.staticRouter.GET("/user/confirm", api.WithDBSession(api.noAuth(api.userConfirmGET))) // TODO POST
