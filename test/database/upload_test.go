@@ -37,45 +37,49 @@ func TestUploadsByUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	totalUploadSize := testUploadSize
-	rawStorageUsed := skynet.RawStorageUsed(testUploadSize)
-	uploadBandwidth := skynet.BandwidthUploadCost(testUploadSize)
-	uploadsCount := 1
+	// Note that we don't initialise the "total" values, as we are not going to
+	// use them in this test.
+	expected := database.UserStatsUpload{
+		Count:          1,
+		Size:           testUploadSize,
+		RawStorageUsed: skynet.RawStorageUsed(testUploadSize),
+		Bandwidth:      skynet.BandwidthUploadCost(testUploadSize),
+	}
 	// Fetch the user's uploads.
 	ups, n, err := db.UploadsByUser(ctx, *u, 0, database.DefaultPageSize)
 	if err != nil {
 		t.Fatal("Failed to fetch uploads by user.", err)
 	}
-	if n != uploadsCount {
-		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, n)
+	if n != expected.Count {
+		t.Fatalf("Expected to have %d upload(s), got %d.", expected.Count, n)
 	}
-	if ups[0].RawStorage != rawStorageUsed {
+	if ups[0].RawStorage != expected.RawStorageUsed {
 		t.Fatalf("Expected the raw storage used of an upload with file size of %d (%d MiB) to be %d (%d MiB), got %d (%d MiB).",
-			testUploadSize, testUploadSize/skynet.MiB, rawStorageUsed, rawStorageUsed/skynet.MiB, ups[0].Size, ups[0].Size/skynet.MiB)
+			testUploadSize, testUploadSize/skynet.MiB, expected.RawStorageUsed, expected.RawStorageUsed/skynet.MiB, ups[0].Size, ups[0].Size/skynet.MiB)
 	}
-	if ups[0].Size != totalUploadSize {
+	if ups[0].Size != expected.Size {
 		t.Fatalf("Expected the uploads size of an upload with file size of %d (%d MiB) to be %d (%d MiB), got %d (%d MiB).",
-			testUploadSize, testUploadSize/skynet.MiB, totalUploadSize, totalUploadSize/skynet.MiB, ups[0].Size, ups[0].Size/skynet.MiB)
+			testUploadSize, testUploadSize/skynet.MiB, expected.Size, expected.Size/skynet.MiB, ups[0].Size, ups[0].Size/skynet.MiB)
 	}
 	// Refresh the user's record and make sure we report storage used accurately.
 	stats, err := db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user.", err)
 	}
-	if stats.RawStorageUsed != rawStorageUsed {
+	if stats.RawStorageUsed != expected.RawStorageUsed {
 		t.Fatalf("Expected raw storage used of %d (%d MiB), got %d (%d MiB).",
-			rawStorageUsed, rawStorageUsed/skynet.MiB, stats.RawStorageUsed, stats.RawStorageUsed/skynet.MiB)
+			expected.RawStorageUsed, expected.RawStorageUsed/skynet.MiB, stats.RawStorageUsed, stats.RawStorageUsed/skynet.MiB)
 	}
-	if stats.TotalUploadsSize != totalUploadSize {
-		t.Fatalf("Expected total upload size of %d (%d MiB), got %d (%d MiB).",
-			totalUploadSize, totalUploadSize/skynet.MiB, stats.TotalUploadsSize, stats.TotalUploadsSize/skynet.MiB)
+	if stats.UploadsSize != expected.Size {
+		t.Fatalf("Expected upload size of %d (%d MiB), got %d (%d MiB).",
+			expected.Size, expected.Size/skynet.MiB, stats.UploadsSize, stats.UploadsSize/skynet.MiB)
 	}
-	if stats.BandwidthUploads != uploadBandwidth {
+	if stats.BandwidthUploads != expected.Bandwidth {
 		t.Fatalf("Expected upload bandwidth used of %d (%d MiB), got %d (%d MiB).",
-			uploadBandwidth, uploadBandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+			expected.Bandwidth, expected.Bandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
 	}
-	if stats.NumUploads != uploadsCount {
-		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
+	if stats.NumUploads != expected.Count {
+		t.Fatalf("Expected to have %d upload(s), got %d.", expected.Count, stats.NumUploads)
 	}
 	// Create a second upload for the same skylink. The user's used storage
 	// should stay the same but the upload bandwidth should increase.
@@ -83,58 +87,58 @@ func TestUploadsByUser(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to re-upload.", err)
 	}
-	totalUploadSize += 0 // raw storage used stays the same
-	rawStorageUsed += 0  // storage stays the same
-	uploadBandwidth += skynet.BandwidthUploadCost(testUploadSize)
-	uploadsCount++
+	expected.Size += 0           // raw storage used stays the same
+	expected.RawStorageUsed += 0 // storage stays the same
+	expected.Bandwidth += skynet.BandwidthUploadCost(testUploadSize)
+	expected.Count++
 	// Refresh the user's record and make sure we report storage used accurately.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user.", err)
 	}
-	if stats.RawStorageUsed != rawStorageUsed {
+	if stats.RawStorageUsed != expected.RawStorageUsed {
 		t.Fatalf("Expected raw storage used of %d (%d MiB), got %d (%d MiB).",
-			rawStorageUsed, rawStorageUsed/skynet.MiB, stats.RawStorageUsed, stats.RawStorageUsed/skynet.MiB)
+			expected.RawStorageUsed, expected.RawStorageUsed/skynet.MiB, stats.RawStorageUsed, stats.RawStorageUsed/skynet.MiB)
 	}
-	if stats.TotalUploadsSize != totalUploadSize {
-		t.Fatalf("Expected total upload size of %d (%d MiB), got %d (%d MiB).",
-			totalUploadSize, totalUploadSize/skynet.MiB, stats.TotalUploadsSize, stats.TotalUploadsSize/skynet.MiB)
+	if stats.UploadsSize != expected.Size {
+		t.Fatalf("Expected upload size of %d (%d MiB), got %d (%d MiB).",
+			expected.Size, expected.Size/skynet.MiB, stats.UploadsSize, stats.UploadsSize/skynet.MiB)
 	}
-	if stats.BandwidthUploads != uploadBandwidth {
+	if stats.BandwidthUploads != expected.Bandwidth {
 		t.Fatalf("Expected upload bandwidth used of %d (%d MiB), got %d (%d MiB).",
-			uploadBandwidth, uploadBandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+			expected.Bandwidth, expected.Bandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
 	}
-	if stats.NumUploads != uploadsCount {
-		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
+	if stats.NumUploads != expected.Count {
+		t.Fatalf("Expected to have %d upload(s), got %d.", expected.Count, stats.NumUploads)
 	}
 	// Upload the same file again. Uploads go up, storage stays the same.
 	_, _, err = test.RegisterTestUpload(ctx, db, *u, sl)
 	if err != nil {
 		t.Fatal("Failed to re-upload after unpinning.", err)
 	}
-	totalUploadSize += 0 // total upload size stays the same
-	rawStorageUsed += 0  // storage stays the same
-	uploadBandwidth += skynet.BandwidthUploadCost(testUploadSize)
-	uploadsCount++
+	expected.Size += 0           // upload size stays the same
+	expected.RawStorageUsed += 0 // storage stays the same
+	expected.Bandwidth += skynet.BandwidthUploadCost(testUploadSize)
+	expected.Count++
 	// Refresh the user's record and make sure we report storage used accurately.
 	stats, err = db.UserStats(ctx, *u)
 	if err != nil {
 		t.Fatal("Failed to fetch user.", err)
 	}
-	if stats.RawStorageUsed != rawStorageUsed {
+	if stats.RawStorageUsed != expected.RawStorageUsed {
 		t.Fatalf("Expected raw storage used of %d (%d MiB), got %d (%d MiB).",
-			rawStorageUsed, rawStorageUsed/skynet.MiB, stats.RawStorageUsed, stats.RawStorageUsed/skynet.MiB)
+			expected.RawStorageUsed, expected.RawStorageUsed/skynet.MiB, stats.RawStorageUsed, stats.RawStorageUsed/skynet.MiB)
 	}
-	if stats.TotalUploadsSize != totalUploadSize {
-		t.Fatalf("Expected total upload size of %d (%d MiB), got %d (%d MiB).",
-			totalUploadSize, totalUploadSize/skynet.MiB, stats.TotalUploadsSize, stats.TotalUploadsSize/skynet.MiB)
+	if stats.UploadsSize != expected.Size {
+		t.Fatalf("Expected upload size of %d (%d MiB), got %d (%d MiB).",
+			expected.Size, expected.Size/skynet.MiB, stats.UploadsSize, stats.UploadsSize/skynet.MiB)
 	}
-	if stats.BandwidthUploads != uploadBandwidth {
+	if stats.BandwidthUploads != expected.Bandwidth {
 		t.Fatalf("Expected upload bandwidth used of %d (%d MiB), got %d (%d MiB).",
-			uploadBandwidth, uploadBandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+			expected.Bandwidth, expected.Bandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
 	}
-	if stats.NumUploads != uploadsCount {
-		t.Fatalf("Expected to have %d upload(s), got %d.", uploadsCount, stats.NumUploads)
+	if stats.NumUploads != expected.Count {
+		t.Fatalf("Expected to have %d upload(s), got %d.", expected.Count, stats.NumUploads)
 	}
 }
 
@@ -216,9 +220,9 @@ func TestUnpinUploads(t *testing.T) {
 			0, 0, stats.TotalUploadsSize, stats.TotalUploadsSize/skynet.MiB)
 	}
 	expectedUploadBandwidth := 2 * skynet.BandwidthUploadCost(testUploadSize)
-	if stats.BandwidthUploads != expectedUploadBandwidth {
+	if stats.BandwidthUploadsTotal != expectedUploadBandwidth {
 		t.Fatalf("Expected upload bandwidth used of %d (%d MiB), got %d (%d MiB).",
-			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB, stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB, stats.BandwidthUploadsTotal, stats.BandwidthUploadsTotal/skynet.MiB)
 	}
 	// Fetch the second user's uploads.
 	_, n, err = db.UploadsByUser(ctx, *u2, 0, database.DefaultPageSize)

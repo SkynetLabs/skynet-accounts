@@ -64,7 +64,7 @@ func (db *DB) UploadCreate(ctx context.Context, user User, ip string, skylink Sk
 
 // UploadsBySkylink fetches a page of uploads of this skylink and the total
 // number of such uploads.
-func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]UploadResponse, int, error) {
+func (db *DB) UploadsBySkylink(ctx context.Context, skylink Skylink, offset, pageSize int) ([]UploadResponse, int64, error) {
 	if skylink.ID.IsZero() {
 		return nil, 0, ErrInvalidSkylink
 	}
@@ -119,7 +119,7 @@ func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int
 
 // UploadsByUser fetches a page of uploads by this user and the total number of
 // such uploads.
-func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int) ([]UploadResponse, int, error) {
+func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int) ([]UploadResponse, int64, error) {
 	if user.ID.IsZero() {
 		return nil, 0, errors.New("invalid user")
 	}
@@ -135,7 +135,7 @@ func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int
 
 // uploadsBy fetches a page of uploads, filtered by an arbitrary match criteria.
 // It also reports the total number of records in the list.
-func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]UploadResponse, int, error) {
+func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize int) ([]UploadResponse, int64, error) {
 	if err := validateOffsetPageSize(offset, pageSize); err != nil {
 		return nil, 0, err
 	}
@@ -156,7 +156,7 @@ func (db *DB) uploadsBy(ctx context.Context, matchStage bson.D, offset, pageSize
 	for ix := range uploads {
 		uploads[ix].RawStorage = skynet.RawStorageUsed(uploads[ix].Size)
 	}
-	return uploads, int(cnt), nil
+	return uploads, cnt, nil
 }
 
 // validateOffsetPageSize returns an error if offset and/or page size are invalid.
