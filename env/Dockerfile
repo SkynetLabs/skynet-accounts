@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Import golang image
-FROM golang:1.16-alpine
+FROM golang:1.18-alpine
 
 # Define working directory
 WORKDIR /app
