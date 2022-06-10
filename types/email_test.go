@@ -12,7 +12,6 @@ import (
 func TestEmail_String(t *testing.T) {
 	s := "mIxEdCaSeStRiNg"
 	e := Email(s)
-	strings.EqualFold(e.String(), s)
 	if !strings.EqualFold(e.String(), s) {
 		t.Fatalf("Expected '%s', got '%s'", strings.ToLower(s), e)
 	}
