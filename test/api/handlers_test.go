@@ -41,6 +41,9 @@ type subtest struct {
 // TestHandlers is a meta test that sets up a test instance of accounts and runs
 // a suite of tests that ensure all handlers behave as expected.
 func TestHandlers(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	dbName := test.DBNameForTest(t.Name())
 	at, err := test.NewAccountsTester(dbName)
 	if err != nil {

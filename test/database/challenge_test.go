@@ -18,6 +18,9 @@ import (
 
 // TestValidateChallengeResponse is a unit test using a database.
 func TestValidateChallengeResponse(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -126,6 +129,9 @@ func TestValidateChallengeResponse(t *testing.T) {
 // TestUnconfirmedUserUpdate ensures the entire flow for unconfirmed user
 // updates works as expected.
 func TestUnconfirmedUserUpdate(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)

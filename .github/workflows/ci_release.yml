@@ -1,10 +1,9 @@
 name: Release
 on:
   push:
-    # Nightly schedule pending full e2e testing with other repos
-    #schedule:
-    # Run daily at 1:15am
-    #- cron: "15 1 * * *"
+    branches:
+      - main
+  pull_request:
   workflow_dispatch:
     # Inputs the workflow accepts.
     inputs:
@@ -36,32 +35,23 @@ jobs:
         run: go install gitlab.com/NebulousLabs/analyze@latest
       - name: Install golangci-lint
         run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.45.0
+      - name: Update Dependecies and Clean Up
+        run: make deps
       - name: Lint
         run: make lint
       - name: Run unit tests
         run: make test
-
-  # Check if there were any changes since the last tag if this is not a push
-  # event
-  changes:
-    needs: [hadolint, test]
-    runs-on: ubuntu-latest
-    outputs:
-      updates: ${{steps.changes.outputs.any == 'true'}}
-    if: ${{ github.event_name != 'push' }}
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0 # Required due to the way Git works, without it this action won't be able to find any or the correct tags
-      - uses: SkynetLabs/.github/.github/actions/changes-since-last-tag@master
+      - name: Start Mongo Container
+        run: make start-mongo
+      - name: Run Long tests
+        run: make test-long-ci
 
   # Make a release if
-  # - there were changes and this is a scheduled job
   # - This is a manually trigger job, i.e. workflow_dispatch
   release:
-    needs: changes
+    needs: [hadolint, test]
     runs-on: ubuntu-latest
-    if: ${{ (needs.changes.outputs.updates == 'true' && github.event_name == 'schedule') || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     outputs:
       new_version: ${{ steps.version.outputs.new-version }}
     steps:

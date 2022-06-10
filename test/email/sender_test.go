@@ -21,6 +21,9 @@ import (
 // TestSender goes through the standard Sender workflow and ensures that it
 // works correctly.
 func TestSender(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dbName := test.DBNameForTest(t.Name())
@@ -88,6 +91,9 @@ func TestSender(t *testing.T) {
 // servers is sent exactly once. The test has several "servers" continuously
 // creating and "sending" emails.
 func TestContendingSenders(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)

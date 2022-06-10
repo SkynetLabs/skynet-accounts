@@ -132,7 +132,7 @@ func TestUserLimitsGetFromTier(t *testing.T) {
 			}
 		}()
 		// The call that we expect to log a critical.
-		_ = userLimitsGetFromTier("", math.MaxInt, false, true)
+		_ = userLimitsGetFromTier("", math.MaxInt64, false, true)
 		return
 	}()
 	if err != nil {

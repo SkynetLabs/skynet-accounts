@@ -10,6 +10,9 @@ import (
 
 // TestAPIKeys ensures the DB operations with API keys work as expected.
 func TestAPIKeys(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)

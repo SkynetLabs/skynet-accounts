@@ -13,6 +13,9 @@ import (
 // TestUploadsByUser ensures UploadsByUser returns the correct uploads,
 // in the correct order, with the correct sized and so on.
 func TestUploadsByUser(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -145,6 +148,9 @@ func TestUploadsByUser(t *testing.T) {
 // TestUnpinUploads ensures UnpinUploads unpins all uploads of this
 // skylink by this user without affecting uploads by other users.
 func TestUnpinUploads(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -255,6 +261,9 @@ func TestUnpinUploads(t *testing.T) {
 
 // TestUploadCreateAnon ensures that UploadCreate can create anonymous uploads.
 func TestUploadCreateAnon(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
