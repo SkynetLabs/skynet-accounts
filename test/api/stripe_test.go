@@ -27,7 +27,10 @@ func TestStripe(t *testing.T) {
 	// We only run tests against Stripe's test infrastructure. For that we need
 	// a test API key.
 	key, ok := os.LookupEnv("STRIPE_API_KEY")
-	if !ok || !strings.HasPrefix(key, "sk_test_") {
+	if !ok {
+		t.Skipf("Skipping %s. If you want to run this test, update STRIPE_API_KEY to hold a test API key.\n", t.Name())
+	}
+	if !strings.HasPrefix(key, "sk_test_") {
 		t.Skipf("Skipping %s. If you want to run this test, update STRIPE_API_KEY to hold a test API key.\n"+
 			"Expected STRIPE_API_KEY that starts with '%s', got '%s'", t.Name(), "sk_test_", key[:8])
 	}
