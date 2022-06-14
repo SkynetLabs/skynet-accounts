@@ -21,6 +21,9 @@ import (
 // TestUserByEmail ensures UserByEmail works as expected.
 // This method also tests UserCreate.
 func TestUserByEmail(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -64,6 +67,9 @@ func TestUserByEmail(t *testing.T) {
 
 // TestUserByID ensures UserByID works as expected.
 func TestUserByID(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -106,6 +112,9 @@ func TestUserByID(t *testing.T) {
 // TestUserByPubKey makes sure UserByPubKey functions correctly, both with a
 // single and multiple pubkeys attached to a user.
 func TestUserByPubKey(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	name := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, name)
@@ -157,6 +166,9 @@ func TestUserByPubKey(t *testing.T) {
 // TestUserByStripeID ensures UserByStripeID works as expected.
 // This method also tests UserCreate and UserSetStripeID.
 func TestUserByStripeID(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -201,6 +213,9 @@ func TestUserByStripeID(t *testing.T) {
 // TestUserBySub ensures UserBySub works as expected.
 // This method also tests UserCreate.
 func TestUserBySub(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -243,6 +258,9 @@ func TestUserBySub(t *testing.T) {
 // TestUserConfirmEmail ensures that email confirmation works as expected,
 // including resecting the expiration of tokens.
 func TestUserConfirmEmail(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -281,6 +299,9 @@ func TestUserConfirmEmail(t *testing.T) {
 
 // TestUserCreate ensures UserCreate works as expected.
 func TestUserCreate(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -333,6 +354,9 @@ func TestUserCreate(t *testing.T) {
 
 // TestUserCreateEmailConfirmation tests UserCreateEmailConfirmation.
 func TestUserCreateEmailConfirmation(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -364,6 +388,9 @@ func TestUserCreateEmailConfirmation(t *testing.T) {
 
 // TestUserDelete ensures UserDelete works as expected.
 func TestUserDelete(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -399,6 +426,9 @@ func TestUserDelete(t *testing.T) {
 
 // TestUserSave ensures that UserSave works as expected.
 func TestUserSave(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -445,6 +475,9 @@ func TestUserSave(t *testing.T) {
 
 // TestUserSetStripeID ensures that UserSetStripeID works as expected.
 func TestUserSetStripeID(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -479,6 +512,9 @@ func TestUserSetStripeID(t *testing.T) {
 
 // TestUserPubKey tests UserPubKeyAdd and UserPubKeyRemove.
 func TestUserPubKey(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
@@ -563,6 +599,9 @@ func TestUserPubKey(t *testing.T) {
 
 // TestUserSetTier ensures that UserSetTier works as expected.
 func TestUserSetTier(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -595,6 +634,9 @@ func TestUserSetTier(t *testing.T) {
 
 // TestUserStats ensures we report accurate statistics for users.
 func TestUserStats(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)

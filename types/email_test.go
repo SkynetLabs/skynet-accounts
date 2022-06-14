@@ -12,7 +12,7 @@ import (
 func TestEmail_String(t *testing.T) {
 	s := "mIxEdCaSeStRiNg"
 	e := Email(s)
-	if e.String() != strings.ToLower(s) {
+	if !strings.EqualFold(e.String(), s) {
 		t.Fatalf("Expected '%s', got '%s'", strings.ToLower(s), e)
 	}
 }
@@ -44,7 +44,7 @@ func TestEmail_UnmarshalJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	// We expect the unmarshalled email to be lowercase only.
-	if string(e) != strings.ToLower(string(b[1:len(b)-1])) {
+	if !strings.EqualFold(string(e), string(b[1:len(b)-1])) {
 		t.Fatalf("Expected to get a lowercase version of '%s', i.e. '%s' but got '%s'", e, strings.ToLower(string(e)), e)
 	}
 }
