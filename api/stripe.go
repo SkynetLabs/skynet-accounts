@@ -91,8 +91,11 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		Customer: s.Customer.ID,
 		Status:   string(stripe.SubscriptionStatusActive),
 	})
-	// Pick the latest active plan and set the user's tier based on that.
 	subs := it.SubscriptionList().Data
+	if len(subs) > 1 {
+		api.staticLogger.Tracef("More than one active subscription detected: %+v", subs)
+	}
+	// Pick the latest active plan and set the user's tier based on that.
 	var mostRecentSub *stripe.Subscription
 	for _, subsc := range subs {
 		if mostRecentSub == nil || subsc.Created > mostRecentSub.Created {
@@ -128,9 +131,10 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 			api.staticLogger.Warnf("Empty subscription ID! User ID '%s', Stripe ID '%s', subscription object '%+v'", u.ID.Hex(), u.StripeID, subs)
 			continue
 		}
-		subsc, err = sub.Cancel(subsc.ID, &p)
+		cs, err := sub.Cancel(subsc.ID, &p)
 		if err != nil {
 			api.staticLogger.Warnf("Failed to cancel sub with id '%s' for user '%s' with Stripe customer id '%s'. Error: '%s'", subsc.ID, u.ID.Hex(), s.Customer.ID, err.Error())
+			api.staticLogger.Tracef("Sub information returned by Stripe: %+v", cs)
 		} else {
 			api.staticLogger.Tracef("Successfully cancelled sub with id '%s' for user '%s' with Stripe customer id '%s'.", subsc.ID, u.ID.Hex(), s.Customer.ID)
 		}
