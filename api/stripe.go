@@ -166,7 +166,7 @@ func (api *API) stripeBillingHANDLER(u *database.User, w http.ResponseWriter, re
 	}
 	params := &stripe.BillingPortalSessionParams{
 		Customer:  stripe.String(u.StripeID),
-		ReturnURL: stripe.String(DashboardURL + "/payments"),
+		ReturnURL: stripe.String("https://account.dev3.siasky.dev/processing-payment"),
 	}
 	s, err := bpsession.New(params)
 	if err != nil {
