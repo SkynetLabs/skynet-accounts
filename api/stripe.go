@@ -166,7 +166,7 @@ func (api *API) stripeBillingHANDLER(u *database.User, w http.ResponseWriter, re
 	}
 	params := &stripe.BillingPortalSessionParams{
 		Customer:  stripe.String(u.StripeID),
-		ReturnURL: stripe.String("https://account.dev3.siasky.dev/processing-payment"),
+		ReturnURL: stripe.String("https://account.dev3.siasky.dev/payments"),
 	}
 	s, err := bpsession.New(params)
 	if err != nil {
@@ -200,8 +200,8 @@ func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req 
 	subscription := "subscription"
 	paymentMethodTypeCard := "card"
 	lineItem1Quantity := int64(1)
-	cancelURL := DashboardURL + "/payments"
-	successURL := DashboardURL + "/payments?session_id={CHECKOUT_SESSION_ID}"
+	cancelURL := "https://account.dev3.siasky.dev/payments"
+	successURL := "https://account.dev3.siasky.dev/processing-payment?session_id={CHECKOUT_SESSION_ID}"
 	params := stripe.CheckoutSessionParams{
 		AllowPromotionCodes: &True,
 		CancelURL:           &cancelURL,
