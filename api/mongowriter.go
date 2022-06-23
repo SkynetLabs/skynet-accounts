@@ -16,38 +16,46 @@ const (
 )
 
 type (
-	// MongoWriter is a custom http.ResponseWriter to commit or abort transactions.
+	// MongoWriter is a custom http.ResponseWriter that handles MongoDB
+	// transactions.
 	MongoWriter struct {
 		logger *logrus.Logger
 		sctx   mongo.SessionContext
 		rw     http.ResponseWriter
-		// ew is an error writer buffer in which we'll store the data written to the
-		// writer in case the operation is not successful. Later we'll be able to
-		// either retrieve this data (if we can't retry anymore) or discard it (if
-		// we want to retry the call).
-		ew bufferedResponseWriter
+		// ew is an error writer buffer in which we'll store the data written to
+		// the writer in case the operation is not successful. Later we'll be
+		// able to either retrieve this data (if we can't retry anymore) or
+		// discard it (if we want to retry the call).
+		ew bufferResponseWriter
 		// w is the currently active response writer. In case of a successful
 		// operation it will be the rw writer, otherwise it will be the ew.
 		w http.ResponseWriter
 	}
 
-	// bufferedResponseWriter will hold anything written to it in memory.
+	// bufferResponseWriter will hold anything written to it in memory.
 	// We use it on error to temporarily store the content until we decide
 	// whether to retry or give up on the operation.
-	bufferedResponseWriter struct {
+	bufferResponseWriter struct {
 		Buffer bytes.Buffer
 		Status int
 	}
 )
 
-// NewMongoWriter creates the MongoWriter and starts a transaction.
+// NewMongoWriter creates a MongoWriter and starts a transaction.
 // Returns an error if it fails to start a transaction.
+//
+// If the response is a successful one (status code 2xx) then MongoWriter will
+// directly write to the given http.ResponseWriter. Otherwise, it will write to
+// an internal buffer writer, leaving the original http.ResponseWriter intact,
+// so the request can be retried. The status of the internal buffer writer can
+// be inspected via the ErrorStatus, ErrorBuffer, and FailedWithWriteConflict
+// methods.
 func NewMongoWriter(w http.ResponseWriter, sctx mongo.SessionContext, logger *logrus.Logger) (MongoWriter, error) {
 	return MongoWriter{
 		logger: logger,
 		sctx:   sctx,
 		w:      w,
-		ew:     bufferedResponseWriter{},
+		ew:     bufferResponseWriter{},
 	}, sctx.StartTransaction()
 }
 
@@ -97,16 +105,16 @@ func (mw *MongoWriter) FailedWithWriteConflict() bool {
 }
 
 // Header implementation.
-func (w *bufferedResponseWriter) Header() http.Header {
+func (w *bufferResponseWriter) Header() http.Header {
 	return http.Header{}
 }
 
 // Write implementation.
-func (w *bufferedResponseWriter) Write(b []byte) (int, error) {
+func (w *bufferResponseWriter) Write(b []byte) (int, error) {
 	return w.Buffer.Write(b)
 }
 
 // WriteHeader implementation.
-func (w *bufferedResponseWriter) WriteHeader(statusCode int) {
+func (w *bufferResponseWriter) WriteHeader(statusCode int) {
 	w.Status = statusCode
 }
