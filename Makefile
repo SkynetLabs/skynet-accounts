@@ -29,7 +29,7 @@ else
 	- DEL /F /Q cover output
 endif
 
-run = . 
+run = .
 
 # count says how many times to run the tests.
 count = 1
@@ -85,7 +85,7 @@ ifneq ("$(OS)","Windows_NT")
 endif
 
 # Define docker container name our test MongoDB instance.
-MONGO_TEST_CONTAINER_NAME=blocker-mongo-test-db
+MONGO_TEST_CONTAINER_NAME=accounts-mongo-test-db
 
 # start-mongo starts a local mongoDB container with no persistence.
 # We first prepare for the start of the container by making sure the test
@@ -135,11 +135,6 @@ test-long: lint lint-ci start-mongo test-long-ci stop-mongo
 test-long-ci:
 	@mkdir -p cover
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=600s $(pkgs) -run=$(run) -count=$(count)
-
-# Cookie vars
-# TODO: Are these used?
-COOKIE_HASH_KEY="7eb32cfab5014d14394648dae1cf4e606727eee2267f6a50213cd842e61c5bce"
-COOKIE_ENC_KEY="65d31d12b80fc57df16d84c02a9bb62e2bc3b633388b05e49ef8abfdf0d35cf3"
 
 # docker-generate is a docker command for env var generation
 #
