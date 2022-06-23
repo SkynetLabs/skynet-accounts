@@ -34,11 +34,6 @@ var (
 	// `https://account.` prepended to it).
 	DashboardURL = "https://account.siasky.net"
 
-	// StripeTestMode tells us whether to use Stripe's test mode or prod mode
-	// plan and price ids. This depends on what kind of key is stored in the
-	// STRIPE_API_KEY environment variable.
-	StripeTestMode = false
-
 	// True is a helper for when we need to pass a *bool to Stripe.
 	True = true
 
@@ -96,8 +91,11 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 		Customer: s.Customer.ID,
 		Status:   string(stripe.SubscriptionStatusActive),
 	})
-	// Pick the latest active plan and set the user's tier based on that.
 	subs := it.SubscriptionList().Data
+	if len(subs) > 1 {
+		api.staticLogger.Tracef("More than one active subscription detected: %+v", subs)
+	}
+	// Pick the latest active plan and set the user's tier based on that.
 	var mostRecentSub *stripe.Subscription
 	for _, subsc := range subs {
 		if mostRecentSub == nil || subsc.Created > mostRecentSub.Created {
@@ -122,9 +120,6 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	}
 	// Cancel all subs aside from the latest one.
 	p := stripe.SubscriptionCancelParams{
-		Params: stripe.Params{
-			StripeAccount: &s.Customer.ID,
-		},
 		InvoiceNow: &True,
 		Prorate:    &True,
 	}
@@ -136,9 +131,10 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 			api.staticLogger.Warnf("Empty subscription ID! User ID '%s', Stripe ID '%s', subscription object '%+v'", u.ID.Hex(), u.StripeID, subs)
 			continue
 		}
-		subsc, err = sub.Cancel(subsc.ID, &p)
+		cs, err := sub.Cancel(subsc.ID, &p)
 		if err != nil {
 			api.staticLogger.Warnf("Failed to cancel sub with id '%s' for user '%s' with Stripe customer id '%s'. Error: '%s'", subsc.ID, u.ID.Hex(), s.Customer.ID, err.Error())
+			api.staticLogger.Tracef("Sub information returned by Stripe: %+v", cs)
 		} else {
 			api.staticLogger.Tracef("Successfully cancelled sub with id '%s' for user '%s' with Stripe customer id '%s'.", subsc.ID, u.ID.Hex(), s.Customer.ID)
 		}
@@ -329,7 +325,8 @@ func (api *API) stripeWebhookPOST(_ *database.User, w http.ResponseWriter, req *
 			return
 		}
 		// Check the details about this subscription:
-		s, err := sub.Get(hasSub.Sub, nil)
+		var s *stripe.Subscription
+		s, err = sub.Get(hasSub.Sub, nil)
 		if err != nil {
 			api.staticLogger.Debugln("Webhook: Failed to fetch sub:", err)
 			api.WriteError(w, err, http.StatusInternalServerError)
@@ -365,8 +362,13 @@ func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, i
 
 // StripePrices returns a mapping of Stripe price ids to Skynet tiers.
 func StripePrices() map[string]int {
-	if StripeTestMode {
+	if StripeTestMode() {
 		return stripePricesTest
 	}
 	return stripePricesProd
+}
+
+// StripeTestMode tells us whether we're using a test key or a live key.
+func StripeTestMode() bool {
+	return strings.HasPrefix(stripe.Key, "sk_test_")
 }

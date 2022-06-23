@@ -35,7 +35,6 @@ func TestStripe(t *testing.T) {
 			"Expected STRIPE_API_KEY that starts with '%s', got '%s'", t.Name(), "sk_test_", key[:8])
 	}
 	stripe.Key = key
-	api.StripeTestMode = true
 
 	tests := map[string]func(t *testing.T, at *test.AccountsTester){
 		"get billing":   testStripeBillingGET,
