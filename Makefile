@@ -85,7 +85,7 @@ ifneq ("$(OS)","Windows_NT")
 endif
 
 # Define docker container name our test MongoDB instance.
-MONGO_TEST_CONTAINER_NAME=blocker-mongo-test-db
+MONGO_TEST_CONTAINER_NAME=accounts-mongo-test-db
 
 # start-mongo starts a local mongoDB container with no persistence.
 # We first prepare for the start of the container by making sure the test
@@ -138,12 +138,6 @@ test-long-ci:
 
 test-single:
 	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(pkgs) -run=$(run) -count=$(count)
-
-# Cookie vars
-# TODO: Are these used?
-COOKIE_HASH_KEY="7eb32cfab5014d14394648dae1cf4e606727eee2267f6a50213cd842e61c5bce"
-COOKIE_ENC_KEY="65d31d12b80fc57df16d84c02a9bb62e2bc3b633388b05e49ef8abfdf0d35cf3"
-
 # docker-generate is a docker command for env var generation
 #
 # The sleep is to allow time for the docker container to start up after `docker

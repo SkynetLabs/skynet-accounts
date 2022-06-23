@@ -190,9 +190,6 @@ func TestParseConfiguration(t *testing.T) {
 	if config.StripeKey != sk {
 		t.Fatalf("Expected %s, got %s", sk, config.StripeKey)
 	}
-	if config.StripeTestMode {
-		t.Fatal("Expected live mode.")
-	}
 	if config.ServerLockID != serverDomain {
 		t.Fatalf("Expected %s, got %s", serverDomain, config.ServerLockID)
 	}
@@ -226,9 +223,6 @@ func TestParseConfiguration(t *testing.T) {
 	}
 	if config.StripeKey != sk {
 		t.Fatalf("Expected %s, got %s", sk, config.StripeKey)
-	}
-	if !config.StripeTestMode {
-		t.Fatal("Expected test mode.")
 	}
 	if config.MaxAPIKeys != maxKeys {
 		t.Fatalf("Expected %d, got %d", maxKeys, config.MaxAPIKeys)
