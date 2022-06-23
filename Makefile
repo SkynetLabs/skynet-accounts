@@ -29,7 +29,7 @@ else
 	- DEL /F /Q cover output
 endif
 
-run = . 
+run = .
 
 # count says how many times to run the tests.
 count = 1
@@ -136,6 +136,9 @@ test-long-ci:
 	@mkdir -p cover
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=600s $(pkgs) -run=$(run) -count=$(count)
 
+test-single:
+	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(pkgs) -run=$(run) -count=$(count)
+
 # Cookie vars
 # TODO: Are these used?
 COOKIE_HASH_KEY="7eb32cfab5014d14394648dae1cf4e606727eee2267f6a50213cd842e61c5bce"
@@ -153,4 +156,4 @@ docker-generate: clean
 	sleep 3
 	@docker stop genenv || true && docker rm --force genenv
 
-.PHONY: all deps fmt install release clean check test test-long test-long-ci start-mongo stop-mongo docker-generate
+.PHONY: all deps fmt install release clean check test test-long test-long-ci test-single start-mongo stop-mongo docker-generate

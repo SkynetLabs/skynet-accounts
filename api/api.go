@@ -9,11 +9,17 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"gitlab.com/SkynetLabs/skyd/build"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
-	"go.mongodb.org/mongo-driver/mongo"
+)
+
+const (
+	// dbTxnRetryCount specifies the number of times we should retry an API
+	// call in case we run into transaction errors.
+	dbTxnRetryCount = 3
 )
 
 type (
@@ -82,33 +88,57 @@ func (api *API) ListenAndServe(port int) error {
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), api.staticRouter)
 }
 
-// WithDBSession injects a session context into the request context of the handler.
+// WithDBSession injects a session context into the request context of the
+// handler. In case of a MongoDB WriteConflict error, the call is retried up to
+// dbTxnRetryCount times or until the request context expires.
 func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		// Create a new db session
-		sess, err := api.staticDB.NewSession()
-		if err != nil {
-			api.WriteError(w, errors.AddContext(err, "failed to start a new mongo session"), http.StatusInternalServerError)
+		numRetriesLeft := dbTxnRetryCount
+		for {
+			// Create a new db session
+			sess, err := api.staticDB.NewSession()
+			if err != nil {
+				api.WriteError(w, errors.AddContext(err, "failed to start a new mongo session"), http.StatusInternalServerError)
+				return
+			}
+			// Close session after the handler is done.
+			defer sess.EndSession(req.Context())
+			// Create session context.
+			sctx := mongo.NewSessionContext(req.Context(), sess)
+			// Get the special response writer.
+			mw, err := NewMongoWriter(w, sctx, api.staticLogger)
+			if err != nil {
+				api.WriteError(w, errors.AddContext(err, "failed to start a new transaction"), http.StatusInternalServerError)
+				return
+			}
+			// Create a new request with our session context.
+			req = req.WithContext(sctx)
+			// Forward the new response writer and request to the handler.
+			h(&mw, req, ps)
+
+			// If the call succeeded then we're done because both the status and
+			// the response content are already written to the response writer.
+			if mw.ErrorStatus() == 0 {
+				return
+			}
+			// If the call failed with a WriteConflict error and we still have
+			// retries left, we'll retry it. Otherwise, we'll write the error to
+			// the response writer and finish the call.
+			if mw.FailedWithWriteConflict() && numRetriesLeft > 0 {
+				api.staticLogger.Tracef("Retrying call because of WriteConflict (%d out of %d). Request: %+v", numRetriesLeft, dbTxnRetryCount, req)
+				numRetriesLeft--
+				continue
+			}
+			// If the call failed with a non-WriteConflict error  or we ran out
+			// of retries, we write the error and status to the response writer
+			// and finish the call.
+			w.WriteHeader(mw.ErrorStatus())
+			_, err = w.Write(mw.ErrorBuffer())
+			if err != nil {
+				api.staticLogger.Warnf("Failed to write to response writer: %+v", err)
+			}
 			return
 		}
-		// Close session after the handler is done.
-		defer sess.EndSession(req.Context())
-
-		// Create session context.
-		sctx := mongo.NewSessionContext(req.Context(), sess)
-
-		// Get the special response writer.
-		mw, err := NewMongoWriter(w, sctx, api.staticLogger)
-		if err != nil {
-			api.WriteError(w, errors.AddContext(err, "failed to start a new transaction"), http.StatusInternalServerError)
-			return
-		}
-
-		// Create a new request with our session context.
-		req = req.WithContext(sctx)
-
-		// Forward the new response writer and request to the handler.
-		h(&mw, req, ps)
 	}
 }
 
