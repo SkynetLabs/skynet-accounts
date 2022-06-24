@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
@@ -19,7 +21,7 @@ import (
 const (
 	// dbTxnRetryCount specifies the number of times we should retry an API
 	// call in case we run into transaction errors.
-	dbTxnRetryCount = 3
+	dbTxnRetryCount = 5
 )
 
 type (
@@ -94,7 +96,17 @@ func (api *API) ListenAndServe(port int) error {
 func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		numRetriesLeft := dbTxnRetryCount
+		// Read the request's body and replace its Body io.ReadCloser with a
+		// new one based off the read data.
+		body, err := io.ReadAll(io.LimitReader(req.Body, LimitBodySizeLarge))
+		if err != nil {
+			api.WriteError(w, errors.AddContext(err, "failed to read body"), http.StatusBadRequest)
+			return
+		}
+		_ = req.Body.Close()
+
 		for {
+			req.Body = io.NopCloser(bytes.NewReader(body))
 			// Create a new db session
 			sess, err := api.staticDB.NewSession()
 			if err != nil {

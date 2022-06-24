@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -136,6 +137,59 @@ func TestWithDBSession(t *testing.T) {
 	if err == nil {
 		t.Fatal("Fetched a user that shouldn't have existed")
 	}
+}
+
+func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	dbName := test.DBNameForTest(t.Name())
+	at, err := test.NewAccountsTester(dbName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if errClose := at.Close(); errClose != nil {
+			t.Error(errors.AddContext(errClose, "failed to close account tester"))
+		}
+	}()
+
+	// Create a test user.
+	userEmail := types.NewEmail(t.Name() + "@siasky.net")
+	userPassword := t.Name() + "pass"
+	_, b, err := at.UserPOST(userEmail.String(), userPassword)
+	if err != nil {
+		t.Fatal(err, string(b))
+	}
+	defer func() {
+		_, _ = at.UserDELETE()
+	}()
+	r, b, err := at.LoginCredentialsPOST(userEmail.String(), userPassword)
+	if err != nil {
+		t.Fatal(err, string(b))
+	}
+	at.SetCookie(test.ExtractCookie(r))
+
+	// Set up several goroutines that will update the user simultaneously.
+	// We'll make them all block on a channel and then we'll close the channel,
+	// so they all start at the same time. We want to keep the number of
+	// conflicting goroutines low because we want the WriteConflict to resolve
+	// within the given dxTxnRetryCount attempts.
+	ch := make(chan int)
+	var wg sync.WaitGroup
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-ch
+			_, _, err := at.UserPUT(userEmail.String(), "newpassword", "")
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	close(ch)
+	wg.Wait()
 }
 
 // TestUserTierCache ensures out tier cache works as expected.
