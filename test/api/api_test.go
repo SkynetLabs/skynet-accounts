@@ -139,6 +139,8 @@ func TestWithDBSession(t *testing.T) {
 	}
 }
 
+// TestWithDBSession_RetryOnWriteConflict ensures that WithDBSession can
+// properly retry requests on MongoDB WriteConflict error.
 func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
@@ -153,6 +155,17 @@ func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 			t.Error(errors.AddContext(errClose, "failed to close account tester"))
 		}
 	}()
+
+	// Ensure WithDBSession works with requests without bodies.
+	// This is a regression test. It panics with a nil pointer if we cannot
+	// properly handle requests with nil bodies.
+	testAPI, err := api.New(at.DB, nil, at.Logger, nil)
+	if err != nil {
+		t.Fatal("Failed to instantiate API.", err)
+	}
+	handler := func(_ http.ResponseWriter, _ *http.Request, _ httprouter.Params) {}
+	req := (&http.Request{}).WithContext(context.Background())
+	testAPI.WithDBSession(handler)(nil, req, nil)
 
 	// Create a test user.
 	userEmail := types.NewEmail(t.Name() + "@siasky.net")

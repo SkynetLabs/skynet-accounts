@@ -96,14 +96,18 @@ func (api *API) ListenAndServe(port int) error {
 func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		numRetriesLeft := dbTxnRetryCount
-		// Read the request's body and replace its Body io.ReadCloser with a
-		// new one based off the read data.
-		body, err := io.ReadAll(io.LimitReader(req.Body, LimitBodySizeLarge))
-		if err != nil {
-			api.WriteError(w, errors.AddContext(err, "failed to read body"), http.StatusBadRequest)
-			return
+		var body []byte
+		var err error
+		if req.Body != nil {
+			// Read the request's body and replace its Body io.ReadCloser with a
+			// new one based off the read data.
+			body, err = io.ReadAll(io.LimitReader(req.Body, LimitBodySizeLarge))
+			if err != nil {
+				api.WriteError(w, errors.AddContext(err, "failed to read body"), http.StatusBadRequest)
+				return
+			}
+			_ = req.Body.Close()
 		}
-		_ = req.Body.Close()
 
 		for {
 			req.Body = io.NopCloser(bytes.NewReader(body))
