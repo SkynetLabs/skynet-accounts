@@ -13,7 +13,6 @@ all: release
 
 deps:
 	go mod download
-	go mod tidy
 
 # clean removes all directories that get automatically created during
 # development.
