@@ -148,9 +148,14 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 			// retries left, we'll retry it. Otherwise, we'll write the error to
 			// the response writer and finish the call.
 			if mw.FailedWithWriteConflict() && numRetriesLeft > 0 {
-				api.staticLogger.Tracef("Retrying call because of WriteConflict (%d out of %d). Request: %+v", numRetriesLeft, dbTxnRetryCount, req)
-				numRetriesLeft--
-				continue
+				select {
+				case <-req.Context().Done():
+					// If the request context has expired we won't retry anymore.
+				default:
+					api.staticLogger.Tracef("Retrying call because of WriteConflict (%d out of %d). Request: %+v", numRetriesLeft, dbTxnRetryCount, req)
+					numRetriesLeft--
+					continue
+				}
 			}
 			// If the call failed with a non-WriteConflict error  or we ran out
 			// of retries, we write the error and status to the response writer
