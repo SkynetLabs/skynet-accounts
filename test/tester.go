@@ -17,6 +17,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
+	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -70,7 +71,7 @@ func NewDatabase(ctx context.Context, dbName string) (*database.DB, error) {
 
 // NewAccountsTester creates and starts a new AccountsTester service.
 // Use the Close method for a graceful shutdown.
-func NewAccountsTester(dbName string) (*AccountsTester, error) {
+func NewAccountsTester(dbName string, deps lib.Dependencies) (*AccountsTester, error) {
 	ctx := context.Background()
 	logger := NewDiscardLogger()
 
@@ -101,7 +102,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	mf := metafetcher.New(ctxWithCancel, db, logger)
 
 	// The server API encapsulates all the modules together.
-	server, err := api.New(db, mf, logger, email.NewMailer(db))
+	server, err := api.New(db, mf, logger, email.NewMailer(db), deps)
 	if err != nil {
 		cancel()
 		return nil, errors.AddContext(err, "failed to build the API")

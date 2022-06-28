@@ -9,6 +9,7 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
+	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"gitlab.com/SkynetLabs/skyd/build"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -28,6 +29,7 @@ type (
 	// API is the central struct which gives us access to all subsystems.
 	API struct {
 		staticDB            *database.DB
+		staticDeps          lib.Dependencies
 		staticMF            *metafetcher.MetaFetcher
 		staticRouter        *httprouter.Router
 		staticLogger        *logrus.Logger
@@ -43,7 +45,7 @@ type (
 )
 
 // New returns a new initialised API.
-func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer) (*API, error) {
+func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer, deps lib.Dependencies) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
 	}
@@ -65,9 +67,13 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 			Storage:           t.Storage,
 		}
 	}
+	if deps == nil {
+		deps = &lib.ProductionDependencies{}
+	}
 
 	api := &API{
 		staticDB:            db,
+		staticDeps:          deps,
 		staticMF:            mf,
 		staticRouter:        router,
 		staticLogger:        logger,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/fastrand"
@@ -33,7 +34,7 @@ func TestWithDBSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testAPI, err := api.New(db, nil, &logrus.Logger{}, nil)
+	testAPI, err := api.New(db, nil, &logrus.Logger{}, nil, nil)
 	if err != nil {
 		t.Fatal("Failed to instantiate API.", err)
 	}
@@ -146,7 +147,8 @@ func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 		t.SkipNow()
 	}
 	dbName := test.DBNameForTest(t.Name())
-	at, err := test.NewAccountsTester(dbName)
+	dep := lib.NewDependencyUserPutMongoDelay()
+	at, err := test.NewAccountsTester(dbName, dep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +161,7 @@ func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 	// Ensure WithDBSession works with requests without bodies.
 	// This is a regression test. It panics with a nil pointer if we cannot
 	// properly handle requests with nil bodies.
-	testAPI, err := api.New(at.DB, nil, at.Logger, nil)
+	testAPI, err := api.New(at.DB, nil, at.Logger, nil, nil)
 	if err != nil {
 		t.Fatal("Failed to instantiate API.", err)
 	}
@@ -188,20 +190,17 @@ func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 	// so they all start at the same time. We want to keep the number of
 	// conflicting goroutines low because we want the WriteConflict to resolve
 	// within the given dxTxnRetryCount attempts.
-	ch := make(chan int)
 	var wg sync.WaitGroup
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			<-ch
 			_, _, err := at.UserPUT(userEmail.String(), "newpassword", "")
 			if err != nil {
 				t.Error(err)
 			}
 		}()
 	}
-	close(ch)
 	wg.Wait()
 }
 
@@ -211,7 +210,7 @@ func TestUserTierCache(t *testing.T) {
 		t.SkipNow()
 	}
 	dbName := test.DBNameForTest(t.Name())
-	at, err := test.NewAccountsTester(dbName)
+	at, err := test.NewAccountsTester(dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

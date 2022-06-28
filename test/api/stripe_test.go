@@ -43,7 +43,7 @@ func TestStripe(t *testing.T) {
 		"post checkout": testStripeCheckoutPOST,
 	}
 
-	at, err := test.NewAccountsTester(t.Name())
+	at, err := test.NewAccountsTester(t.Name(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
