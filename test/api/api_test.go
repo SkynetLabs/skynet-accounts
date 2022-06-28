@@ -105,7 +105,7 @@ func TestWithDBSession(t *testing.T) {
 		testAPI.WriteError(w, errors.New("error"), http.StatusInternalServerError)
 	}
 
-	var rw test.ResponseWriter
+	rw := &test.ResponseWriter{}
 	var ps httprouter.Params
 	req := (&http.Request{}).WithContext(ctx)
 	// Call the success handler.

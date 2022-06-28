@@ -2,11 +2,12 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const (
@@ -16,20 +17,28 @@ const (
 )
 
 type (
+	// MongoSessionContext defines the minimal session context interface that
+	// we are using. This interface facilitates testing and should be expanded
+	// whenever we need additional functionality from mongo.SessionContext.
+	MongoSessionContext interface {
+		context.Context
+		StartTransaction(...*options.TransactionOptions) error
+		AbortTransaction(context.Context) error
+		CommitTransaction(context.Context) error
+	}
 	// MongoWriter is a custom http.ResponseWriter that handles MongoDB
 	// transactions.
 	MongoWriter struct {
 		logger *logrus.Logger
-		sctx   mongo.SessionContext
-		rw     http.ResponseWriter
+		sctx   MongoSessionContext
+		// w is the currently active response writer. In case of a successful
+		// operation it will be the response writer, otherwise it will be the ew.
+		w http.ResponseWriter
 		// ew is an error writer buffer in which we'll store the data written to
 		// the writer in case the operation is not successful. Later we'll be
 		// able to either retrieve this data (if we can't retry anymore) or
 		// discard it (if we want to retry the call).
-		ew bufferResponseWriter
-		// w is the currently active response writer. In case of a successful
-		// operation it will be the rw writer, otherwise it will be the ew.
-		w http.ResponseWriter
+		ew *bufferResponseWriter
 	}
 
 	// bufferResponseWriter will hold anything written to it in memory.
@@ -50,12 +59,12 @@ type (
 // so the request can be retried. The status of the internal buffer writer can
 // be inspected via the ErrorStatus, ErrorBuffer, and FailedWithWriteConflict
 // methods.
-func NewMongoWriter(w http.ResponseWriter, sctx mongo.SessionContext, logger *logrus.Logger) (MongoWriter, error) {
+func NewMongoWriter(w http.ResponseWriter, sctx MongoSessionContext, logger *logrus.Logger) (MongoWriter, error) {
 	return MongoWriter{
 		logger: logger,
 		sctx:   sctx,
 		w:      w,
-		ew:     bufferResponseWriter{},
+		ew:     &bufferResponseWriter{},
 	}, sctx.StartTransaction()
 }
 
@@ -73,7 +82,7 @@ func (mw *MongoWriter) Write(bytes []byte) (int, error) {
 func (mw *MongoWriter) WriteHeader(statusCode int) {
 	if statusCode < 200 || statusCode > 299 {
 		// This is an error state, write all further content to the error writer.
-		mw.w = &mw.ew
+		mw.w = mw.ew
 		err := mw.sctx.AbortTransaction(mw.sctx)
 		if err != nil {
 			mw.logger.Warningln("Failed to abort transaction:", err)
