@@ -23,6 +23,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	jwt2 "github.com/lestrrat-go/jwx/jwt"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/fastrand"
 	"gitlab.com/SkynetLabs/skyd/build"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -742,7 +743,7 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 		changedEmail = true
 	}
 
-	if api.staticDeps.Disrupt("DependencyUserPutMongoDelay") && fastrand.Int(0,2) == 0 {
+	if api.staticDeps.Disrupt("DependencyUserPutMongoDelay") && fastrand.Intn(2) == 0 {
 		time.Sleep(100 * time.Millisecond)
 	}
 
