@@ -136,8 +136,6 @@ test-long-ci:
 	@mkdir -p cover
 	GORACE='$(racevars)' go test -race --coverprofile='./cover/cover.out' -v -failfast -tags='testing debug netgo' -timeout=600s $(pkgs) -run=$(run) -count=$(count)
 
-test-single:
-	GORACE='$(racevars)' go test -race -v -tags='testing debug netgo' -timeout=300s $(pkgs) -run=$(run) -count=$(count)
 # docker-generate is a docker command for env var generation
 #
 # The sleep is to allow time for the docker container to start up after `docker
