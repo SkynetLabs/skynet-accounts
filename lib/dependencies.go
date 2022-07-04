@@ -15,22 +15,3 @@ type ProductionDependencies struct{}
 func (pd *ProductionDependencies) Disrupt(_ string) bool {
 	return false
 }
-
-/* Test dependencies */
-
-type (
-	// DependencyUserPutMongoDelay causes the `PUT /user` endpoint to add a delay before
-	// writing to Mongo.
-	DependencyUserPutMongoDelay struct{}
-)
-
-// Disrupt causes the `PUT /user` endpoint to add a delay before writing to
-// Mongo.
-func (d *DependencyUserPutMongoDelay) Disrupt(s string) bool {
-	return s == "DependencyUserPutMongoDelay"
-}
-
-// NewDependencyUserPutMongoDelay returns a new DependencyUserPutMongoDelay.
-func NewDependencyUserPutMongoDelay() Dependencies {
-	return &DependencyUserPutMongoDelay{}
-}

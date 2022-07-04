@@ -11,8 +11,8 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/database"
-	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/test/dependencies"
 	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/build"
@@ -34,7 +34,7 @@ func TestWithDBSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testAPI, err := api.New(db, nil, &logrus.Logger{}, nil, nil)
+	testAPI, err := api.New(db, nil, &logrus.Logger{}, nil)
 	if err != nil {
 		t.Fatal("Failed to instantiate API.", err)
 	}
@@ -147,7 +147,7 @@ func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 		t.SkipNow()
 	}
 	dbName := test.DBNameForTest(t.Name())
-	dep := lib.NewDependencyUserPutMongoDelay()
+	dep := dependencies.NewDependencyUserPutMongoDelay()
 	at, err := test.NewAccountsTester(dbName, dep)
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 	// Ensure WithDBSession works with requests without bodies.
 	// This is a regression test. It panics with a nil pointer if we cannot
 	// properly handle requests with nil bodies.
-	testAPI, err := api.New(at.DB, nil, at.Logger, nil, nil)
+	testAPI, err := api.New(at.DB, nil, at.Logger, nil)
 	if err != nil {
 		t.Fatal("Failed to instantiate API.", err)
 	}

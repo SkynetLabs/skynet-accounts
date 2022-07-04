@@ -102,7 +102,7 @@ func NewAccountsTester(dbName string, deps lib.Dependencies) (*AccountsTester, e
 	mf := metafetcher.New(ctxWithCancel, db, logger)
 
 	// The server API encapsulates all the modules together.
-	server, err := api.New(db, mf, logger, email.NewMailer(db), deps)
+	server, err := api.NewCustom(db, mf, logger, email.NewMailer(db), deps)
 	if err != nil {
 		cancel()
 		return nil, errors.AddContext(err, "failed to build the API")

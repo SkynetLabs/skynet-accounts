@@ -45,7 +45,13 @@ type (
 )
 
 // New returns a new initialised API.
-func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer, deps lib.Dependencies) (*API, error) {
+func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer) (*API, error) {
+	return NewCustom(db, mf, logger, mailer, &lib.ProductionDependencies{})
+}
+
+// NewCustom returns a new initialised API and allows specifying custom
+// dependencies.
+func NewCustom(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer, deps lib.Dependencies) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
 	}
@@ -67,10 +73,6 @@ func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, ma
 			Storage:           t.Storage,
 		}
 	}
-	if deps == nil {
-		deps = &lib.ProductionDependencies{}
-	}
-
 	api := &API{
 		staticDB:            db,
 		staticDeps:          deps,
@@ -115,7 +117,10 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 			_ = req.Body.Close()
 		}
 
-		for {
+		// handleFn wraps a full execution of the handler, combined with a retry
+		// detection and counting. It also takes care of creating and cancelling
+		// Mongo sessions and transactions.
+		handleFn := func() (retry bool) {
 			req.Body = io.NopCloser(bytes.NewReader(body))
 			// Create a new db session
 			sess, err := api.staticDB.NewSession()
@@ -142,7 +147,7 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 			// If the call succeeded then we're done because both the status and
 			// the response content are already written to the response writer.
 			if mw.ErrorStatus() == 0 {
-				return
+				return false
 			}
 			// If the call failed with a WriteConflict error and we still have
 			// retries left, we'll retry it. Otherwise, we'll write the error to
@@ -154,7 +159,7 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 				default:
 					api.staticLogger.Tracef("Retrying call because of WriteConflict (%d out of %d). Request: %+v", numRetriesLeft, dbTxnRetryCount, req)
 					numRetriesLeft--
-					continue
+					return true
 				}
 			}
 			// If the call failed with a non-WriteConflict error  or we ran out
@@ -165,7 +170,12 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 			if err != nil {
 				api.staticLogger.Warnf("Failed to write to response writer: %+v", err)
 			}
-			return
+			return false
+		}
+
+		// Keep retrying the handleFn until it returns a false, indicating that
+		// no more retries are needed or possible.
+		for handleFn() {
 		}
 	}
 }

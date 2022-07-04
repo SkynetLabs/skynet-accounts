@@ -256,7 +256,7 @@ func main() {
 	// we can determine their size.
 	mf := metafetcher.New(ctx, db, logger)
 	// Start the HTTP server.
-	server, err := api.New(db, mf, logger, mailer, nil)
+	server, err := api.New(db, mf, logger, mailer)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
