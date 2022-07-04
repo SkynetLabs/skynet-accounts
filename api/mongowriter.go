@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	// writeConflictErrMsg is the error message MongoDB issues when a
-	// transaction needs to be reverted because of a write conflict.
-	writeConflictErrMsg = "(WriteConflict) WriteConflict error: this operation conflicted with another operation. Please retry your operation or multi-document transaction."
+	// writeConflictErrMsg is a detectable substring of the error message
+	// MongoDB issues when a transaction needs to be reverted because of a
+	// write conflict.
+	writeConflictErrMsg = "(WriteConflict)"
 )
 
 type (
@@ -44,6 +45,7 @@ type (
 	// bufferResponseWriter will hold anything written to it in memory.
 	// We use it on error to temporarily store the content until we decide
 	// whether to retry or give up on the operation.
+	// It implements the http.ResponseWriter interface.
 	bufferResponseWriter struct {
 		Buffer bytes.Buffer
 		Status int
@@ -68,17 +70,18 @@ func NewMongoWriter(w http.ResponseWriter, sctx MongoSessionContext, logger *log
 	}, sctx.StartTransaction()
 }
 
-// Header implements the ResponseWriter interface.
+// Header implements http.ResponseWriter.
 func (mw *MongoWriter) Header() http.Header {
 	return mw.w.Header()
 }
 
-// Write implements the ResponseWriter interface.
+// Write implements http.ResponseWriter.
 func (mw *MongoWriter) Write(bytes []byte) (int, error) {
 	return mw.w.Write(bytes)
 }
 
-// WriteHeader writes the header and finalises the transaction.
+// WriteHeader implements http.ResponseWriter. It also writes the header and
+// finalises the MongoDB transaction.
 func (mw *MongoWriter) WriteHeader(statusCode int) {
 	if statusCode < 200 || statusCode > 299 {
 		// This is an error state, write all further content to the error writer.
@@ -113,17 +116,17 @@ func (mw *MongoWriter) FailedWithWriteConflict() bool {
 	return mw.ew.Status != 0 && strings.Contains(mw.ew.Buffer.String(), writeConflictErrMsg)
 }
 
-// Header implementation.
+// Header implements http.ResponseWriter.
 func (w *bufferResponseWriter) Header() http.Header {
 	return http.Header{}
 }
 
-// Write implementation.
+// Write implements http.ResponseWriter.
 func (w *bufferResponseWriter) Write(b []byte) (int, error) {
 	return w.Buffer.Write(b)
 }
 
-// WriteHeader implementation.
+// WriteHeader implements http.ResponseWriter.
 func (w *bufferResponseWriter) WriteHeader(statusCode int) {
 	w.Status = statusCode
 }

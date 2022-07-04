@@ -147,6 +147,8 @@ func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 		t.SkipNow()
 	}
 	dbName := test.DBNameForTest(t.Name())
+	// This dependency adds a delay within the transaction that updates the
+	// user, causing a WriteConflict error.
 	dep := dependencies.NewDependencyUserPutMongoDelay()
 	at, err := test.NewAccountsTester(dbName, dep)
 	if err != nil {
@@ -170,16 +172,16 @@ func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 	testAPI.WithDBSession(handler)(nil, req, nil)
 
 	// Create a test user.
-	userEmail := types.NewEmail(t.Name() + "@siasky.net")
+	userEmailStr := types.NewEmail(t.Name() + "@siasky.net").String()
 	userPassword := t.Name() + "pass"
-	_, b, err := at.UserPOST(userEmail.String(), userPassword)
+	_, b, err := at.UserPOST(userEmailStr, userPassword)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
 	defer func() {
 		_, _ = at.UserDELETE()
 	}()
-	r, b, err := at.LoginCredentialsPOST(userEmail.String(), userPassword)
+	r, b, err := at.LoginCredentialsPOST(userEmailStr, userPassword)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
@@ -195,7 +197,7 @@ func TestWithDBSession_RetryOnWriteConflict(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _, err := at.UserPUT(userEmail.String(), "newpassword", "")
+			_, _, err := at.UserPUT(userEmailStr, "newpassword", "")
 			if err != nil {
 				t.Error(err)
 			}

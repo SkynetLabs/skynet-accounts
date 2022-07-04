@@ -1,8 +1,8 @@
 package api
 
 import (
+	"bytes"
 	"context"
-	"crypto/subtle"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -105,7 +105,7 @@ func TestMongoWriter(t *testing.T) {
 		t.Fatalf("Expected %d bytes to be written, got %d", len(contentOK), n)
 	}
 	// Expect to find the content in the original response writer, i.e. testRW.
-	if subtle.ConstantTimeCompare(testRW.Buffer.Bytes(), []byte(contentOK)) != 1 {
+	if !bytes.Equal(testRW.Buffer.Bytes(), []byte(contentOK)) {
 		t.Fatalf("Expected buffer content to be '%s', got '%s'", contentOK, string(testRW.Buffer.Bytes()))
 	}
 	// Expect the transaction to be successfully committed.
@@ -144,7 +144,7 @@ func TestMongoWriter(t *testing.T) {
 		t.Fatalf("Expected error status to be %d, got %d", http.StatusInternalServerError, mw.ErrorStatus())
 	}
 	// Expect to find the content in the error buffer.
-	if subtle.ConstantTimeCompare(mw.ErrorBuffer(), []byte(contentErr)) != 1 {
+	if !bytes.Equal(mw.ErrorBuffer(), []byte(contentErr)) {
 		t.Fatalf("Expected error buffer content to be '%s', got '%s'", string(mw.ErrorBuffer()), contentOK)
 	}
 	// Expect the transaction to be successfully aborted.
@@ -187,7 +187,7 @@ func TestMongoWriter(t *testing.T) {
 		t.Fatalf("Expected error status to be %d, got %d", http.StatusInternalServerError, mw.ErrorStatus())
 	}
 	// Expect to find the content in the error buffer.
-	if subtle.ConstantTimeCompare(mw.ErrorBuffer(), []byte(writeConflictErrMsg)) != 1 {
+	if !bytes.Equal(mw.ErrorBuffer(), []byte(writeConflictErrMsg)) {
 		t.Fatalf("Expected error buffer content to be '%s', got '%s'", string(mw.ErrorBuffer()), contentOK)
 	}
 	// Expect the transaction to be successfully aborted.

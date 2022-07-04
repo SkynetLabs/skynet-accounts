@@ -1,8 +1,8 @@
 package database
 
 import (
+	"bytes"
 	"context"
-	"crypto/subtle"
 	"reflect"
 	"testing"
 	"time"
@@ -547,7 +547,7 @@ func TestUserPubKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(u1.PubKeys) == 1 && subtle.ConstantTimeCompare(u1.PubKeys[0][:], pk[:]) != 1 {
+	if len(u1.PubKeys) == 1 && !bytes.Equal(u1.PubKeys[0][:], pk[:]) {
 		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u1.PubKeys, pk)
 	}
 	// Add another.
@@ -559,7 +559,7 @@ func TestUserPubKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(u2.PubKeys) == 2 && subtle.ConstantTimeCompare(u1.PubKeys[1][:], pk1[:]) == 1 {
+	if len(u2.PubKeys) == 2 && bytes.Equal(u1.PubKeys[1][:], pk1[:]) {
 		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u2.PubKeys, pk1)
 	}
 	// Delete a pubkey.
@@ -571,7 +571,7 @@ func TestUserPubKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(u3.PubKeys) == 1 && subtle.ConstantTimeCompare(u3.PubKeys[0][:], pk1[:]) == 1 {
+	if len(u3.PubKeys) == 1 && bytes.Equal(u3.PubKeys[0][:], pk1[:]) {
 		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u3.PubKeys, pk1)
 	}
 	// Make sure UserPubKeyRemove removes all copies of the pubkey from the set.

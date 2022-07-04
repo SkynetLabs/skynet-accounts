@@ -14,7 +14,9 @@ func (d *DependencyUserPutMongoDelay) Disrupt(s string) bool {
 	return s == "DependencyUserPutMongoDelay"
 }
 
-// NewDependencyUserPutMongoDelay returns a new DependencyUserPutMongoDelay.
+// NewDependencyUserPutMongoDelay returns a new DependencyUserPutMongoDelay
+// which causes the `PUT /user` endpoint to add a delay before writing to
+// Mongo.
 func NewDependencyUserPutMongoDelay() lib.Dependencies {
 	return &DependencyUserPutMongoDelay{}
 }

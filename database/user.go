@@ -1,8 +1,8 @@
 package database
 
 import (
+	"bytes"
 	"context"
-	"crypto/subtle"
 	"fmt"
 	"net/mail"
 	"time"
@@ -620,7 +620,7 @@ func (db *DB) managedUserBySub(ctx context.Context, sub string) (*User, error) {
 // user.
 func (u User) HasKey(pk PubKey) bool {
 	for _, upk := range u.PubKeys {
-		if subtle.ConstantTimeCompare(upk, pk) == 1 {
+		if bytes.Equal(upk, pk) {
 			return true
 		}
 	}

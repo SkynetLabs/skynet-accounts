@@ -1,7 +1,7 @@
 package api
 
 import (
-	"crypto/subtle"
+	"bytes"
 	"encoding/base32"
 	"encoding/base64"
 	"net/http"
@@ -91,7 +91,7 @@ func TestTokenFromRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if subtle.ConstantTimeCompare(tkB, tkBytes) == 0 {
+	if !bytes.Equal(tkB, tkBytes) {
 		t.Log(string(tkB), "\n", string(tkBytes))
 		t.Fatal("Token mismatch.")
 	}
@@ -115,11 +115,11 @@ func TestTokenFromRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if subtle.ConstantTimeCompare(tkB, tkBytes) == 1 {
+	if bytes.Equal(tkB, tkBytes) {
 		t.Fatal("Cookie token got precedence over header token.")
 	}
 
-	if subtle.ConstantTimeCompare(tkB, tkBytes2) == 0 {
+	if !bytes.Equal(tkB, tkBytes2) {
 		t.Fatal("Token mismatch.")
 	}
 

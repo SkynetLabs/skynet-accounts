@@ -72,6 +72,10 @@ func NewDatabase(ctx context.Context, dbName string) (*database.DB, error) {
 // NewAccountsTester creates and starts a new AccountsTester service.
 // Use the Close method for a graceful shutdown.
 func NewAccountsTester(dbName string, deps lib.Dependencies) (*AccountsTester, error) {
+	// Make sure we have valid dependencies.
+	if deps == nil {
+		deps = &lib.ProductionDependencies{}
+	}
 	ctx := context.Background()
 	logger := NewDiscardLogger()
 

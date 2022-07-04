@@ -1,7 +1,7 @@
 package hash
 
 import (
-	"crypto/subtle"
+	"bytes"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -20,8 +20,7 @@ func TestDecodeHash(t *testing.T) {
 	}
 	expectedHash, _ := base64.RawStdEncoding.DecodeString("eDQwOMoSyRmzyvpD/wwGBg")
 	expectedSalt, _ := base64.RawStdEncoding.DecodeString("dwr95pEjaa7emZOu9bDAWw")
-	if subtle.ConstantTimeCompare(hash, expectedHash) != 1 ||
-		subtle.ConstantTimeCompare(salt, expectedSalt) != 1 ||
+	if !bytes.Equal(hash, expectedHash) || !bytes.Equal(salt, expectedSalt) ||
 		ac.Memory != 131072 || ac.Iterations != 2 || ac.Parallelism != 1 {
 		t.Fatal("Unexpected result")
 	}

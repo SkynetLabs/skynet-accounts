@@ -2,7 +2,6 @@ package database
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
@@ -93,7 +92,7 @@ func TestChallengeResponse_LoadFromReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if subtle.ConstantTimeCompare(chr.Response, response) != 1 || subtle.ConstantTimeCompare(chr.Signature, signature) != 1 {
+	if !bytes.Equal(chr.Response, response) || !bytes.Equal(chr.Signature, signature) {
 		t.Fatalf("Expected '%s' and '%s',\ngot '%s' and '%s'",
 			hex.EncodeToString(response), hex.EncodeToString(signature),
 			hex.EncodeToString(chr.Response), hex.EncodeToString(chr.Signature))
@@ -149,7 +148,7 @@ func TestPubKey_LoadString(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Make sure we have the expected pubkey.
-	if subtle.ConstantTimeCompare(pk[:], pk2[:]) != 1 {
+	if !bytes.Equal(pk[:], pk2[:]) {
 		t.Fatalf("Expected '%s', got '%s'", hex.EncodeToString(pk2[:]), hex.EncodeToString(pk[:]))
 	}
 }
