@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	// dbTxnRetryCount specifies the number of times we should retry an API
+	// DBTxnRetryCount specifies the number of times we should retry an API
 	// call in case we run into transaction errors.
-	dbTxnRetryCount = 5
+	DBTxnRetryCount = 5
 )
 
 type (
@@ -100,10 +100,10 @@ func (api *API) ListenAndServe(port int) error {
 
 // WithDBSession injects a session context into the request context of the
 // handler. In case of a MongoDB WriteConflict error, the call is retried up to
-// dbTxnRetryCount times or until the request context expires.
+// DBTxnRetryCount times or until the request context expires.
 func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		numRetriesLeft := dbTxnRetryCount
+		numRetriesLeft := DBTxnRetryCount
 		var body []byte
 		var err error
 		if req.Body != nil {
@@ -157,7 +157,7 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 				case <-req.Context().Done():
 					// If the request context has expired we won't retry anymore.
 				default:
-					api.staticLogger.Tracef("Retrying call because of WriteConflict (%d out of %d). Request: %+v", numRetriesLeft, dbTxnRetryCount, req)
+					api.staticLogger.Tracef("Retrying call because of WriteConflict (%d out of %d). Request: %+v", numRetriesLeft, DBTxnRetryCount, req)
 					numRetriesLeft--
 					return true
 				}

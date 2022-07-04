@@ -19,6 +19,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
+	"github.com/SkynetLabs/skynet-accounts/test/dependencies"
 	"github.com/SkynetLabs/skynet-accounts/types"
 	"github.com/julienschmidt/httprouter"
 	jwt2 "github.com/lestrrat-go/jwx/jwt"
@@ -744,6 +745,10 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 
 	if api.staticDeps.Disrupt("DependencyUserPutMongoDelay") {
 		time.Sleep(100 * time.Millisecond)
+	}
+	if api.staticDeps.Disrupt("DependencyMongoWriteConflictN") {
+		api.WriteError(w, errors.New(dependencies.DependencyMongoWriteConflictNMessage), http.StatusInternalServerError)
+		return
 	}
 
 	// Save the changes.
