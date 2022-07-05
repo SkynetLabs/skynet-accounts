@@ -126,7 +126,7 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 			sess, err := api.staticDB.NewSession()
 			if err != nil {
 				api.WriteError(w, errors.AddContext(err, "failed to start a new mongo session"), http.StatusInternalServerError)
-				return
+				return false
 			}
 			// Close session after the handler is done.
 			defer sess.EndSession(req.Context())
@@ -137,7 +137,7 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 			mw, err := NewMongoWriter(w, sctx, api.staticLogger)
 			if err != nil {
 				api.WriteError(w, errors.AddContext(err, "failed to start a new transaction"), http.StatusInternalServerError)
-				return
+				return false
 			}
 			// Create a new request with our session context.
 			req = req.WithContext(sctx)
@@ -162,7 +162,7 @@ func (api *API) WithDBSession(h httprouter.Handle) httprouter.Handle {
 					return true
 				}
 			}
-			// If the call failed with a non-WriteConflict error  or we ran out
+			// If the call failed with a non-WriteConflict error or we ran out
 			// of retries, we write the error and status to the response writer
 			// and finish the call.
 			w.WriteHeader(mw.ErrorStatus())

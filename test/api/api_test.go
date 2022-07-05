@@ -384,13 +384,24 @@ func testWithDBSessionRetryOnWriteConflictRepeatedFailures(t *testing.T) {
 	at.SetCookie(test.ExtractCookie(r))
 
 	// Try to update the user. Expect this to fail due to the dependency.
-	_, _, err = at.UserPUT(userEmailStr, "new password", "")
+	newpass := "new password"
+	_, _, err = at.UserPUT(userEmailStr, newpass, "")
 	if err == nil || !strings.Contains(err.Error(), dependencies.DependencyMongoWriteConflictNMessage) {
 		t.Fatalf("Expected a '%s' error, got '%s'", dependencies.DependencyMongoWriteConflictNMessage, err)
 	}
+	// Ensure the password was not updated.
+	r, _, _ = at.LoginCredentialsPOST(userPassword, newpass)
+	if r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected status '%d', got '%d'", http.StatusUnauthorized, r.StatusCode)
+	}
 	// Try to update the user again. Expect this to pass after one retry.
-	_, _, err = at.UserPUT(userEmailStr, "new password", "")
+	_, _, err = at.UserPUT(userEmailStr, newpass, "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Ensure the password was updated.
+	r, _, err = at.LoginCredentialsPOST(userEmailStr, newpass)
+	if err != nil || r.StatusCode != http.StatusNoContent {
+		t.Fatalf("Expected to log in successfully, got %d '%v'", r.StatusCode, err)
 	}
 }
