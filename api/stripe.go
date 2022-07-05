@@ -218,10 +218,29 @@ func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req 
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	// If the session contains a valid subscription, update the user's tier to
+	// match it. We won't do all the other work processStripeSub does (such as
+	// cancelling duplicate subs) because this endpoint runs synchronously and
+	// we want it to be fast. The webhook will handle those.
+	oldTier := u.Tier
+	newTier := u.Tier
+	if s.Subscription != nil {
+		subsc := s.Subscription
+		u.Tier = StripePrices()[subsc.Plan.ID]
+		newTier = u.Tier
+		u.SubscribedUntil = time.Unix(subsc.CurrentPeriodEnd, 0).UTC().Truncate(time.Millisecond)
+		u.SubscriptionStatus = string(subsc.Status)
+		u.SubscriptionCancelAt = time.Unix(subsc.CancelAt, 0).UTC().Truncate(time.Millisecond)
+		u.SubscriptionCancelAtPeriodEnd = subsc.CancelAtPeriodEnd
+	}
 	response := struct {
 		SessionID string `json:"sessionId"`
+		OldTier   int    `json:"oldTier"`
+		NewTier   int    `json:"newTier"`
 	}{
 		SessionID: s.ID,
+		OldTier:   oldTier,
+		NewTier:   newTier,
 	}
 	api.WriteJSON(w, response)
 }
