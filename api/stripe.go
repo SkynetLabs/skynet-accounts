@@ -21,6 +21,7 @@ import (
 	"github.com/stripe/stripe-go/v72/sub"
 	"github.com/stripe/stripe-go/v72/webhook"
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/SkynetLabs/skyd/build"
 )
 
 const (
@@ -33,9 +34,6 @@ var (
 	// This value is controlled by the PORTAL_DOMAIN environment variable (with
 	// `https://account.` prepended to it).
 	DashboardURL = "https://account.siasky.net"
-
-	// True is a helper for when we need to pass a *bool to Stripe.
-	True = true
 
 	// stripePageSize defines the number of records we are going to request from
 	// endpoints that support pagination.
@@ -73,6 +71,21 @@ type (
 		StripeID    string  `json:"stripe"`
 		ProductID   string  `json:"productId"`
 		LiveMode    bool    `json:"livemode"`
+	}
+	// SubscriptionInfoGET is a basic description of the subscription.
+	SubscriptionInfoGET struct {
+		// Time at which the object was created. Measured in seconds since the Unix epoch.
+		Created int64 `json:"created"`
+		// The subscription's description, meant to be displayable to the customer. Use this field to optionally store an explanation of the subscription for rendering in Stripe surfaces.
+		Description string `json:"description"`
+		// Describes the current discount applied to this subscription, if there is one. When billing, a discount applied to a subscription overrides a discount applied on a customer-wide basis.
+		Discount *stripe.Discount `json:"discount"`
+		// Unique identifier for the object.
+		ID string `json:"id"`
+		// The price of the subscription.
+		Price *stripe.Price `json:"price"`
+		// Date when the subscription was first created. The date might differ from the `created` date due to backdating.
+		StartDate int64 `json:"start_date"`
 	}
 )
 
@@ -120,8 +133,8 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 	}
 	// Cancel all subs aside from the latest one.
 	p := stripe.SubscriptionCancelParams{
-		InvoiceNow: &True,
-		Prorate:    &True,
+		InvoiceNow: stripe.Bool(true),
+		Prorate:    stripe.Bool(true),
 	}
 	for _, subsc := range subs {
 		if subsc == nil || (mostRecentSub != nil && subsc.ID == mostRecentSub.ID) {
@@ -199,7 +212,7 @@ func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req 
 	cancelURL := DashboardURL + "/payments"
 	successURL := DashboardURL + "/payments?session_id={CHECKOUT_SESSION_ID}"
 	params := stripe.CheckoutSessionParams{
-		AllowPromotionCodes: &True,
+		AllowPromotionCodes: stripe.Bool(true),
 		CancelURL:           &cancelURL,
 		ClientReferenceID:   &u.Sub,
 		Customer:            &u.StripeID,
@@ -226,6 +239,68 @@ func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req 
 	api.WriteJSON(w, response)
 }
 
+// stripeCheckoutIDGET checks the status of a checkout session. If the checkout
+// is successful and results in a higher tier sub than the current one, we
+// upgrade the user to the new tier.
+func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	checkoutSessionID := ps.ByName("checkout_id")
+	subStr := "subscription"
+	params := &stripe.CheckoutSessionParams{
+		Params: stripe.Params{
+			Expand: []*string{&subStr},
+		},
+	}
+	cos, err := cosession.Get(checkoutSessionID, params)
+	if err != nil {
+		api.WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+	if cos.Customer.ID != u.StripeID {
+		api.WriteError(w, errors.New("checkout session does not belong to current user"), http.StatusBadRequest)
+		return
+	}
+	coSub := cos.Subscription
+	if coSub == nil {
+		api.WriteError(w, errors.New("this checkout session does not have an associated subscription"), http.StatusBadRequest) // TODO What happens in this case?
+		return
+	}
+	if coSub.Status != stripe.SubscriptionStatusActive {
+		api.WriteError(w, errors.New("subscription not active"), http.StatusBadRequest) // TODO What happens in this case?
+		return
+	}
+	// Get the subscription price.
+	if coSub.Items == nil || len(coSub.Items.Data) == 0 || coSub.Items.Data[0].Price == nil {
+		api.WriteError(w, errors.New("subscription does not have a price"), http.StatusInternalServerError)
+		return
+	}
+	coSubPrice := coSub.Items.Data[0].Price
+	tier, exists := StripePrices()[coSubPrice.ID]
+	if !exists {
+		err = fmt.Errorf("invalid price id '%s'", coSubPrice.ID)
+		api.WriteError(w, err, http.StatusBadRequest)
+		build.Critical(errors.AddContext(err, "We somehow received an invalid price ID from Stripe. This might be caused by mismatched test/prod tokens or or breakdown in our Stripe setup."))
+		return
+	}
+	if tier > u.Tier {
+		// Promote the user.
+		u.Tier = tier
+		err = api.staticDB.UserSave(req.Context(), u)
+		if err != nil {
+			api.WriteError(w, errors.AddContext(err, "failed to update user"), http.StatusInternalServerError)
+			return
+		}
+	}
+	subInfo := SubscriptionInfoGET{
+		Created:     coSub.Created,
+		Description: coSub.Description,
+		Discount:    coSub.Discount,
+		ID:          coSub.ID,
+		Price:       coSubPrice,
+		StartDate:   coSub.StartDate,
+	}
+	api.WriteJSON(w, subInfo)
+}
+
 // stripeCreateCustomer creates a Stripe customer record for this user and
 // updates the user in the database.
 func (api *API) stripeCreateCustomer(ctx context.Context, u *database.User) (string, error) {
@@ -245,7 +320,7 @@ func (api *API) stripeCreateCustomer(ctx context.Context, u *database.User) (str
 func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	var sPrices []StripePrice
 	params := &stripe.PriceListParams{
-		Active: &True,
+		Active: stripe.Bool(true),
 		ListParams: stripe.ListParams{
 			Limit: &stripePageSize,
 		},

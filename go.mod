@@ -15,6 +15,7 @@ require (
 	go.mongodb.org/mongo-driver v1.9.1
 	go.sia.tech/siad v1.5.8
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d
+	gopkg.in/h2non/gock.v1 v1.1.2
 	gopkg.in/mail.v2 v2.3.1
 )
 
@@ -27,6 +28,7 @@ require (
 	github.com/goccy/go-json v0.9.7 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/h2non/parth v0.0.0-20190131123155-b4df798d6542 // indirect
 	github.com/klauspost/compress v1.15.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.14 // indirect
 	github.com/klauspost/reedsolomon v1.10.0 // indirect

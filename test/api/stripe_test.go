@@ -7,9 +7,12 @@ import (
 	"testing"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
+	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/test/fixtures"
 	"github.com/joho/godotenv"
 	"github.com/stripe/stripe-go/v72"
+	"gopkg.in/h2non/gock.v1"
 )
 
 // TestStripe is a complete test suite that covers all Stripe endpoints we
@@ -41,6 +44,7 @@ func TestStripe(t *testing.T) {
 		"post billing":  testStripeBillingPOST,
 		"get prices":    testStripePricesGET,
 		"post checkout": testStripeCheckoutPOST,
+		"get checkout":  testStripeCheckoutIDGET,
 	}
 
 	at, err := test.NewAccountsTester(t.Name())
@@ -145,6 +149,166 @@ func testStripeCheckoutPOST(t *testing.T, at *test.AccountsTester) {
 	if sessID == "" {
 		t.Fatal("Empty session ID.")
 	}
+}
+
+// testStripeCheckoutIDGET ensures that we can get the info for a checkout
+// session and act on it, i.e. promote the user, if needed.
+func testStripeCheckoutIDGET(t *testing.T, at *test.AccountsTester) {
+	name := test.DBNameForTest(t.Name())
+	// Create a test user.
+	r, _, err := at.UserPOST(name+"@siasky.net", name+"pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := test.ExtractCookie(r)
+	at.SetCookie(c)
+	defer func(c *http.Cookie) {
+		at.SetCookie(c)
+		_, _ = at.UserDELETE()
+	}(c)
+	u, _, err := at.UserGET()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Set the user's Sub and Stripe ID to the ones from the fixture.
+	u.Sub = "00000000-bd52-4e90-a685-3572137c8989"
+	stripeID := "cus_M0WOqhLQj6siQL"
+	u.StripeID = stripeID
+	// Make sure the StripeID is also updated in the server DB. We can't run a
+	// simple at.DB.UserSave() because the tester and the server might be
+	// running off different databases.
+	// See https://linear.app/skynetlabs/issue/SKY-1239/accounts-tester-parallel-testers
+	_, _, err = at.UserPUT("", "", stripeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Fixture values.
+	sessionIDWithSub5 := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ3"
+	sessionIDWithSub20 := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ4"
+	sessionIDWithoutSub := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ5"
+	priceID5 := "price_1IReXpIzjULiPWN66PvsxHL4"
+	priceID20 := "price_1IReY5IzjULiPWN6AxPytHEG"
+
+	// // Set the test price to the $5 test offering. We need to use a specific
+	// // price, so we can make the correct test payment later.
+	// price := "price_1IReXpIzjULiPWN66PvsxHL4"
+	// // // Create a checkout session.
+	// sessID, _, err := at.StripeCheckoutPOST(price)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// // subscription := "subscription"
+	// // paymentMethodTypeCard := "card"
+	// // lineItem1Quantity := int64(1)
+	// // cancelURL := api.DashboardURL + "/payments"
+	// // successURL := api.DashboardURL + "/payments?session_id={CHECKOUT_SESSION_ID}"
+	// // params := stripe.CheckoutSessionParams{
+	// // 	AllowPromotionCodes: stripe.Bool(true),
+	// // 	CancelURL:           &cancelURL,
+	// // 	ClientReferenceID:   &u.Sub,
+	// // 	LineItems: []*stripe.CheckoutSessionLineItemParams{{
+	// // 		Price:    &price,
+	// // 		Quantity: &lineItem1Quantity,
+	// // 	}},
+	// // 	Mode:               &subscription,
+	// // 	PaymentIntentData:  nil,
+	// // 	PaymentMethodTypes: []*string{&paymentMethodTypeCard},
+	// // 	SetupIntentData:    nil,
+	// // 	SuccessURL:         &successURL,
+	// // 	TaxIDCollection:    nil,
+	// // }
+	// // coSess, err := cosession.New(&params)
+	// // if err != nil {
+	// // 	t.Fatal(err)
+	// // }
+	//
+	// // // Manually create a subscription and payment for this checkout session.
+	// // params := &stripe.PaymentIntentParams{
+	// // 	Amount:        stripe.Int64(500),
+	// // 	Currency:      stripe.String(string(stripe.CurrencyUSD)),
+	// // 	PaymentMethod: stripe.String("pm_card_visa"),
+	// // }
+	// // result, err := paymentintent.New(params)
+	// // if err != nil {
+	// // 	t.Fatal(err)
+	// // }
+	// t.Logf(" >>> payment result %+v\n\n", result)
+
+	defer gock.Off()
+	// We need to enable networking in order to allow the Tester to call our
+	// own API.
+	gock.EnableNetworking()
+	// gock.NetworkingFilter(func(request *http.Request) bool {
+	// 	return !strings.Contains(request.RequestURI, "/stripe/checkout/cs_test_")
+	// })
+	// Set up a response that will upgrade the user to tier 20.
+	gock.New("https://api.stripe.com").
+		Get("/v1/checkout/sessions/" + sessionIDWithSub20).
+		Reply(http.StatusOK).
+		Body(strings.NewReader(fixtures.StripeCheckoutSessionWithSubTier20))
+	// Set up a response that won't upgrade a tier 20 user because it's tier 5.
+	gock.New("https://api.stripe.com").
+		Get("/v1/checkout/sessions/" + sessionIDWithSub5).
+		Reply(http.StatusOK).
+		Body(strings.NewReader(fixtures.StripeCheckoutSessionWithSubTier5))
+	// Set up a response without a subscription.
+	gock.New("https://api.stripe.com").
+		Get("/v1/checkout/sessions/" + sessionIDWithoutSub).
+		Reply(http.StatusOK).
+		Body(strings.NewReader(fixtures.StripeCheckoutSessionWithoutSub))
+
+	// Get the info on a $20 checkout session.
+	info, status, err := at.StripeCheckoutIDGET(sessionIDWithSub20)
+	if err != nil || status != http.StatusOK {
+		t.Fatal(err, status)
+	}
+	// Ensure the price is correct.
+	if info.Price.ID != priceID20 {
+		t.Fatalf("Expected price '%s', got '%s'", priceID20, info.Price.ID)
+	}
+	// Ensure that the user has been promoted.
+	u, _, err = at.UserGET()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Tier != database.TierPremium20 {
+		t.Fatalf("Expected tier %d, got %d", database.TierPremium20, u.Tier)
+	}
+	// Get the info on a $5 checkout session.
+	info, status, err = at.StripeCheckoutIDGET(sessionIDWithSub5)
+	if err != nil || status != http.StatusOK {
+		t.Fatal(err, status)
+	}
+	// Ensure the price is correct.
+	if info.Price.ID != priceID5 {
+		t.Fatalf("Expected price '%s', got '%s'", priceID5, info.Price.ID)
+	}
+	// Ensure that the user has NOT been demoted.
+	u, _, err = at.UserGET()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Tier != database.TierPremium20 {
+		t.Fatalf("Expected tier %d, got %d", database.TierPremium20, u.Tier)
+	}
+	// Get the info on a checkout session that hasn't been completed and
+	// doesn't have a subscription assigned to it, yet.
+	info, status, err = at.StripeCheckoutIDGET(sessionIDWithoutSub)
+	errStr := "this checkout session does not have an associated subscription"
+	if err == nil || !strings.Contains(err.Error(), errStr) || status != http.StatusBadRequest {
+		t.Fatalf("Expected %d '%s', got %d '%s'", http.StatusBadRequest, errStr, status, err)
+	}
+
+	if gock.HasUnmatchedRequest() {
+		t.Fatalf("Gock has %d unmatched requests.", len(gock.GetUnmatchedRequests()))
+	}
+
+	/*
+		TODO
+		 - non-active sub
+		 - sub without a price?
+	*/
 }
 
 // testStripePricesGET ensures that we have the expected test prices set on Stripe.

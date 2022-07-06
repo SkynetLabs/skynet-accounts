@@ -708,6 +708,13 @@ func (at *AccountsTester) StripeCheckoutPOST(price string) (string, int, error) 
 	return resp.SessionID, r.StatusCode, err
 }
 
+// StripeCheckoutIDGET performs a `GET /stripe/checkout/:checkout_id`
+func (at *AccountsTester) StripeCheckoutIDGET(id string) (api.SubscriptionInfoGET, int, error) {
+	var resp api.SubscriptionInfoGET
+	r, err := at.Request(http.MethodGet, "/stripe/checkout/"+id, nil, nil, nil, &resp)
+	return resp, r.StatusCode, err
+}
+
 // StripePricesGET performs a `GET /stripe/prices`
 func (at *AccountsTester) StripePricesGET() ([]api.StripePrice, int, error) {
 	resp := make([]api.StripePrice, 0)
