@@ -170,9 +170,16 @@ func testStripeCheckoutIDGET(t *testing.T, at *test.AccountsTester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Set the user's Sub and Stripe ID to the ones from the fixture.
-	u.Sub = "00000000-bd52-4e90-a685-3572137c8989"
+
+	// Fixture values.
+	sessionIDWithSub5 := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ3"
+	sessionIDWithSub20 := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ4"
+	sessionIDWithoutSub := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ5"
+	priceID5 := "price_1IReXpIzjULiPWN66PvsxHL4"
+	priceID20 := "price_1IReY5IzjULiPWN6AxPytHEG"
 	stripeID := "cus_M0WOqhLQj6siQL"
+
+	// Set the user's Stripe ID to the one from the fixture.
 	u.StripeID = stripeID
 	// Make sure the StripeID is also updated in the server DB. We can't run a
 	// simple at.DB.UserSave() because the tester and the server might be
@@ -183,65 +190,10 @@ func testStripeCheckoutIDGET(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 
-	// Fixture values.
-	sessionIDWithSub5 := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ3"
-	sessionIDWithSub20 := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ4"
-	sessionIDWithoutSub := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ5"
-	priceID5 := "price_1IReXpIzjULiPWN66PvsxHL4"
-	priceID20 := "price_1IReY5IzjULiPWN6AxPytHEG"
-
-	// // Set the test price to the $5 test offering. We need to use a specific
-	// // price, so we can make the correct test payment later.
-	// price := "price_1IReXpIzjULiPWN66PvsxHL4"
-	// // // Create a checkout session.
-	// sessID, _, err := at.StripeCheckoutPOST(price)
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// // subscription := "subscription"
-	// // paymentMethodTypeCard := "card"
-	// // lineItem1Quantity := int64(1)
-	// // cancelURL := api.DashboardURL + "/payments"
-	// // successURL := api.DashboardURL + "/payments?session_id={CHECKOUT_SESSION_ID}"
-	// // params := stripe.CheckoutSessionParams{
-	// // 	AllowPromotionCodes: stripe.Bool(true),
-	// // 	CancelURL:           &cancelURL,
-	// // 	ClientReferenceID:   &u.Sub,
-	// // 	LineItems: []*stripe.CheckoutSessionLineItemParams{{
-	// // 		Price:    &price,
-	// // 		Quantity: &lineItem1Quantity,
-	// // 	}},
-	// // 	Mode:               &subscription,
-	// // 	PaymentIntentData:  nil,
-	// // 	PaymentMethodTypes: []*string{&paymentMethodTypeCard},
-	// // 	SetupIntentData:    nil,
-	// // 	SuccessURL:         &successURL,
-	// // 	TaxIDCollection:    nil,
-	// // }
-	// // coSess, err := cosession.New(&params)
-	// // if err != nil {
-	// // 	t.Fatal(err)
-	// // }
-	//
-	// // // Manually create a subscription and payment for this checkout session.
-	// // params := &stripe.PaymentIntentParams{
-	// // 	Amount:        stripe.Int64(500),
-	// // 	Currency:      stripe.String(string(stripe.CurrencyUSD)),
-	// // 	PaymentMethod: stripe.String("pm_card_visa"),
-	// // }
-	// // result, err := paymentintent.New(params)
-	// // if err != nil {
-	// // 	t.Fatal(err)
-	// // }
-	// t.Logf(" >>> payment result %+v\n\n", result)
-
 	defer gock.Off()
 	// We need to enable networking in order to allow the Tester to call our
 	// own API.
 	gock.EnableNetworking()
-	// gock.NetworkingFilter(func(request *http.Request) bool {
-	// 	return !strings.Contains(request.RequestURI, "/stripe/checkout/cs_test_")
-	// })
 	// Set up a response that will upgrade the user to tier 20.
 	gock.New("https://api.stripe.com").
 		Get("/v1/checkout/sessions/" + sessionIDWithSub20).
