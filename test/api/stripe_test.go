@@ -175,6 +175,8 @@ func testStripeCheckoutIDGET(t *testing.T, at *test.AccountsTester) {
 	sessionIDWithSub5 := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ3"
 	sessionIDWithSub20 := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ4"
 	sessionIDWithoutSub := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ5"
+	sessionIDInactiveSub := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ6"
+	sessionIDPricelessSub := "cs_test_a1fQmmAWGp1woxtWil1Xvx1wtv04fXErpaB7d5avGKvxoZiM86tJeATPZ7"
 	priceID5 := "price_1IReXpIzjULiPWN66PvsxHL4"
 	priceID20 := "price_1IReY5IzjULiPWN6AxPytHEG"
 	stripeID := "cus_M0WOqhLQj6siQL"
@@ -209,6 +211,16 @@ func testStripeCheckoutIDGET(t *testing.T, at *test.AccountsTester) {
 		Get("/v1/checkout/sessions/" + sessionIDWithoutSub).
 		Reply(http.StatusOK).
 		Body(strings.NewReader(fixtures.StripeCheckoutSessionWithoutSub))
+	// Set up a response with an inactive subscription.
+	gock.New("https://api.stripe.com").
+		Get("/v1/checkout/sessions/" + sessionIDInactiveSub).
+		Reply(http.StatusOK).
+		Body(strings.NewReader(fixtures.StripeCheckoutSessionWithInactiveSub))
+	// Set up a response without a subscription.
+	gock.New("https://api.stripe.com").
+		Get("/v1/checkout/sessions/" + sessionIDPricelessSub).
+		Reply(http.StatusOK).
+		Body(strings.NewReader(fixtures.StripeCheckoutSessionWithPricelessSub))
 
 	// Get the info on a $20 checkout session.
 	info, status, err := at.StripeCheckoutIDGET(sessionIDWithSub20)
@@ -251,16 +263,20 @@ func testStripeCheckoutIDGET(t *testing.T, at *test.AccountsTester) {
 	if err == nil || !strings.Contains(err.Error(), errStr) || status != http.StatusBadRequest {
 		t.Fatalf("Expected %d '%s', got %d '%s'", http.StatusBadRequest, errStr, status, err)
 	}
+	// Get the info on a checkout session without an active sub.
+	info, status, err = at.StripeCheckoutIDGET(sessionIDInactiveSub)
+	if err == nil || !strings.Contains(err.Error(), "subscription not active") || status != http.StatusBadRequest {
+		t.Fatalf("Expected %d '%s', got %d '%v'", http.StatusBadRequest, "subscription not active", status, err)
+	}
+	// Get the info on a checkout session with a sub without a price.
+	info, status, err = at.StripeCheckoutIDGET(sessionIDPricelessSub)
+	if err == nil || !strings.Contains(err.Error(), "subscription does not have a price") || status != http.StatusBadRequest {
+		t.Fatalf("Expected %d '%s', got %d '%v'", http.StatusBadRequest, "subscription does not have a price", status, err)
+	}
 
 	if gock.HasUnmatchedRequest() {
 		t.Fatalf("Gock has %d unmatched requests.", len(gock.GetUnmatchedRequests()))
 	}
-
-	/*
-		TODO
-		 - non-active sub
-		 - sub without a price?
-	*/
 }
 
 // testStripePricesGET ensures that we have the expected test prices set on Stripe.

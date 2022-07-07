@@ -261,16 +261,16 @@ func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req
 	}
 	coSub := cos.Subscription
 	if coSub == nil {
-		api.WriteError(w, errors.New("this checkout session does not have an associated subscription"), http.StatusBadRequest) // TODO What happens in this case?
+		api.WriteError(w, errors.New("this checkout session does not have an associated subscription"), http.StatusBadRequest)
 		return
 	}
 	if coSub.Status != stripe.SubscriptionStatusActive {
-		api.WriteError(w, errors.New("subscription not active"), http.StatusBadRequest) // TODO What happens in this case?
+		api.WriteError(w, errors.New("subscription not active"), http.StatusBadRequest)
 		return
 	}
 	// Get the subscription price.
 	if coSub.Items == nil || len(coSub.Items.Data) == 0 || coSub.Items.Data[0].Price == nil {
-		api.WriteError(w, errors.New("subscription does not have a price"), http.StatusInternalServerError)
+		api.WriteError(w, errors.New("subscription does not have a price"), http.StatusBadRequest)
 		return
 	}
 	coSubPrice := coSub.Items.Data[0].Price
@@ -278,15 +278,14 @@ func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req
 	if !exists {
 		err = fmt.Errorf("invalid price id '%s'", coSubPrice.ID)
 		api.WriteError(w, err, http.StatusBadRequest)
-		build.Critical(errors.AddContext(err, "We somehow received an invalid price ID from Stripe. This might be caused by mismatched test/prod tokens or or breakdown in our Stripe setup."))
+		build.Critical(errors.AddContext(err, "We somehow received an invalid price ID from Stripe. This might be caused by mismatched test/prod tokens or a breakdown in our Stripe setup."))
 		return
 	}
+	// Promote the user, if needed.
 	if tier > u.Tier {
-		// Promote the user.
-		u.Tier = tier
-		err = api.staticDB.UserSave(req.Context(), u)
+		err = api.staticDB.UserSetTier(req.Context(), u, tier)
 		if err != nil {
-			api.WriteError(w, errors.AddContext(err, "failed to update user"), http.StatusInternalServerError)
+			api.WriteError(w, errors.AddContext(err, "failed to promote user"), http.StatusInternalServerError)
 			return
 		}
 	}
