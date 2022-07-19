@@ -1,6 +1,10 @@
 package dependencies
 
-import "github.com/SkynetLabs/skynet-accounts/lib"
+import (
+	"sync"
+
+	"github.com/SkynetLabs/skynet-accounts/lib"
+)
 
 var (
 	// DependencyMongoWriteConflictNMessage is the error message with which the
@@ -13,6 +17,7 @@ type (
 	// WriteConflict N times in a row.
 	DependencyMongoWriteConflictN struct {
 		remainingFailures uint
+		mu                sync.Mutex
 	}
 	// DependencyUserPutMongoDelay causes the `PUT /user` endpoint to add a delay before
 	// writing to Mongo.
@@ -23,6 +28,8 @@ type (
 // Mongo.
 func (d *DependencyMongoWriteConflictN) Disrupt(s string) bool {
 	if s == "DependencyMongoWriteConflictN" && d.remainingFailures > 0 {
+		d.mu.Lock()
+		defer d.mu.Unlock()
 		d.remainingFailures--
 		return true
 	}
@@ -32,7 +39,7 @@ func (d *DependencyMongoWriteConflictN) Disrupt(s string) bool {
 // NewDependencyMongoWriteConflictN returns a new DependencyMongoWriteConflictN
 // which causes the caller to fail with a WriteConflict N times in a row.
 func NewDependencyMongoWriteConflictN(n uint) lib.Dependencies {
-	return &DependencyMongoWriteConflictN{n}
+	return &DependencyMongoWriteConflictN{remainingFailures: n}
 }
 
 // Disrupt causes the `PUT /user` endpoint to add a delay before writing to
