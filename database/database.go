@@ -113,11 +113,14 @@ type (
 
 // New returns a new DB connection based on the passed parameters.
 func New(ctx context.Context, creds DBCredentials, logger *logrus.Logger) (*DB, error) {
-	return NewCustomDB(ctx, dbName, creds, logger)
+	return NewCustomDB(ctx, dbName, creds, logger, nil)
 }
 
 // NewCustomDB returns a new DB connection based on the passed parameters.
-func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger *logrus.Logger) (*DB, error) {
+func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger *logrus.Logger, deps lib.Dependencies) (*DB, error) {
+	if deps == nil {
+		deps = &lib.ProductionDependencies{}
+	}
 	connStr := connectionString(creds)
 	c, err := mongo.NewClient(options.Client().ApplyURI(connStr))
 	if err != nil {
@@ -148,6 +151,7 @@ func NewCustomDB(ctx context.Context, dbName string, creds DBCredentials, logger
 		staticUnconfirmedUserUpdates: db.Collection(collUnconfirmedUserUpdates),
 		staticConfiguration:          db.Collection(collConfiguration),
 		staticAPIKeys:                db.Collection(collAPIKeys),
+		staticDeps:                   deps,
 		staticLogger:                 logger,
 	}, nil
 }

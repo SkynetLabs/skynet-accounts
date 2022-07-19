@@ -66,7 +66,12 @@ func ExtractCookie(r *http.Response) *http.Cookie {
 
 // NewDatabase returns a new DB connection based on the passed parameters.
 func NewDatabase(ctx context.Context, dbName string) (*database.DB, error) {
-	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDiscardLogger())
+	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDiscardLogger(), nil)
+}
+
+// NewDatabaseWithDeps returns a new DB connection with custom dependencies.
+func NewDatabaseWithDeps(ctx context.Context, dbName string, deps lib.Dependencies) (*database.DB, error) {
+	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDiscardLogger(), deps)
 }
 
 // NewAccountsTester creates and starts a new AccountsTester service.
@@ -88,7 +93,7 @@ func NewAccountsTester(dbName string, deps lib.Dependencies) (*AccountsTester, e
 	}
 
 	// Connect to the database.
-	db, err := NewDatabase(ctx, dbName)
+	db, err := NewDatabaseWithDeps(ctx, dbName, deps)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to connect to the DB")
 	}

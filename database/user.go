@@ -10,6 +10,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/hash"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
+	"github.com/SkynetLabs/skynet-accounts/test/dependencies"
 	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/SkynetLabs/skyd/build"
@@ -486,6 +487,9 @@ func (db *DB) UserDelete(ctx context.Context, u *User) error {
 
 // UserSave saves the user to the DB.
 func (db *DB) UserSave(ctx context.Context, u *User) error {
+	if db.staticDeps.Disrupt("DependencyMongoWriteConflictN") {
+		return errors.New(dependencies.DependencyMongoWriteConflictNMessage)
+	}
 	filter := bson.M{"_id": u.ID}
 	opts := options.Replace().SetUpsert(true)
 	_, err := db.staticUsers.ReplaceOne(ctx, filter, u, opts)
