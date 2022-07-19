@@ -35,6 +35,16 @@ var (
 	// `https://account.` prepended to it).
 	DashboardURL = "https://account.siasky.net"
 
+	// ErrCheckoutWithoutSub is the error returned when a checkout session doesn't
+	// have an associated subscription
+	ErrCheckoutWithoutSub = errors.New("this checkout session does not have an associated subscription")
+	// ErrSubNotActive is returned when the given subscription is not active, so
+	// we cannot do anything based on it.
+	ErrSubNotActive = errors.New("subscription not active")
+	// ErrSubWithoutPrice is returned when the subscription doesn't have a
+	// price, so we cannot determine the user's tier based on it.
+	ErrSubWithoutPrice = errors.New("subscription does not have a price")
+
 	// stripePageSize defines the number of records we are going to request from
 	// endpoints that support pagination.
 	stripePageSize = int64(1)
@@ -256,28 +266,28 @@ func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req
 		return
 	}
 	if cos.Customer.ID != u.StripeID {
-		api.WriteError(w, errors.New("checkout session does not belong to current user"), http.StatusBadRequest)
+		api.WriteError(w, ErrCheckoutWithoutSub, http.StatusBadRequest)
 		return
 	}
 	coSub := cos.Subscription
 	if coSub == nil {
-		api.WriteError(w, errors.New("this checkout session does not have an associated subscription"), http.StatusBadRequest)
+		api.WriteError(w, ErrCheckoutWithoutSub, http.StatusBadRequest)
 		return
 	}
 	if coSub.Status != stripe.SubscriptionStatusActive {
-		api.WriteError(w, errors.New("subscription not active"), http.StatusBadRequest)
+		api.WriteError(w, ErrSubNotActive, http.StatusBadRequest)
 		return
 	}
 	// Get the subscription price.
 	if coSub.Items == nil || len(coSub.Items.Data) == 0 || coSub.Items.Data[0].Price == nil {
-		api.WriteError(w, errors.New("subscription does not have a price"), http.StatusBadRequest)
+		api.WriteError(w, ErrSubWithoutPrice, http.StatusBadRequest)
 		return
 	}
 	coSubPrice := coSub.Items.Data[0].Price
 	tier, exists := StripePrices()[coSubPrice.ID]
 	if !exists {
 		err = fmt.Errorf("invalid price id '%s'", coSubPrice.ID)
-		api.WriteError(w, err, http.StatusBadRequest)
+		api.WriteError(w, err, http.StatusInternalServerError)
 		build.Critical(errors.AddContext(err, "We somehow received an invalid price ID from Stripe. This might be caused by mismatched test/prod tokens or a breakdown in our Stripe setup."))
 		return
 	}
