@@ -35,9 +35,16 @@ var (
 	// `https://account.` prepended to it).
 	DashboardURL = "https://account.siasky.net"
 
+	// ErrCheckoutWithoutCustomer is the error returned when a checkout session
+	// doesn't have an associated customer
+	ErrCheckoutWithoutCustomer = errors.New("this checkout session does not have an associated customer")
 	// ErrCheckoutWithoutSub is the error returned when a checkout session doesn't
 	// have an associated subscription
 	ErrCheckoutWithoutSub = errors.New("this checkout session does not have an associated subscription")
+	// ErrCheckoutDoesNotBelongToUser is returned when the given checkout
+	// session does not belong to the current user. This might be a mistake or
+	// might be an attempt for fraud.
+	ErrCheckoutDoesNotBelongToUser = errors.New("checkout session does not belong to current user")
 	// ErrSubNotActive is returned when the given subscription is not active, so
 	// we cannot do anything based on it.
 	ErrSubNotActive = errors.New("subscription not active")
@@ -82,20 +89,40 @@ type (
 		ProductID   string  `json:"productId"`
 		LiveMode    bool    `json:"livemode"`
 	}
-	// SubscriptionInfoGET is a basic description of the subscription.
-	SubscriptionInfoGET struct {
-		// Time at which the object was created. Measured in seconds since the Unix epoch.
-		Created int64 `json:"created"`
-		// The subscription's description, meant to be displayable to the customer. Use this field to optionally store an explanation of the subscription for rendering in Stripe surfaces.
+	// SubscriptionGET describes a Stripe subscription for our front end needs.
+	SubscriptionGET struct {
+		Created            int64                    `json:"created"`
+		CurrentPeriodStart int64                    `json:"currentPeriodStart"`
+		Discount           *SubscriptionDiscountGET `json:"discount"`
+		ID                 string                   `json:"id"`
+		Plan               *SubscriptionPlanGET     `json:"plan"`
+		StartDate          int64                    `json:"startDate"`
+		Status             string                   `json:"status"`
+	}
+	// SubscriptionDiscountGET describes a Stripe subscription discount for our
+	// front end needs.
+	SubscriptionDiscountGET struct {
+		AmountOff        int64   `json:"amountOff"`
+		Currency         string  `json:"currency"`
+		Duration         string  `json:"duration"`
+		DurationInMonths int64   `json:"durationInMonths"`
+		Name             string  `json:"name"`
+		PercentOff       float64 `json:"percentOff"`
+	}
+	// SubscriptionPlanGET describes a Stripe subscription plan for our front
+	// end needs.
+	SubscriptionPlanGET struct {
+		Amount        int64                   `json:"amount"`
+		Currency      string                  `json:"currency"`
+		Interval      string                  `json:"interval"`
+		IntervalCount int64                   `json:"intervalCount"`
+		Product       *SubscriptionProductGET `json:"product"`
+	}
+	// SubscriptionPlanGET describes a Stripe subscription plan for our front
+	// end needs.
+	SubscriptionProductGET struct {
 		Description string `json:"description"`
-		// Describes the current discount applied to this subscription, if there is one. When billing, a discount applied to a subscription overrides a discount applied on a customer-wide basis.
-		Discount *stripe.Discount `json:"discount"`
-		// Unique identifier for the object.
-		ID string `json:"id"`
-		// The price of the subscription.
-		Price *stripe.Price `json:"price"`
-		// Date when the subscription was first created. The date might differ from the `created` date due to backdating.
-		StartDate int64 `json:"start_date"`
+		Name        string `json:"name"`
 	}
 )
 
@@ -255,9 +282,11 @@ func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req 
 func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	checkoutSessionID := ps.ByName("checkout_id")
 	subStr := "subscription"
+	subDiscountStr := "subscription.discount"
+	subPlanProductStr := "subscription.plan.product"
 	params := &stripe.CheckoutSessionParams{
 		Params: stripe.Params{
-			Expand: []*string{&subStr},
+			Expand: []*string{&subStr, &subDiscountStr, &subPlanProductStr},
 		},
 	}
 	cos, err := cosession.Get(checkoutSessionID, params)
@@ -265,8 +294,12 @@ func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+	if cos.Customer == nil {
+		api.WriteError(w, ErrCheckoutWithoutCustomer, http.StatusBadRequest)
+		return
+	}
 	if cos.Customer.ID != u.StripeID {
-		api.WriteError(w, ErrCheckoutWithoutSub, http.StatusBadRequest)
+		api.WriteError(w, ErrCheckoutDoesNotBelongToUser, http.StatusBadRequest)
 		return
 	}
 	coSub := cos.Subscription
@@ -299,13 +332,54 @@ func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req
 			return
 		}
 	}
-	subInfo := SubscriptionInfoGET{
-		Created:     coSub.Created,
-		Description: coSub.Description,
-		Discount:    coSub.Discount,
-		ID:          coSub.ID,
-		Price:       coSubPrice,
-		StartDate:   coSub.StartDate,
+	// Build the response DTO.
+	var discountInfo *SubscriptionDiscountGET
+	if coSub.Discount != nil {
+		var coupon *stripe.Coupon
+		// We can potentially fetch the discount coupon from two places - the
+		// discount itself or its promotional code. We'll check them in order.
+		if coSub.Discount.Coupon != nil {
+			coupon = coSub.Discount.Coupon
+		} else if coSub.Discount.PromotionCode != nil && coSub.Discount.PromotionCode.Coupon != nil {
+			coupon = coSub.Discount.PromotionCode.Coupon
+		}
+		if coupon != nil {
+			discountInfo = &SubscriptionDiscountGET{
+				AmountOff:        coupon.AmountOff,
+				Currency:         string(coupon.Currency),
+				Duration:         string(coupon.Duration),
+				DurationInMonths: coupon.DurationInMonths,
+				Name:             coupon.Name,
+				PercentOff:       coupon.PercentOff,
+			}
+		}
+	}
+	var planInfo *SubscriptionPlanGET
+	if coSub.Plan != nil {
+		var productInfo *SubscriptionProductGET
+		if coSub.Plan.Product != nil {
+			productInfo = &SubscriptionProductGET{
+				Description: coSub.Plan.Product.Description,
+				Name:        coSub.Plan.Product.Name,
+			}
+		}
+		planInfo = &SubscriptionPlanGET{
+			Amount:        coSub.Plan.Amount,
+			Currency:      string(coSub.Plan.Currency),
+			Interval:      string(coSub.Plan.Interval),
+			IntervalCount: coSub.Plan.IntervalCount,
+			Product:       productInfo,
+		}
+	}
+
+	subInfo := SubscriptionGET{
+		Created:            coSub.Created,
+		CurrentPeriodStart: coSub.CurrentPeriodStart,
+		Discount:           discountInfo,
+		ID:                 coSub.ID,
+		Plan:               planInfo,
+		StartDate:          coSub.StartDate,
+		Status:             string(coSub.Status),
 	}
 	api.WriteJSON(w, subInfo)
 }

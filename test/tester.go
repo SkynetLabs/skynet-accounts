@@ -709,8 +709,8 @@ func (at *AccountsTester) StripeCheckoutPOST(price string) (string, int, error) 
 }
 
 // StripeCheckoutIDGET performs a `GET /stripe/checkout/:checkout_id`
-func (at *AccountsTester) StripeCheckoutIDGET(id string) (api.SubscriptionInfoGET, int, error) {
-	var resp api.SubscriptionInfoGET
+func (at *AccountsTester) StripeCheckoutIDGET(id string) (api.SubscriptionGET, int, error) {
+	var resp api.SubscriptionGET
 	r, err := at.Request(http.MethodGet, "/stripe/checkout/"+id, nil, nil, nil, &resp)
 	return resp, r.StatusCode, err
 }
