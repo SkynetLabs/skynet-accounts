@@ -77,7 +77,7 @@ var (
 )
 
 type (
-	// StripePrice ...
+	// StripePrice describes a Stripe price item.
 	StripePrice struct {
 		ID          string  `json:"id"`
 		Name        string  `json:"name"`
@@ -118,8 +118,8 @@ type (
 		IntervalCount int64                   `json:"intervalCount"`
 		Product       *SubscriptionProductGET `json:"product"`
 	}
-	// SubscriptionPlanGET describes a Stripe subscription plan for our front
-	// end needs.
+	// SubscriptionProductGET describes a Stripe subscription product for our
+	// front end needs.
 	SubscriptionProductGET struct {
 		Description string `json:"description"`
 		Name        string `json:"name"`
@@ -391,12 +391,24 @@ func (api *API) stripeCreateCustomer(ctx context.Context, u *database.User) (str
 	if err != nil {
 		return "", errors.AddContext(err, "failed to create Stripe customer")
 	}
-	stripeID := cus.ID
-	err = api.staticDB.UserSetStripeID(ctx, u, stripeID)
+	// We'll try to update the customer with the user's email and sub. We only
+	// do this as an optional step, so we can match Stripe customers to local
+	// users more easily. We do not care if this step fails - it's entirely
+	// optional. It requires an additional round-trip to Stripe and we don't
+	// need to wait for it to finish, so we'll do it in a separate goroutine.
+	go func() {
+		email := u.Email.String()
+		updateParams := stripe.CustomerParams{
+			Description: &u.Sub,
+			Email:       &email,
+		}
+		_, _ = customer.Update(cus.ID, &updateParams)
+	}()
+	err = api.staticDB.UserSetStripeID(ctx, u, cus.ID)
 	if err != nil {
 		return "", errors.AddContext(err, "failed to save user's StripeID")
 	}
-	return stripeID, nil
+	return cus.ID, nil
 }
 
 // stripePricesGET returns a list of plans and prices.
