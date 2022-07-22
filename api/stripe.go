@@ -116,6 +116,7 @@ type (
 		Currency      string                  `json:"currency"`
 		Interval      string                  `json:"interval"`
 		IntervalCount int64                   `json:"intervalCount"`
+		Price         string                  `json:"price"`
 		Product       *SubscriptionProductGET `json:"product"`
 	}
 	// SubscriptionProductGET describes a Stripe subscription product for our
@@ -368,6 +369,7 @@ func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req
 			Currency:      string(coSub.Plan.Currency),
 			Interval:      string(coSub.Plan.Interval),
 			IntervalCount: coSub.Plan.IntervalCount,
+			Price:         coSub.Plan.ID, // plan ID and price ID are the same
 			Product:       productInfo,
 		}
 	}

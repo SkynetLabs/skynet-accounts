@@ -216,8 +216,12 @@ func testStripeCheckoutIDGET(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err, status)
 	}
 	// Ensure the price is correct.
-	if info.Price.ID != fixturePriceID20 {
-		t.Fatalf("Expected price '%s', got '%s'", fixturePriceID20, info.Price.ID)
+	if info.Plan.Price != fixturePriceID20 {
+		t.Fatalf("Expected price '%s', got '%s'", fixturePriceID20, info.Plan.Price)
+	}
+	// Ensure that the discount is correct.
+	if info.Discount.PercentOff != 50.0 {
+		t.Fatalf("Expected discount of %.2f, got %.2f", 50.0, info.Discount.PercentOff)
 	}
 	// Ensure that the user has been promoted.
 	u, _, err = at.UserGET()
@@ -235,8 +239,8 @@ func testStripeCheckoutIDGET(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err, status)
 	}
 	// Ensure the price is correct.
-	if info.Price.ID != fixturePriceID5 {
-		t.Fatalf("Expected price '%s', got '%s'", fixturePriceID5, info.Price.ID)
+	if info.Plan.Price != fixturePriceID5 {
+		t.Fatalf("Expected price '%s', got '%s'", fixturePriceID5, info.Plan.Price)
 	}
 	// Ensure that the user has NOT been demoted.
 	u, _, err = at.UserGET()
