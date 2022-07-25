@@ -144,7 +144,7 @@ docker-generate: clean
 	@mkdir output
 	@docker build -f ./env/Dockerfile -t accounts-genenv .
 	@docker run -v ${PWD}/output:/app --name genenv -d accounts-genenv
-	sleep 3
+	sleep 10
 	@docker stop genenv || true && docker rm --force genenv
 
 .PHONY: all deps fmt install release clean check test test-long test-long-ci start-mongo stop-mongo docker-generate
