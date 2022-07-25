@@ -300,7 +300,7 @@ func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req
 		return
 	}
 	if cos.Customer.ID != u.StripeID {
-		api.WriteError(w, ErrCheckoutDoesNotBelongToUser, http.StatusBadRequest)
+		api.WriteError(w, ErrCheckoutDoesNotBelongToUser, http.StatusForbidden)
 		return
 	}
 	coSub := cos.Subscription
