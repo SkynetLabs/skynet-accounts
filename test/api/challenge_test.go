@@ -1,7 +1,7 @@
 package api
 
 import (
-	"crypto/subtle"
+	"bytes"
 	"encoding/hex"
 	"net/http"
 	"strings"
@@ -235,7 +235,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	if len(u3.PubKeys) == 0 {
 		t.Fatal("Expected at least one pubkey assigned, got none.")
 	}
-	if subtle.ConstantTimeCompare(u3.PubKeys[0], pk[:]) != 1 {
+	if !bytes.Equal(u3.PubKeys[0], pk[:]) {
 		t.Fatalf("Expected pubKey '%s', got '%s',", hex.EncodeToString(pk[:]), hex.EncodeToString(u3.PubKeys[0]))
 	}
 }
@@ -281,7 +281,7 @@ func testUserDeletePubKey(t *testing.T, at *test.AccountsTester) {
 	if len(u1.PubKeys) != 1 {
 		t.Fatal("Expected one pubkey assigned, got none.")
 	}
-	if subtle.ConstantTimeCompare(u1.PubKeys[0], pk[:]) != 1 {
+	if !bytes.Equal(u1.PubKeys[0], pk[:]) {
 		t.Fatalf("Expected pubKey '%s', got '%s',", hex.EncodeToString(pk[:]), hex.EncodeToString(u1.PubKeys[0]))
 	}
 

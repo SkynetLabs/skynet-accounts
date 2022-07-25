@@ -1,8 +1,8 @@
 package database
 
 import (
+	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -115,7 +115,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to validate the response", err)
 	}
-	if subtle.ConstantTimeCompare(pk[:], pk2[:]) != 1 {
+	if !bytes.Equal(pk[:], pk2[:]) {
 		t.Fatalf("Expected pubkey '%s', got '%s'.", hex.EncodeToString(pk[:]), hex.EncodeToString(pk2[:]))
 	}
 

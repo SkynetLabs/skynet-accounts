@@ -742,6 +742,10 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 		changedEmail = true
 	}
 
+	if api.staticDeps.Disrupt("DependencyUserPutMongoDelay") {
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	// Save the changes.
 	err = api.staticDB.UserSave(ctx, u)
 	if err != nil {

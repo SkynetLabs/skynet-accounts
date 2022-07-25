@@ -45,7 +45,7 @@ func TestHandlers(t *testing.T) {
 		t.SkipNow()
 	}
 	dbName := test.DBNameForTest(t.Name())
-	at, err := test.NewAccountsTester(dbName)
+	at, err := test.NewAccountsTester(dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

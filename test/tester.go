@@ -17,6 +17,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
+	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -65,12 +66,21 @@ func ExtractCookie(r *http.Response) *http.Cookie {
 
 // NewDatabase returns a new DB connection based on the passed parameters.
 func NewDatabase(ctx context.Context, dbName string) (*database.DB, error) {
-	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDiscardLogger())
+	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDiscardLogger(), nil)
+}
+
+// NewDatabaseWithDeps returns a new DB connection with custom dependencies.
+func NewDatabaseWithDeps(ctx context.Context, dbName string, deps lib.Dependencies) (*database.DB, error) {
+	return database.NewCustomDB(ctx, SanitizeName(dbName), DBTestCredentials(), NewDiscardLogger(), deps)
 }
 
 // NewAccountsTester creates and starts a new AccountsTester service.
 // Use the Close method for a graceful shutdown.
-func NewAccountsTester(dbName string) (*AccountsTester, error) {
+func NewAccountsTester(dbName string, deps lib.Dependencies) (*AccountsTester, error) {
+	// Make sure we have valid dependencies.
+	if deps == nil {
+		deps = &lib.ProductionDependencies{}
+	}
 	ctx := context.Background()
 	logger := NewDiscardLogger()
 
@@ -83,7 +93,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	}
 
 	// Connect to the database.
-	db, err := NewDatabase(ctx, dbName)
+	db, err := NewDatabaseWithDeps(ctx, dbName, deps)
 	if err != nil {
 		return nil, errors.AddContext(err, "failed to connect to the DB")
 	}
@@ -101,7 +111,7 @@ func NewAccountsTester(dbName string) (*AccountsTester, error) {
 	mf := metafetcher.New(ctxWithCancel, db, logger)
 
 	// The server API encapsulates all the modules together.
-	server, err := api.New(db, mf, logger, email.NewMailer(db))
+	server, err := api.NewCustom(db, mf, logger, email.NewMailer(db), deps)
 	if err != nil {
 		cancel()
 		return nil, errors.AddContext(err, "failed to build the API")
