@@ -16,7 +16,7 @@ tags:
     description: Adding, removing, and checking MySky identities attached to current account.
 info:
   description: Accounts is a service that manages user accounts for a Skynet portal
-  version: "1.0.0"
+  version: "1.1.1"
   title: Accounts
   contact:
     email: devs@skynetlabs.com
@@ -223,11 +223,18 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/Skylink'
-        - in: query # TODO is this in the query?
-          name: ip
-          required: true
-          schema:
-            $ref: '#/components/schemas/IP'
+      requestBody:
+        description: Uploader IP.
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                ip:
+                  required: [ ip ]
+                  type: string
+                  description: The IP address of the user.
+                  example: 192.168.0.1
       responses:
         '204':
           description: no content
@@ -252,6 +259,17 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/Skylink'
+      requestBody:
+        description: Downloaded bytes.
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                bytes:
+                  type: number
+                  description: The number of bytes that were downloaded.
+                  example: 1024
       responses:
         '204':
           description: no content
@@ -336,7 +354,7 @@ paths:
               $ref: '#/components/schemas/Credentials'
         description: Login credentials.
       responses:
-        '204':
+        '200':
           description: user successfully created
           headers:
             Skynet-Token:
@@ -350,8 +368,68 @@ paths:
                 type: string
               description: Sets an encrypted cookie that contains the user's JWT.
               example: skynet-jwt=abcde12345; Path=/; HttpOnly; Secure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
         '400':
           description: bad request
+        '500':
+          description: internal server error
+    put:
+      summary: updates a user
+      operationId: userUpdate
+      tags:
+        - User
+      description: Updates a user with the given email, password, and StripeID
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      requestBody:
+        description: User update fields.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: user successfully updated
+          headers:
+            Skynet-Token:
+              schema:
+                type: string
+              description: |
+                Unencrypted JWT that can be used for authentication via the 
+                `Authorization: Bearer <JWT>` header.
+            Set-Cookie:
+              schema:
+                type: string
+              description: Sets an encrypted cookie that contains the user's JWT.
+              example: skynet-jwt=abcde12345; Path=/; HttpOnly; Secure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: bad request
+        '500':
+          description: internal server error
+    delete:
+      summary: deletes a user
+      operationId: userDelete
+      tags:
+        - User
+      description: Deletes a user.
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '204':
+          description: user successfully deleted
+        '404':
+          description: not found
         '500':
           description: internal server error
   /user/limits:
@@ -388,7 +466,81 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserLimits'
+  /user/limits/{skylink}:
+    get:
+      tags:
+        - User
+      summary: user limits
+      operationId: userLimitsSkylink
+      description: |
+        Returns all current limits imposed on the user. These include:
+         - tier ID
+         - tier name
+         - upload and download bandwidth
+         - registry actions delay
+         - maximum size of uploaded files
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+        - { } # Authentication is optional.
+      parameters:
+        - in: query
+          name: unit
+          description: |
+            unit for bandwidth representation, either "byte" for bytes per second
+            or anything else for bits per second
+          required: false
+          schema:
+            type: string
+        - in: path
+          name: skylink
+          required: true
+          schema:
+            $ref: '#/components/schemas/Skylink'
+      responses:
+        '200':
+          description: user limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserLimits'
+  /user/stats:
+    description: TODO get
+  /user/pubkey/{pubKey}:
+    description: TODO delete
+  /user/pubkey/register:
+    description: TODO get post
+  /user/uploads:
+    description: TODO get
+  /user/uploads/{skylink}:
+    description: TODO delete
+  /user/downloads:
+    description: TODO get
   /user/apikeys:
+    get:
+      tags:
+        - APIKeys
+      summary: List all API keys that belong to this user.
+      description: List API keys
+      operationId: apiKeysList
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArrayOfAPIKeys'
+        '400':
+          description: invalid input
+        '401':
+          description: invalid credentials, invalid token, or failed challenge-response
+        '500':
+          description: internal server error
     post:
       summary: creates a new API key
       operationId: apikeyCreate
@@ -415,6 +567,26 @@ paths:
           description: invalid credentials, invalid token, or failed challenge-response
         '500':
           description: internal server error
+  /user/apikeys/{id}:
+    description: TODO get put patch delete
+  /user/confirm:
+    description: TODO get
+  /user/reconfirm:
+    description: TODO post
+  /user/recover/request:
+    description: TODO post
+  /user/recover:
+    description: TODO post
+  /stripe/billing:
+    description: TODO post
+  /stripe/checkout:
+    description: TODO post
+  /stripe/prices:
+    description: TODO get
+  /stripe/webhook:
+    description: TODO post
+  /.well-known/jwks.json:
+    description: TODO get
 components:
   securitySchemes:
     apiKeyAuth:
@@ -492,10 +664,6 @@ components:
           $ref: '#/components/schemas/Email'
         password:
           $ref: '#/components/schemas/Password'
-    IP:
-      type: string
-      description: The IP address of the user.
-      example: 192.168.0.1
     Skylink:
       type: string
       description: Skylink - a unique identifier of the uploaded content.
@@ -508,6 +676,9 @@ components:
       type: string
       format: password
       example: me1fzxCVXqHeu619nuiMjlVQ
+    StripeID:
+      type: string
+      example: cus_M0WOqhLQj6siQL
     Timestamp:
       type: string
       format: date-time
@@ -560,6 +731,15 @@ components:
         emailConfirmed:
           type: boolean
           example: false
+    UserUpdate:
+      type: object
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+        password:
+          $ref: '#/components/schemas/Password'
+        StripeID:
+          $ref: '#/components/schemas/StripeID'
     UserLimits:
       type: object
       properties:
@@ -619,6 +799,10 @@ components:
           example: [ "AAAKvcU4_Jhzd907PyU2Tnup7INBQCh-RNr6PmvQQ0lTzQ", "_A3dyZt5FAD4Trdn800eTxAPuZVZsvQalmK-vL-l14KIsg" ]
         createdAt:
           $ref: '#/components/schemas/Timestamp'
+    ArrayOfAPIKeys:
+      type: array
+      items:
+        $ref: '#/components/schemas/APIKey'
     PubKey:
       type: string
       description: The public key of the user.
