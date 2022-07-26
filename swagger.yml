@@ -578,8 +578,10 @@ paths:
   /user/recover:
     description: TODO post
   /stripe/billing:
-    description: TODO post
+    description: TODO get post
   /stripe/checkout:
+    description: TODO post
+  /stripe/checkout/{checkout_id}:
     description: TODO post
   /stripe/prices:
     description: TODO get
