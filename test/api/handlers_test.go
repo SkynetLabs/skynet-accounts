@@ -17,6 +17,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
@@ -40,8 +41,11 @@ type subtest struct {
 // TestHandlers is a meta test that sets up a test instance of accounts and runs
 // a suite of tests that ensure all handlers behave as expected.
 func TestHandlers(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	dbName := test.DBNameForTest(t.Name())
-	at, err := test.NewAccountsTester(dbName)
+	at, err := test.NewAccountsTester(dbName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +105,7 @@ func testHandlerHealthGET(t *testing.T, at *test.AccountsTester) {
 func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 	// Use the test's name as an email-compatible identifier.
 	name := test.DBNameForTest(t.Name())
-	emailAddr := name + "@siasky.net"
+	emailAddr := types.NewEmail(name + "@siasky.net")
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	// Try to create a user with a missing email.
 	_, _, err := at.UserPOST("", password)
@@ -119,12 +123,12 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
 	// Try to create a user with an empty password.
-	_, b, err = at.UserPOST(emailAddr, "")
+	_, b, err = at.UserPOST(emailAddr.String(), "")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s", badRequest, err, string(b))
 	}
 	// Create a user.
-	_, b, err = at.UserPOST(emailAddr, password)
+	_, b, err = at.UserPOST(emailAddr.String(), password)
 	if err != nil {
 		t.Fatalf("User creation failed. Error: '%s'. Body: '%s' ", err.Error(), string(b))
 	}
@@ -147,12 +151,12 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 		}
 	}(u)
 	// Log in with that user in order to make sure it exists.
-	_, b, err = at.LoginCredentialsPOST(emailAddr, password)
+	_, b, err = at.LoginCredentialsPOST(emailAddr.String(), password)
 	if err != nil {
 		t.Fatalf("Login failed. Error: '%s'. Body: '%s'", err.Error(), string(b))
 	}
 	// try to create a user with an already taken email
-	_, b, err = at.UserPOST(emailAddr, "password")
+	_, b, err = at.UserPOST(emailAddr.String(), "password")
 	if err == nil || !strings.Contains(err.Error(), badRequest) {
 		t.Fatalf("Expected user creation to fail with '%s', got '%s'. Body: '%s'", badRequest, err, string(b))
 	}
@@ -160,10 +164,10 @@ func testHandlerUserPOST(t *testing.T, at *test.AccountsTester) {
 
 // testHandlerLoginPOST tests the /login endpoint.
 func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
-	emailAddr := test.DBNameForTest(t.Name()) + "@siasky.net"
+	emailAddr := types.NewEmail(test.DBNameForTest(t.Name()) + "@siasky.net")
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	// Try logging in with a non-existent user.
-	_, _, err := at.LoginCredentialsPOST(emailAddr, password)
+	_, _, err := at.LoginCredentialsPOST(emailAddr.String(), password)
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
@@ -177,7 +181,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		}
 	}()
 	// Login with an existing user.
-	r, _, err := at.LoginCredentialsPOST(emailAddr, password)
+	r, _, err := at.LoginCredentialsPOST(emailAddr.String(), password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,6 +189,12 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	c := test.ExtractCookie(r)
 	if c == nil {
 		t.Fatal("Expected a cookie.")
+	}
+	// Login with an email with a different capitalisation.
+	// Expect this to succeed.
+	_, _, err = at.LoginCredentialsPOST(strings.ToUpper(emailAddr.String()), password)
+	if err != nil {
+		t.Fatal(err)
 	}
 	// Make sure the returned cookie is usable for making requests.
 	at.SetCookie(c)
@@ -222,7 +232,7 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected %s, got %s", unauthorized, err)
 	}
 	// Try logging in with a bad password.
-	_, _, err = at.LoginCredentialsPOST(emailAddr, "bad password")
+	_, _, err = at.LoginCredentialsPOST(emailAddr.String(), "bad password")
 	if err == nil || !strings.Contains(err.Error(), unauthorized) {
 		t.Fatalf("Expected '%s', got '%s'", unauthorized, err)
 	}
@@ -295,17 +305,17 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	}
 	// Check if we can login with the new password.
 	params := url.Values{}
-	params.Set("email", u.Email)
+	params.Set("email", u.Email.String())
 	params.Set("password", pw)
 	// Try logging in with a non-existent user.
-	_, _, err = at.LoginCredentialsPOST(u.Email, pw)
+	_, _, err = at.LoginCredentialsPOST(u.Email.String(), pw)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Update the user's email.
-	emailAddr := name + "_new@siasky.net"
-	_, status, err = at.UserPUT(emailAddr, "", "")
+	emailAddr := types.NewEmail(name + "_new@siasky.net")
+	_, status, err = at.UserPUT(emailAddr.String(), "", "")
 	if err != nil || status != http.StatusOK {
 		t.Fatal(status, err)
 	}
@@ -323,13 +333,33 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 		t.Fatalf("Expected the user to have a non-empty confirmation token, got '%s'", u3.EmailConfirmationToken)
 	}
 	// Expect to find a confirmation email queued for sending.
-	filer := bson.M{"to": emailAddr}
+	filer := bson.M{"to": emailAddr.String()}
 	_, msgs, err := at.DB.FindEmails(at.Ctx, filer, &options.FindOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(msgs) != 1 || msgs[0].Subject != "Please verify your email address" {
 		t.Fatal("Expected to find a single confirmation email but didn't.")
+	}
+	// Update the user's email to a mixed-case string, expect it to be persisted
+	// as lowercase only.
+	emailStr := name + "_ThIsIsMiXeDcAsE@siasky.net"
+	_, status, err = at.UserPUT(emailStr, "", "")
+	if err != nil || status != http.StatusOK {
+		t.Fatal(status, err)
+	}
+	// Fetch the user by the mixed-case email. Expect this to succeed because we
+	// cast the email to lowercase in the UserPUT handler.
+	u4, err := at.DB.UserByEmail(at.Ctx, types.NewEmail(emailStr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make sure the email field is lowercase. Make sure to not use String()
+	// because that will cast it to lowercase even if it's not.
+	// We disable gocritic here, so it doesn't suggest to use strings.EqualFold().
+	//nolint:gocritic
+	if string(u4.Email) != strings.ToLower(emailStr) {
+		t.Fatalf("Expected the email to be '%s', got '%s", strings.ToLower(emailStr), u4.Email)
 	}
 }
 
@@ -719,8 +749,8 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// person requesting a recovery and they just forgot which email they used
 	// to sign up. While we can't tell them that, we can indicate tht recovery
 	// process works as expected and they should try their other emails.
-	attemptedEmail := hex.EncodeToString(fastrand.Bytes(16)) + "@siasky.net"
-	_, err = at.UserRecoverRequestPOST(attemptedEmail)
+	attemptedEmail := types.NewEmail(hex.EncodeToString(fastrand.Bytes(16)) + "@siasky.net")
+	_, err = at.UserRecoverRequestPOST(attemptedEmail.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -736,8 +766,8 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 	// Request recovery with a valid email. We expect there to be a single email
 	// with the recovery token. The email is unconfirmed but we don't mind that.
 	bodyParams := url.Values{}
-	bodyParams.Set("email", u.Email)
-	_, err = at.UserRecoverRequestPOST(u.Email)
+	bodyParams.Set("email", u.Email.String())
+	_, err = at.UserRecoverRequestPOST(u.Email.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -809,7 +839,7 @@ func testUserAccountRecovery(t *testing.T, at *test.AccountsTester) {
 		t.Fatal(err)
 	}
 	// Make sure the user's password is now successfully changed.
-	_, b, err := at.LoginCredentialsPOST(u.Email, newPassword)
+	_, b, err := at.LoginCredentialsPOST(u.Email.String(), newPassword)
 	if err != nil {
 		t.Fatal(err, string(b))
 	}
@@ -874,8 +904,11 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	// Adjust the expectations. We won't adjust anything based on size because
 	// the metafetcher won't be running during testing.
 	expectedStats.NumUploads++
+	expectedStats.NumUploadsTotal++
 	expectedStats.BandwidthUploads += skynet.BandwidthUploadCost(0)
+	expectedStats.BandwidthUploadsTotal += skynet.BandwidthUploadCost(0)
 	expectedStats.RawStorageUsed += skynet.RawStorageUsed(0)
+	expectedStats.RawStorageUsedTotal += skynet.RawStorageUsed(0)
 
 	// Call trackDownload without a cookie. Expect this to fail.
 	at.ClearCredentials()
@@ -901,7 +934,11 @@ func testTrackingAndStats(t *testing.T, at *test.AccountsTester) {
 	}
 	// Adjust the expectations.
 	expectedStats.NumDownloads++
+	expectedStats.NumDownloadsTotal++
 	expectedStats.BandwidthDownloads += skynet.BandwidthDownloadCost(200)
+	expectedStats.BandwidthDownloadsTotal += skynet.BandwidthDownloadCost(200)
+	expectedStats.DownloadsSize += 200
+	expectedStats.DownloadsSizeTotal += 200
 	expectedStats.TotalDownloadsSize += 200
 
 	// Call userStats without a cookie.
@@ -933,7 +970,7 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	queryParams.Set("email", emailAddr)
 	queryParams.Set("password", password)
 	// Create a user.
-	u, err := test.CreateUser(at, queryParams.Get("email"), queryParams.Get("password"))
+	u, err := test.CreateUser(at, types.NewEmail(queryParams.Get("email")), queryParams.Get("password"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -968,14 +1005,14 @@ func testUserFlow(t *testing.T, at *test.AccountsTester) {
 	}
 	at.SetCookie(c)
 	// Change the user's email.
-	newEmail := name + "_new@siasky.net"
-	_, _, err = at.UserPUT(newEmail, "", "")
+	newEmail := types.NewEmail(name + "_new@siasky.net")
+	_, _, err = at.UserPUT(newEmail.String(), "", "")
 	if err != nil {
 		t.Fatalf("Failed to update user. Error: %s", err.Error())
 	}
 	// Grab the new cookie. It has changed because of the user edit.
 	at.ClearCredentials()
-	r, _, err = at.LoginCredentialsPOST(newEmail, password)
+	r, _, err = at.LoginCredentialsPOST(newEmail.String(), password)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,8 +1,8 @@
 package database
 
 import (
+	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -18,6 +18,9 @@ import (
 
 // TestValidateChallengeResponse is a unit test using a database.
 func TestValidateChallengeResponse(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -112,7 +115,7 @@ func TestValidateChallengeResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to validate the response", err)
 	}
-	if subtle.ConstantTimeCompare(pk[:], pk2[:]) != 1 {
+	if !bytes.Equal(pk[:], pk2[:]) {
 		t.Fatalf("Expected pubkey '%s', got '%s'.", hex.EncodeToString(pk[:]), hex.EncodeToString(pk2[:]))
 	}
 
@@ -126,6 +129,9 @@ func TestValidateChallengeResponse(t *testing.T) {
 // TestUnconfirmedUserUpdate ensures the entire flow for unconfirmed user
 // updates works as expected.
 func TestUnconfirmedUserUpdate(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)

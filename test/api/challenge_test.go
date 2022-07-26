@@ -1,7 +1,7 @@
 package api
 
 import (
-	"crypto/subtle"
+	"bytes"
 	"encoding/hex"
 	"net/http"
 	"strings"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.sia.tech/siad/crypto"
@@ -45,8 +46,8 @@ func testRegistration(t *testing.T, at *test.AccountsTester) {
 	// Solve the challenge.
 	response := append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	sig := ed25519.Sign(sk[:], response)
-	emailStr := name + "@siasky.net"
-	u, status, err := at.RegisterPOST(response, sig, emailStr)
+	emailStr := types.NewEmail(name + "@siasky.net")
+	u, status, err := at.RegisterPOST(response, sig, emailStr.String())
 	if err != nil {
 		t.Fatalf("Failed to register. Status %d, error '%s'", status, err)
 	}
@@ -89,8 +90,8 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	}
 	response := append(chBytes, append([]byte(database.ChallengeTypeRegister), []byte(database.PortalName)...)...)
 	sig := ed25519.Sign(sk[:], response)
-	emailStr := name + "@siasky.net"
-	u, status, err := at.RegisterPOST(response, sig, emailStr)
+	emailStr := types.NewEmail(name + "@siasky.net")
+	u, status, err := at.RegisterPOST(response, sig, emailStr.String())
 	if err != nil {
 		t.Fatalf("Failed to validate the response. Status %d, error '%s'", status, err)
 	}
@@ -119,8 +120,8 @@ func testLogin(t *testing.T, at *test.AccountsTester) {
 	// Solve the challenge.
 	response = append(chBytes, append([]byte(database.ChallengeTypeLogin), []byte(database.PortalName)...)...)
 	sig = ed25519.Sign(sk[:], response)
-	emailStr = name + "@siasky.net"
-	r, b, err := at.LoginPubKeyPOST(response, sig, emailStr)
+	emailStr = types.NewEmail(name + "@siasky.net")
+	r, b, err := at.LoginPubKeyPOST(response, sig, emailStr.String())
 	if err != nil {
 		t.Fatalf("Failed to login. Status %d, body '%s', error '%s'", r.StatusCode, string(b), err)
 	}
@@ -164,7 +165,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 
 	// Request a challenge with a pubKey that belongs to another user.
 	_, pk2 := crypto.GenerateKeyPair()
-	_, err = at.DB.UserCreatePK(at.Ctx, name+"_other@siasky.net", "", name+"_other_sub", pk2[:], database.TierFree)
+	_, err = at.DB.UserCreatePK(at.Ctx, types.NewEmail(name+"_other@siasky.net"), "", name+"_other_sub", pk2[:], database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +199,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	// Try to solve the challenge while logged in as a different user.
 	// NOTE: This will consume the challenge and the user will need to request
 	// a new one.
-	r, b, err := at.UserPOST(name+"_user3@siasky.net", name+"_pass")
+	r, b, err := at.UserPOST(types.NewEmail(name+"_user3@siasky.net").String(), name+"_pass")
 	if err != nil || r.StatusCode != http.StatusOK {
 		t.Fatal(r.Status, err, string(b))
 	}
@@ -234,7 +235,7 @@ func testUserAddPubKey(t *testing.T, at *test.AccountsTester) {
 	if len(u3.PubKeys) == 0 {
 		t.Fatal("Expected at least one pubkey assigned, got none.")
 	}
-	if subtle.ConstantTimeCompare(u3.PubKeys[0], pk[:]) != 1 {
+	if !bytes.Equal(u3.PubKeys[0], pk[:]) {
 		t.Fatalf("Expected pubKey '%s', got '%s',", hex.EncodeToString(pk[:]), hex.EncodeToString(u3.PubKeys[0]))
 	}
 }
@@ -280,7 +281,7 @@ func testUserDeletePubKey(t *testing.T, at *test.AccountsTester) {
 	if len(u1.PubKeys) != 1 {
 		t.Fatal("Expected one pubkey assigned, got none.")
 	}
-	if subtle.ConstantTimeCompare(u1.PubKeys[0], pk[:]) != 1 {
+	if !bytes.Equal(u1.PubKeys[0], pk[:]) {
 		t.Fatalf("Expected pubKey '%s', got '%s',", hex.EncodeToString(pk[:]), hex.EncodeToString(u1.PubKeys[0]))
 	}
 

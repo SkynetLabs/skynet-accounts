@@ -1,8 +1,8 @@
 package database
 
 import (
+	"bytes"
 	"context"
-	"crypto/subtle"
 	"reflect"
 	"testing"
 	"time"
@@ -11,6 +11,7 @@ import (
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -20,6 +21,9 @@ import (
 // TestUserByEmail ensures UserByEmail works as expected.
 // This method also tests UserCreate.
 func TestUserByEmail(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -27,7 +31,7 @@ func TestUserByEmail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	email := t.Name() + "@siasky.net"
+	email := types.NewEmail(t.Name() + "@siasky.net")
 	pass := t.Name() + "password"
 	sub := t.Name() + "sub"
 	// Ensure we don't have a user with this email and the method handles that
@@ -63,6 +67,9 @@ func TestUserByEmail(t *testing.T) {
 
 // TestUserByID ensures UserByID works as expected.
 func TestUserByID(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -105,6 +112,9 @@ func TestUserByID(t *testing.T) {
 // TestUserByPubKey makes sure UserByPubKey functions correctly, both with a
 // single and multiple pubkeys attached to a user.
 func TestUserByPubKey(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	name := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, name)
@@ -122,7 +132,7 @@ func TestUserByPubKey(t *testing.T) {
 	}
 
 	// Create a user with this pubkey.
-	u, err := db.UserCreatePK(ctx, name+"@siasky.net", name+"pass", name+"sub", pk, database.TierFree)
+	u, err := db.UserCreatePK(ctx, types.NewEmail(name+"@siasky.net"), name+"pass", name+"sub", pk, database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,6 +166,9 @@ func TestUserByPubKey(t *testing.T) {
 // TestUserByStripeID ensures UserByStripeID works as expected.
 // This method also tests UserCreate and UserSetStripeID.
 func TestUserByStripeID(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -172,7 +185,7 @@ func TestUserByStripeID(t *testing.T) {
 		t.Fatalf("Expected error %v, got %v.\n", database.ErrUserNotFound, err)
 	}
 	// Create a test user with the respective StripeID.
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,6 +213,9 @@ func TestUserByStripeID(t *testing.T) {
 // TestUserBySub ensures UserBySub works as expected.
 // This method also tests UserCreate.
 func TestUserBySub(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -242,13 +258,16 @@ func TestUserBySub(t *testing.T) {
 // TestUserConfirmEmail ensures that email confirmation works as expected,
 // including resecting the expiration of tokens.
 func TestUserConfirmEmail(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
 	if err != nil {
 		t.Fatal("Failed to connect to the DB:", err)
 	}
-	emailAddr := t.Name() + "@siasky.net"
+	emailAddr := types.NewEmail(t.Name() + "@siasky.net")
 	// Create a user with this email.
 	u, err := db.UserCreate(ctx, emailAddr, "password", "sub", database.TierFree)
 	if err != nil {
@@ -280,6 +299,9 @@ func TestUserConfirmEmail(t *testing.T) {
 
 // TestUserCreate ensures UserCreate works as expected.
 func TestUserCreate(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -287,7 +309,7 @@ func TestUserCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	email := t.Name() + "@siasky.net"
+	email := types.NewEmail(t.Name() + "@siasky.net")
 	pass := t.Name() + "pass"
 	sub := t.Name() + "sub"
 
@@ -315,7 +337,7 @@ func TestUserCreate(t *testing.T) {
 	if fu == nil {
 		t.Fatal("Expected to find a user but didn't.")
 	}
-	newEmail := t.Name() + "_new@siasky.net"
+	newEmail := types.NewEmail(t.Name() + "_new@siasky.net")
 	newPass := t.Name() + "pass_new"
 	newSub := t.Name() + "sub_new"
 	// Try to create a user with an email which is already in use.
@@ -332,13 +354,16 @@ func TestUserCreate(t *testing.T) {
 
 // TestUserCreateEmailConfirmation tests UserCreateEmailConfirmation.
 func TestUserCreateEmailConfirmation(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,6 +388,9 @@ func TestUserCreateEmailConfirmation(t *testing.T) {
 
 // TestUserDelete ensures UserDelete works as expected.
 func TestUserDelete(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -398,6 +426,9 @@ func TestUserDelete(t *testing.T) {
 
 // TestUserSave ensures that UserSave works as expected.
 func TestUserSave(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -408,7 +439,7 @@ func TestUserSave(t *testing.T) {
 	username := t.Name()
 	// Case: save a user that doesn't exist in the DB.
 	u := &database.User{
-		Email: username + "@siasky.net",
+		Email: types.NewEmail(username + "@siasky.net"),
 		Sub:   t.Name() + "sub",
 		Tier:  database.TierFree,
 	}
@@ -424,7 +455,7 @@ func TestUserSave(t *testing.T) {
 		t.Fatalf("Expected user id %s, got %s.", u.ID.Hex(), u1.ID.Hex())
 	}
 	// Case: save a user that does exist in the DB.
-	u.Email = username + "_changed@siasky.net"
+	u.Email = types.NewEmail(username + "_changed@siasky.net")
 	u.Tier = database.TierPremium80
 	err = db.UserSave(ctx, u)
 	if err != nil {
@@ -444,6 +475,9 @@ func TestUserSave(t *testing.T) {
 
 // TestUserSetStripeID ensures that UserSetStripeID works as expected.
 func TestUserSetStripeID(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -453,7 +487,7 @@ func TestUserSetStripeID(t *testing.T) {
 
 	stripeID := t.Name() + "stripeid"
 	// Create a test user with the respective StripeID.
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -478,14 +512,17 @@ func TestUserSetStripeID(t *testing.T) {
 
 // TestUserPubKey tests UserPubKeyAdd and UserPubKeyRemove.
 func TestUserPubKey(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
-	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil)
+	db, err := database.NewCustomDB(ctx, dbName, test.DBTestCredentials(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Create a test user.
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -510,7 +547,7 @@ func TestUserPubKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(u1.PubKeys) == 1 && subtle.ConstantTimeCompare(u1.PubKeys[0][:], pk[:]) != 1 {
+	if len(u1.PubKeys) == 1 && !bytes.Equal(u1.PubKeys[0][:], pk[:]) {
 		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u1.PubKeys, pk)
 	}
 	// Add another.
@@ -522,7 +559,7 @@ func TestUserPubKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(u2.PubKeys) == 2 && subtle.ConstantTimeCompare(u1.PubKeys[1][:], pk1[:]) == 1 {
+	if len(u2.PubKeys) == 2 && bytes.Equal(u1.PubKeys[1][:], pk1[:]) {
 		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u2.PubKeys, pk1)
 	}
 	// Delete a pubkey.
@@ -534,7 +571,7 @@ func TestUserPubKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(u3.PubKeys) == 1 && subtle.ConstantTimeCompare(u3.PubKeys[0][:], pk1[:]) == 1 {
+	if len(u3.PubKeys) == 1 && bytes.Equal(u3.PubKeys[0][:], pk1[:]) {
 		t.Fatalf("Expected the user to have a single pubkey which matches ours. Got %+v, pubkey %+v", u3.PubKeys, pk1)
 	}
 	// Make sure UserPubKeyRemove removes all copies of the pubkey from the set.
@@ -562,6 +599,9 @@ func TestUserPubKey(t *testing.T) {
 
 // TestUserSetTier ensures that UserSetTier works as expected.
 func TestUserSetTier(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -569,7 +609,7 @@ func TestUserSetTier(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Create a test user with the respective StripeID.
-	u, err := db.UserCreate(ctx, t.Name()+"@siasky.net", t.Name()+"pass", t.Name()+"sub", database.TierFree)
+	u, err := db.UserCreate(ctx, types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"pass", t.Name()+"sub", database.TierFree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -594,6 +634,9 @@ func TestUserSetTier(t *testing.T) {
 
 // TestUserStats ensures we report accurate statistics for users.
 func TestUserStats(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	ctx := context.Background()
 	dbName := test.DBNameForTest(t.Name())
 	db, err := test.NewDatabase(ctx, dbName)
@@ -607,12 +650,6 @@ func TestUserStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func(user *database.User) {
-		err := db.UserDelete(ctx, user)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}(u)
 
 	testUploadSizeSmall := int64(1 + fastrand.Intn(4*skynet.MiB-1))
 	testUploadSizeBig := int64(4*skynet.MiB + 1 + fastrand.Intn(4*skynet.MiB))
@@ -631,12 +668,20 @@ func TestUserStats(t *testing.T) {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
 	if stats.NumUploads != 1 {
-		t.Fatalf("Expected a total of %d uploads, got %d.", 1, stats.NumUploads)
+		t.Fatalf("Expected %d uploads, got %d.", 1, stats.NumUploads)
+	}
+	if stats.NumUploadsTotal != 1 {
+		t.Fatalf("Expected a total of %d uploads, got %d.", 1, stats.NumUploadsTotal)
 	}
 	if stats.BandwidthUploads != expectedUploadBandwidth {
 		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
 			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB,
 			stats.BandwidthUploads, stats.BandwidthUploads/skynet.MiB)
+	}
+	if stats.BandwidthUploadsTotal != expectedUploadBandwidth {
+		t.Fatalf("Expected total upload bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedUploadBandwidth, expectedUploadBandwidth/skynet.MiB,
+			stats.BandwidthUploadsTotal, stats.BandwidthUploadsTotal/skynet.MiB)
 	}
 
 	// Create a big upload.
@@ -651,7 +696,10 @@ func TestUserStats(t *testing.T) {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
 	if stats.NumUploads != 2 {
-		t.Fatalf("Expected a total of %d uploads, got %d.", 2, stats.NumUploads)
+		t.Fatalf("Expected %d uploads, got %d.", 2, stats.NumUploads)
+	}
+	if stats.NumUploadsTotal != 2 {
+		t.Fatalf("Expected a total of %d uploads, got %d.", 2, stats.NumUploadsTotal)
 	}
 	if stats.BandwidthUploads != expectedUploadBandwidth {
 		t.Fatalf("Expected upload bandwidth of %d (%d MiB), got %d (%d MiB).",
@@ -672,12 +720,20 @@ func TestUserStats(t *testing.T) {
 		t.Fatal("Failed to fetch user stats.", err)
 	}
 	if stats.NumDownloads != 1 {
-		t.Fatalf("Expected a total of %d downloads, got %d.", 1, stats.NumDownloads)
+		t.Fatalf("Expected %d downloads, got %d.", 1, stats.NumDownloads)
+	}
+	if stats.NumDownloadsTotal != 1 {
+		t.Fatalf("Expected a total of %d downloads, got %d.", 1, stats.NumDownloadsTotal)
 	}
 	if stats.BandwidthDownloads != expectedDownloadBandwidth {
 		t.Fatalf("Expected download bandwidth of %d (%d MiB), got %d (%d MiB).",
 			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MiB,
 			stats.BandwidthDownloads, stats.BandwidthDownloads/skynet.MiB)
+	}
+	if stats.BandwidthDownloadsTotal != expectedDownloadBandwidth {
+		t.Fatalf("Expected total download bandwidth of %d (%d MiB), got %d (%d MiB).",
+			expectedDownloadBandwidth, expectedDownloadBandwidth/skynet.MiB,
+			stats.BandwidthDownloadsTotal, stats.BandwidthDownloadsTotal/skynet.MiB)
 	}
 	// Register a big download.
 	bigDownload := int64(100*skynet.MiB + fastrand.Intn(4*skynet.MiB))

@@ -6,6 +6,7 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -14,14 +15,14 @@ func testUploadInfo(t *testing.T, at *test.AccountsTester) {
 	// Create two test users.
 	name := test.DBNameForTest(t.Name())
 	name2 := name + "2"
-	email := name + "@siasky.net"
-	email2 := name2 + "@siasky.net"
-	r, _, err := at.UserPOST(email, name+"_pass")
+	email := types.NewEmail(name + "@siasky.net")
+	email2 := types.NewEmail(name2 + "@siasky.net")
+	r, _, err := at.UserPOST(email.String(), name+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}
 	c1 := test.ExtractCookie(r)
-	r, _, err = at.UserPOST(email2, name2+"_pass")
+	r, _, err = at.UserPOST(email2.String(), name2+"_pass")
 	if err != nil {
 		t.Fatal(err)
 	}

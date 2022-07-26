@@ -7,16 +7,15 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
+	"github.com/SkynetLabs/skynet-accounts/build"
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/email"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
 	"github.com/SkynetLabs/skynet-accounts/metafetcher"
 	"github.com/joho/godotenv"
 	"github.com/stripe/stripe-go/v72"
-	"gitlab.com/SkynetLabs/skyd/build"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 
 	"github.com/sirupsen/logrus"
@@ -70,7 +69,6 @@ type (
 		PortalAddressAccounts string
 		ServerLockID          string
 		StripeKey             string
-		StripeTestMode        bool
 		JWKSFile              string
 		JWTTTL                int
 		EmailURI              string
@@ -145,7 +143,6 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 
 	if sk := os.Getenv(envStripeAPIKey); sk != "" {
 		config.StripeKey = sk
-		config.StripeTestMode = !strings.HasPrefix(sk, "sk_live_")
 	}
 	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
 		config.JWKSFile = jwks
@@ -231,7 +228,6 @@ func main() {
 	api.DashboardURL = config.PortalAddressAccounts
 	email.ServerLockID = config.ServerLockID
 	stripe.Key = config.StripeKey
-	api.StripeTestMode = config.StripeTestMode
 	jwt.AccountsJWKSFile = config.JWKSFile
 	jwt.TTL = config.JWTTTL
 	email.From = config.EmailFrom
@@ -264,5 +260,6 @@ func main() {
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
+	log.Printf("Starting Accounts.\nGitRevision: %v (built %v)\n", build.GitRevision, build.BuildTime)
 	logger.Fatal(server.ListenAndServe(3000))
 }

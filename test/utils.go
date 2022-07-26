@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/database"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
@@ -42,17 +43,17 @@ type (
 )
 
 // Header implementation.
-func (w ResponseWriter) Header() http.Header {
+func (w *ResponseWriter) Header() http.Header {
 	return http.Header{}
 }
 
 // Write implementation.
-func (w ResponseWriter) Write(b []byte) (int, error) {
+func (w *ResponseWriter) Write(b []byte) (int, error) {
 	return w.Buffer.Write(b)
 }
 
 // WriteHeader implementation.
-func (w ResponseWriter) WriteHeader(statusCode int) {
+func (w *ResponseWriter) WriteHeader(statusCode int) {
 	w.Status = statusCode
 }
 
@@ -73,14 +74,14 @@ func DBTestCredentials() database.DBCredentials {
 		User:     "admin",
 		Password: "aO4tV5tC1oU3oQ7u",
 		Host:     "localhost",
-		Port:     "17017",
+		Port:     "37017",
 	}
 }
 
 // CreateUser is a helper method which simplifies the creation of test users
-func CreateUser(at *AccountsTester, emailAddr, password string) (*User, error) {
+func CreateUser(at *AccountsTester, emailAddr types.Email, password string) (*User, error) {
 	// Create a user.
-	_, _, err := at.UserPOST(emailAddr, password)
+	_, _, err := at.UserPOST(emailAddr.String(), password)
 	if err != nil {
 		return nil, errors.AddContext(err, "user creation failed")
 	}
@@ -97,7 +98,7 @@ func CreateUser(at *AccountsTester, emailAddr, password string) (*User, error) {
 // function that deletes the user.
 func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, error) {
 	// Use the test's name as an email-compatible identifier.
-	email := DBNameForTest(name) + "@siasky.net"
+	email := types.NewEmail(DBNameForTest(name) + "@siasky.net")
 	password := hex.EncodeToString(fastrand.Bytes(16))
 	// Create a user.
 	u, err := CreateUser(at, email, password)
@@ -105,7 +106,7 @@ func CreateUserAndLogin(at *AccountsTester, name string) (*User, *http.Cookie, e
 		return nil, nil, err
 	}
 	// Log in with that user in order to make sure it exists.
-	r, _, err := at.LoginCredentialsPOST(email, password)
+	r, _, err := at.LoginCredentialsPOST(email.String(), password)
 	if err != nil {
 		return nil, nil, err
 	}

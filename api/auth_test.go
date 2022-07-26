@@ -1,7 +1,7 @@
 package api
 
 import (
-	"crypto/subtle"
+	"bytes"
 	"encoding/base32"
 	"encoding/base64"
 	"net/http"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/jwt"
+	"github.com/SkynetLabs/skynet-accounts/types"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
@@ -47,7 +48,7 @@ func TestTokenFromRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := jwt.TokenForUser(t.Name()+"@siasky.net", t.Name()+"_sub")
+	tk, err := jwt.TokenForUser(types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"_sub")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,14 +91,14 @@ func TestTokenFromRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if subtle.ConstantTimeCompare(tkB, tkBytes) == 0 {
+	if !bytes.Equal(tkB, tkBytes) {
 		t.Log(string(tkB), "\n", string(tkBytes))
 		t.Fatal("Token mismatch.")
 	}
 
 	// Token from request with a header and a cookie. Expect the header to take
 	// precedence.
-	tk2, err := jwt.TokenForUser(t.Name()+"2@siasky.net", t.Name()+"2_sub")
+	tk2, err := jwt.TokenForUser(types.NewEmail(t.Name()+"2@siasky.net"), t.Name()+"2_sub")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,11 +115,11 @@ func TestTokenFromRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if subtle.ConstantTimeCompare(tkB, tkBytes) == 1 {
+	if bytes.Equal(tkB, tkBytes) {
 		t.Fatal("Cookie token got precedence over header token.")
 	}
 
-	if subtle.ConstantTimeCompare(tkB, tkBytes2) == 0 {
+	if !bytes.Equal(tkB, tkBytes2) {
 		t.Fatal("Token mismatch.")
 	}
 
