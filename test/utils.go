@@ -29,16 +29,16 @@ const (
 )
 
 type (
+	// ResponseWriter is a testing ResponseWriter implementation.
+	ResponseWriter struct {
+		Buffer bytes.Buffer
+		Status int
+	}
 	// User is a helper struct that allows for easy cleanup from the DB.
 	// It's called User and not TestUser because lint won't allow that.
 	User struct {
 		*database.User
 		staticDB *database.DB
-	}
-	// ResponseWriter is a testing ResponseWriter implementation.
-	ResponseWriter struct {
-		Buffer bytes.Buffer
-		Status int
 	}
 )
 
@@ -62,20 +62,14 @@ func (tu *User) Delete(ctx context.Context) error {
 	return tu.staticDB.UserDelete(ctx, tu.User)
 }
 
-// DBNameForTest sanitizes the input string, so it can be used as an email or
-// sub.
-func DBNameForTest(s string) string {
-	return strings.ReplaceAll(s, "/", "_")
-}
-
-// DBTestCredentials sets the environment variables to what we have defined in Makefile.
-func DBTestCredentials() database.DBCredentials {
-	return database.DBCredentials{
-		User:     "admin",
-		Password: "aO4tV5tC1oU3oQ7u",
-		Host:     "localhost",
-		Port:     "37017",
+// Contains checks whether the given slice contains the given element.
+func Contains(haystack []string, needle string) bool {
+	for _, el := range haystack {
+		if needle == el {
+			return true
+		}
 	}
+	return false
 }
 
 // CreateUser is a helper method which simplifies the creation of test users
@@ -141,6 +135,22 @@ func CreateTestUpload(ctx context.Context, db *database.DB, user database.User, 
 	}
 	// Register an upload.
 	return RegisterTestUpload(ctx, db, user, skylink)
+}
+
+// DBNameForTest sanitizes the input string, so it can be used as an email or
+// sub.
+func DBNameForTest(s string) string {
+	return strings.ReplaceAll(s, "/", "_")
+}
+
+// DBTestCredentials sets the environment variables to what we have defined in Makefile.
+func DBTestCredentials() database.DBCredentials {
+	return database.DBCredentials{
+		User:     "admin",
+		Password: "aO4tV5tC1oU3oQ7u",
+		Host:     "localhost",
+		Port:     "37017",
+	}
 }
 
 // RandomSkylink generates a random skylink

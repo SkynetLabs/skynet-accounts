@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -672,6 +673,27 @@ func (at *AccountsTester) UploadInfo(sl string) ([]api.UploadInfo, int, error) {
 	r, err := at.Request(http.MethodGet, "/uploadinfo/"+sl, nil, nil, nil, &resp)
 	if err != nil {
 		return nil, r.StatusCode, err
+	}
+	return resp, r.StatusCode, nil
+}
+
+// UploadedSkylinks performs a `GET /uploadedskylinks` request.
+func (at *AccountsTester) UploadedSkylinks(from, to int64) (api.SkylinksList, int, error) {
+	queryParams := url.Values{}
+	queryParams.Set("from", strconv.FormatInt(from, 10))
+	queryParams.Set("to", strconv.FormatInt(to, 10))
+	var resp api.SkylinksList
+	r, err := at.Request(http.MethodGet, "/uploadedskylinks", queryParams, nil, nil, &resp)
+	if err != nil {
+		return api.SkylinksList{}, r.StatusCode, err
+	}
+	if r.StatusCode != http.StatusOK {
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return api.SkylinksList{}, http.StatusInternalServerError, errors.AddContext(err, "failed to read error")
+		}
+		_ = r.Body.Close()
+		return api.SkylinksList{}, r.StatusCode, errors.New(string(body))
 	}
 	return resp, r.StatusCode, nil
 }

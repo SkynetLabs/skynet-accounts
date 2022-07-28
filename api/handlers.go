@@ -28,6 +28,12 @@ import (
 )
 
 const (
+	// DefaultPageSizeSmall is the number of records we return when none is
+	// given and the objects are relatively large.
+	DefaultPageSizeSmall = 10
+	// DefaultPageSizeLarge is the number of records we return when none is
+	// given and the objects are relatively small.
+	DefaultPageSizeLarge = 1000
 	// LimitBodySizeSmall defines a size limit for requests that we don't expect
 	// to contain a lot of data.
 	LimitBodySizeSmall = 4 * skynet.KiB
@@ -898,7 +904,7 @@ func (api *API) userUploadsGET(u *database.User, w http.ResponseWriter, req *htt
 		return
 	}
 	offset, err1 := fetchOffset(req.Form)
-	pageSize, err2 := fetchPageSize(req.Form)
+	pageSize, err2 := fetchPageSize(req.Form, DefaultPageSizeSmall)
 	if err := errors.Compose(err1, err2); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -924,7 +930,7 @@ func (api *API) userDownloadsGET(u *database.User, w http.ResponseWriter, req *h
 		return
 	}
 	offset, err1 := fetchOffset(req.Form)
-	pageSize, err2 := fetchPageSize(req.Form)
+	pageSize, err2 := fetchPageSize(req.Form, DefaultPageSizeSmall)
 	if err := errors.Compose(err1, err2); err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)
 		return
@@ -1328,13 +1334,13 @@ func fetchOffset(form url.Values) (int, error) {
 }
 
 // fetchPageSize extracts the page size from the params and validates its value.
-func fetchPageSize(form url.Values) (int, error) {
+func fetchPageSize(form url.Values, defaultPageSize int) (int, error) {
 	pageSize, _ := strconv.Atoi(form.Get("pageSize"))
 	if pageSize < 0 {
 		return 0, errors.New("Invalid page size")
 	}
 	if pageSize == 0 {
-		pageSize = database.DefaultPageSize
+		pageSize = defaultPageSize
 	}
 	return pageSize, nil
 }
