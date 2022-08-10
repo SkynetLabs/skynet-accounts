@@ -10,6 +10,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+var (
+	// ErrInvalidTimePeriod is returned when the user provides an invalid time
+	// period, i.e. the start is after the end.
+	ErrInvalidTimePeriod = errors.New("invalid time period")
+)
+
 // Upload ...
 type Upload struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
@@ -117,6 +123,15 @@ func (db *DB) UnpinUploads(ctx context.Context, skylink Skylink, user User) (int
 	return ur.ModifiedCount, nil
 }
 
+// UpdateUpload modifies the given upload according to the given update.
+func (db *DB) UpdateUpload(ctx context.Context, id primitive.ObjectID, update bson.M) (int64, error) {
+	ur, err := db.staticUploads.UpdateByID(ctx, id, update)
+	if err != nil {
+		return 0, err
+	}
+	return ur.ModifiedCount, nil
+}
+
 // UploadsByUser fetches a page of uploads by this user and the total number of
 // such uploads.
 func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int) ([]UploadResponse, int64, error) {
@@ -129,6 +144,21 @@ func (db *DB) UploadsByUser(ctx context.Context, user User, offset, pageSize int
 	matchStage := bson.D{{"$match", bson.D{
 		{"user_id", user.ID},
 		{"unpinned", false},
+	}}}
+	return db.uploadsBy(ctx, matchStage, offset, pageSize)
+}
+
+// UploadsByPeriod fetches a page of uploads created during the given time range.
+func (db *DB) UploadsByPeriod(ctx context.Context, from, to time.Time, offset, pageSize int) ([]UploadResponse, int64, error) {
+	if err := validateOffsetPageSize(offset, pageSize); err != nil {
+		return nil, 0, err
+	}
+	if from.After(to) {
+		return nil, 0, ErrInvalidTimePeriod
+	}
+	matchStage := bson.D{{"$match", bson.D{
+		{"timestamp", bson.D{{"$gte", from}}},
+		{"timestamp", bson.D{{"$lte", to}}},
 	}}}
 	return db.uploadsBy(ctx, matchStage, offset, pageSize)
 }

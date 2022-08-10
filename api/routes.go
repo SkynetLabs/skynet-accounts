@@ -87,8 +87,9 @@ func (api *API) buildHTTPRoutes() {
 
 	api.staticRouter.GET("/.well-known/jwks.json", api.noAuth(api.wellKnownJWKSGET))
 
-	// Internal endpoint. Never expose these!
-	api.staticRouter.GET("/uploadinfo/:skylink", api.noAuth(api.uploadInfoGET))
+	// Internal endpoints. Never expose these!
+	api.staticRouter.GET("/uploadinfo/:skylink", api.noAuth(api._uploadInfoGET))
+	api.staticRouter.GET("/uploadedskylinks", api.noAuth(api._uploadedSkylinksGET))
 }
 
 // noAuth is a pass-through method used for decorating the request and
