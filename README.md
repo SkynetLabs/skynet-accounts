@@ -74,6 +74,59 @@ This will generate the needed information in an `output/` directory. The `COOKIE
 variables are in the `output/env` file and the JWKS is in the `output/jwks.json`
 file.
 
+### Solving a challenge
+
+`Accounts` support challenge-response based login and registration. The way that works is by first requesting a
+challenge (e.g. `GET /login`) and then sending a solution to that challenge (e.g. `POST /login`).
+
+Here is some sample code which demonstrates how to solve the challenge:
+
+```go
+package main
+
+import (
+	"crypto/ed25519"
+	"encoding/hex"
+	"fmt"
+
+	"github.com/SkynetLabs/skynet-accounts/database"
+	"go.sia.tech/siad/crypto"
+)
+
+type ChallengeResponse struct {
+	Response  []byte
+	Signature []byte
+}
+
+func solveChallenge(sk crypto.SecretKey, challenge, challengeType, recipient string) ChallengeResponse {
+	challengeBytes, _ := hex.DecodeString(challenge)
+	response := append([]byte{}, challengeBytes...)
+	response = append(response, []byte(challengeType)...)
+	response = append(response, []byte(recipient)...)
+	sig := ed25519.Sign(ed25519.PrivateKey(sk[:]), response)
+	return ChallengeResponse{
+		Response:  response,
+		Signature: sig,
+	}
+}
+
+func main() {
+	seedBytes, _ := hex.DecodeString("c7665dc134829be6953e4fc126f47bfabfbef2045e3b43cef2ed00879c545b8f")
+	var seed [32]byte
+	copy(seed[:], seedBytes)
+	sk, _ := crypto.GenerateKeyPairDeterministic(seed)
+
+	challengeHex := "818e7c0e2a3de6fbd71bebd53117dcc3959e069ffaf573724d5b27c1bc5357b4"
+	challengeType := database.ChallengeTypeLogin
+
+	recipient := "siasky.net"
+	resp := solveChallenge(sk, challengeHex, challengeType, recipient)
+
+	fmt.Println("Response:", hex.EncodeToString(resp.Response))
+	fmt.Println("Signature:", hex.EncodeToString(resp.Signature))
+}
+```
+
 ## License
 
 Skynet Accounts uses a custom [License](./LICENSE.md). The Skynet License is a source code license that allows you to
