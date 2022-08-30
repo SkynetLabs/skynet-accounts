@@ -180,8 +180,14 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 			t.Error(errors.AddContext(err, "failed to delete user in defer"))
 		}
 	}()
-	// Login with an existing user.
-	r, _, err := at.LoginCredentialsPOST(emailAddr.String(), password)
+	// Try to log in with an existing user but set a very long TTL.
+	_, _, err = at.LoginCredentialsPOSTWithTTL(emailAddr.String(), password, jwt.TTL+1)
+	if err == nil || !strings.Contains(err.Error(), "jwt ttl value is too high") {
+		t.Fatalf("Expected error 'jwt ttl value is too high', got '%v'", err)
+	}
+	// Login with an existing user. Set JWT TTL to 100 seconds.
+	ttl := 100
+	r, _, err := at.LoginCredentialsPOSTWithTTL(emailAddr.String(), password, ttl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,6 +195,11 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	c := test.ExtractCookie(r)
 	if c == nil {
 		t.Fatal("Expected a cookie.")
+	}
+	// Make sure the TTL of the cookie is correct.
+	if c.MaxAge != ttl {
+		t.Logf("cookie: %+v\n", c)
+		t.Fatalf("Expected maxAge %d, got %d", ttl, c.MaxAge)
 	}
 	// Login with an email with a different capitalisation.
 	// Expect this to succeed.
@@ -552,13 +563,13 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}
 		if tl.TierID != database.TierFree {
-			return fmt.Errorf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
+			return fmt.Errorf("expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
 		}
 		if tl.TierName != database.UserLimits[database.TierFree].TierName {
-			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
+			return fmt.Errorf("expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
 		}
 		if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
-			return fmt.Errorf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
+			return fmt.Errorf("expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
 		}
 		return nil
 	})

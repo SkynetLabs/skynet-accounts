@@ -23,7 +23,7 @@ func TestJWT(t *testing.T) {
 	email := types.NewEmail(t.Name() + "@siasky.net")
 	sub := "this is a sub"
 	fakeSub := "fake sub"
-	tk, err := TokenForUser(email, sub)
+	tk, err := TokenForUser(email, sub, 0)
 	if err != nil {
 		t.Fatal("failed to generate token:", err)
 	}

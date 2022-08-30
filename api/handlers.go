@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/mail"
@@ -147,6 +147,11 @@ type (
 		Password string      `json:"password"`
 	}
 
+	// loginTTL defines the lifetime of the JWT issued on login.
+	loginTTL struct {
+		TTL int `json:"TTL"`
+	}
+
 	// userUpdatePUT defines the fields of the User record that can be changed
 	// externally, e.g. by calling `PUT /user`.
 	userUpdatePUT struct {
@@ -229,9 +234,20 @@ func (api *API) loginGET(_ *database.User, w http.ResponseWriter, req *http.Requ
 // loginPOST starts a user session by issuing a cookie
 func (api *API) loginPOST(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Get the body, we might need to use it several times.
-	body, err := ioutil.ReadAll(io.LimitReader(req.Body, LimitBodySizeSmall))
+	body, err := io.ReadAll(io.LimitReader(req.Body, LimitBodySizeSmall))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "failed to read request body"), http.StatusBadRequest)
+		return
+	}
+
+	// Use custom JWT TTL if defined in the request.
+	var jwtTTL loginTTL
+	err = json.Unmarshal(body, &jwtTTL)
+	if err != nil || jwtTTL.TTL == 0 {
+		jwtTTL.TTL = jwt.TTL
+	}
+	if jwtTTL.TTL > jwt.TTL {
+		api.WriteError(w, fmt.Errorf("jwt ttl value is too high. it cannot exceed %d", jwt.TTL), http.StatusBadRequest)
 		return
 	}
 
@@ -244,7 +260,7 @@ func (api *API) loginPOST(_ *database.User, w http.ResponseWriter, req *http.Req
 	var payload credentialsPOST
 	err = json.Unmarshal(body, &payload)
 	if err == nil && payload.Email != "" && payload.Password != "" {
-		api.loginPOSTCredentials(w, req, payload.Email, payload.Password)
+		api.loginPOSTCredentials(w, req, payload.Email, payload.Password, jwtTTL.TTL)
 		return
 	}
 
@@ -252,7 +268,7 @@ func (api *API) loginPOST(_ *database.User, w http.ResponseWriter, req *http.Req
 	var chr database.ChallengeResponse
 	err = chr.LoadFromBytes(body)
 	if err == nil {
-		api.loginPOSTChallengeResponse(w, req, chr)
+		api.loginPOSTChallengeResponse(w, req, chr, jwtTTL.TTL)
 		return
 	}
 
@@ -262,7 +278,7 @@ func (api *API) loginPOST(_ *database.User, w http.ResponseWriter, req *http.Req
 }
 
 // loginPOSTChallengeResponse is a helper that handles logins with a challenge.
-func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Request, chr database.ChallengeResponse) {
+func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Request, chr database.ChallengeResponse, jwtTTL int) {
 	ctx := req.Context()
 	pk, _, err := api.staticDB.ValidateChallengeResponse(ctx, chr, database.ChallengeTypeLogin)
 	if err != nil {
@@ -274,11 +290,11 @@ func (api *API) loginPOSTChallengeResponse(w http.ResponseWriter, req *http.Requ
 		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
-	api.loginUser(w, u, false)
+	api.loginUser(w, u, jwtTTL, false)
 }
 
 // loginPOSTCredentials is a helper that handles logins with credentials.
-func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email types.Email, password string) {
+func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, email types.Email, password string, jwtTTL int) {
 	// Fetch the user with that email, if they exist.
 	u, err := api.staticDB.UserByEmail(req.Context(), email)
 	if err != nil {
@@ -292,7 +308,7 @@ func (api *API) loginPOSTCredentials(w http.ResponseWriter, req *http.Request, e
 		api.WriteError(w, ErrInvalidCredentials, http.StatusUnauthorized)
 		return
 	}
-	api.loginUser(w, u, false)
+	api.loginUser(w, u, jwtTTL, false)
 }
 
 // loginPOSTToken is a helper that handles logins via a token attached to the
@@ -327,9 +343,9 @@ func (api *API) loginPOSTToken(w http.ResponseWriter, req *http.Request) {
 
 // loginUser is a helper method that generates a JWT for the user and writes the
 // login cookie.
-func (api *API) loginUser(w http.ResponseWriter, u *database.User, returnUser bool) {
+func (api *API) loginUser(w http.ResponseWriter, u *database.User, jwtTTL int, returnUser bool) {
 	// Generate a JWT.
-	tk, err := jwt.TokenForUser(u.Email, u.Sub)
+	tk, err := jwt.TokenForUser(u.Email, u.Sub, jwtTTL)
 	if err != nil {
 		api.staticLogger.Debugf("Error creating a token for user: %v", err)
 		err = errors.AddContext(err, "failed to create a token for user")
@@ -416,7 +432,7 @@ func (api *API) registerPOST(_ *database.User, w http.ResponseWriter, req *http.
 		return
 	}
 	// Get the body, we might need to use it several times.
-	body, err := ioutil.ReadAll(io.LimitReader(req.Body, LimitBodySizeSmall))
+	body, err := io.ReadAll(io.LimitReader(req.Body, LimitBodySizeSmall))
 	if err != nil {
 		api.WriteError(w, errors.AddContext(err, "empty request body"), http.StatusBadRequest)
 		return
@@ -460,7 +476,7 @@ func (api *API) registerPOST(_ *database.User, w http.ResponseWriter, req *http.
 	if err != nil {
 		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
-	api.loginUser(w, u, true)
+	api.loginUser(w, u, 0, true)
 }
 
 // userGET returns information about an existing user and create it if it
@@ -695,7 +711,7 @@ func (api *API) userPOST(_ *database.User, w http.ResponseWriter, req *http.Requ
 	if err != nil {
 		api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 	}
-	api.loginUser(w, u, true)
+	api.loginUser(w, u, 0, true)
 }
 
 // userPUT allows changing some user information.
@@ -805,7 +821,7 @@ func (api *API) userPUT(u *database.User, w http.ResponseWriter, req *http.Reque
 			api.staticLogger.Debugln(errors.AddContext(err, "failed to send address confirmation email"))
 		}
 	}
-	api.loginUser(w, u, true)
+	api.loginUser(w, u, 0, true)
 }
 
 // userPubKeyDELETE removes a given pubkey from the list of pubkeys associated
@@ -893,7 +909,7 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 	// Check if the pubkey is already associated with the current user.
 	if u.HasKey(pk) {
 		// This pubkey already belongs to the user. Log them in and return.
-		api.loginUser(w, u, true)
+		api.loginUser(w, u, 0, true)
 		return
 	}
 	// Check if the pubkey from the UnconfirmedUserUpdate is already associated
@@ -934,7 +950,7 @@ func (api *API) userPubKeyRegisterPOST(u *database.User, w http.ResponseWriter, 
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.loginUser(w, updatedUser, true)
+	api.loginUser(w, updatedUser, 0, true)
 }
 
 // userUploadsGET returns all uploads made by the current user.
@@ -1008,7 +1024,7 @@ func (api *API) userConfirmGET(_ *database.User, w http.ResponseWriter, req *htt
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
-	api.loginUser(w, u, false)
+	api.loginUser(w, u, 0, false)
 }
 
 // userReconfirmPOST allows the user to request a new email address confirmation
@@ -1156,7 +1172,7 @@ func (api *API) userRecoverPOST(_ *database.User, w http.ResponseWriter, req *ht
 		api.WriteError(w, errors.AddContext(err, "failed to save password"), http.StatusInternalServerError)
 		return
 	}
-	api.loginUser(w, u, false)
+	api.loginUser(w, u, 0, false)
 }
 
 // trackUploadPOST registers a new upload in the system.
