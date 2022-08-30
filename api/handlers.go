@@ -243,12 +243,16 @@ func (api *API) loginPOST(_ *database.User, w http.ResponseWriter, req *http.Req
 	// Use custom JWT TTL if defined in the request.
 	var jwtTTL loginTTL
 	err = json.Unmarshal(body, &jwtTTL)
-	if err != nil || jwtTTL.TTL == 0 {
-		jwtTTL.TTL = jwt.TTL
+	if err != nil {
+		api.WriteError(w, err, http.StatusBadRequest)
+		return
 	}
 	if jwtTTL.TTL > jwt.TTL {
 		api.WriteError(w, fmt.Errorf("jwt ttl value is too high. it cannot exceed %d", jwt.TTL), http.StatusBadRequest)
 		return
+	}
+	if jwtTTL.TTL <= 0 {
+		jwtTTL.TTL = jwt.TTL
 	}
 
 	// Since we don't want to have separate endpoints for logging in with
