@@ -756,3 +756,13 @@ func (at *AccountsTester) StripePricesGET() ([]api.StripePrice, int, error) {
 	}
 	return resp, r.StatusCode, nil
 }
+
+/*** Promoter helpers ***/
+
+// PromoterSetTierPOST performs a `POST /promoter/settier/:sub`
+func (at *AccountsTester) PromoterSetTierPOST(sub string, tier int) (int, error) {
+	body := api.PromoterSetTierPOST{tier}
+	bodyBytes, err := json.Marshal(body)
+	r, err := at.Request(http.MethodPost, "/promoter/settier/"+sub, nil, bodyBytes, nil, nil)
+	return r.StatusCode, err
+}

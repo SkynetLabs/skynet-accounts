@@ -123,7 +123,9 @@ func (api *API) _uploadedSkylinksGET(_ *database.User, w http.ResponseWriter, re
 	defaultPeriod := 3 * dayInSecs
 	maxPeriod := 30 * dayInSecs
 	if to == 0 && from == 0 {
-		to = time.Now().UTC().Unix()
+		// We're adding a extra second to account for the rounding down that
+		// happens when truncating time to seconds.
+		to = time.Now().UTC().Add(time.Second).Unix()
 		from = to - defaultPeriod
 	} else if to == 0 {
 		to = from + defaultPeriod

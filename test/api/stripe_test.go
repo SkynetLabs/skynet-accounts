@@ -97,7 +97,7 @@ func testStripeBillingGET(t *testing.T, at *test.AccountsTester) {
 	if err != nil || s != http.StatusTemporaryRedirect {
 		t.Fatalf("Expected %d and no error, got %d '%s'", http.StatusTemporaryRedirect, s, err)
 	}
-	expectedRedirectPrefix := "https://billing.stripe.com/session/"
+	expectedRedirectPrefix := "https://billing.stripe.com/"
 	if !strings.HasPrefix(h.Get("Location"), expectedRedirectPrefix) {
 		t.Fatalf("Expected a redirect link with prefix '%s', got '%s'", expectedRedirectPrefix, h.Get("Location"))
 	}
@@ -128,7 +128,7 @@ func testStripeBillingPOST(t *testing.T, at *test.AccountsTester) {
 	if err != nil || s != http.StatusTemporaryRedirect {
 		t.Fatalf("Expected %d and no error, got %d '%s'", http.StatusTemporaryRedirect, s, err)
 	}
-	expectedRedirectPrefix := "https://billing.stripe.com/session/"
+	expectedRedirectPrefix := "https://billing.stripe.com/"
 	if !strings.HasPrefix(h.Get("Location"), expectedRedirectPrefix) {
 		t.Fatalf("Expected a redirect link with prefix '%s', got '%s'", expectedRedirectPrefix, h.Get("Location"))
 	}

@@ -78,6 +78,7 @@ func TestHandlers(t *testing.T) {
 		{name: "PublicAPIKeysUsage", test: testPublicAPIKeysUsage},
 		{name: "APIKeysAcceptance", test: testAPIKeysAcceptance},
 		{name: "UploadInfo", test: testUploadInfo},
+		{name: "PromoterSetTier", test: testHandlerPromoterSetTierPOST},
 	}
 
 	// Run subtests
@@ -303,7 +304,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	if uNewPassHash.PasswordHash == u.PasswordHash {
 		t.Fatal("Expected the user's password to change but it did not.")
 	}
-	// Check if we can login with the new password.
+	// Check if we can log in with the new password.
 	params := url.Values{}
 	params.Set("email", u.Email.String())
 	params.Set("password", pw)
@@ -552,13 +553,13 @@ func testUserLimits(t *testing.T, at *test.AccountsTester) {
 			return errors.AddContext(err, "failed to call /user/limits")
 		}
 		if tl.TierID != database.TierFree {
-			return fmt.Errorf("Expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
+			return fmt.Errorf("expected to get the results for tier id %d, got %d", database.TierFree, tl.TierID)
 		}
 		if tl.TierName != database.UserLimits[database.TierFree].TierName {
-			return fmt.Errorf("Expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
+			return fmt.Errorf("expected tier name '%s', got '%s'", database.UserLimits[database.TierFree].TierName, tl.TierName)
 		}
 		if tl.DownloadBandwidth != database.UserLimits[database.TierAnonymous].DownloadBandwidth {
-			return fmt.Errorf("Expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
+			return fmt.Errorf("expected download bandwidth '%d', got '%d'", database.UserLimits[database.TierAnonymous].DownloadBandwidth, tl.DownloadBandwidth)
 		}
 		return nil
 	})
