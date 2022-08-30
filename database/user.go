@@ -18,7 +18,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 const (
@@ -565,14 +564,6 @@ func (db *DB) UserSetTier(ctx context.Context, u *User, t int) error {
 	}
 	u.Tier = t
 	return nil
-}
-
-// Ping sends a ping command to verify that the client can connect to the DB and
-// specifically to the primary.
-func (db *DB) Ping(ctx context.Context) error {
-	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	return db.staticDB.Client().Ping(ctx2, readpref.Primary())
 }
 
 // managedUsersByField finds all users that have a given field value.
