@@ -196,9 +196,8 @@ func testHandlerLoginPOST(t *testing.T, at *test.AccountsTester) {
 	if c == nil {
 		t.Fatal("Expected a cookie.")
 	}
-	// Make sure the TTL of the cookie is correct.
-	if c.MaxAge != ttl {
-		t.Logf("cookie: %+v\n", c)
+	// Make sure the TTL of the cookie is correct. 2 seconds tolerance.
+	if c.MaxAge > ttl || c.MaxAge < ttl-2 {
 		t.Fatalf("Expected maxAge %d, got %d", ttl, c.MaxAge)
 	}
 	// Login with an email with a different capitalisation.
