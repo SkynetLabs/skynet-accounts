@@ -619,7 +619,7 @@ func TestUserSetTier(t *testing.T) {
 			t.Fatal(err)
 		}
 	}(u)
-	err = db.UserSetTier(ctx, u, database.TierPremium80)
+	err = db.UserSetTier(ctx, u, database.TierPremium80, true)
 	if err != nil {
 		t.Fatal(err)
 	}

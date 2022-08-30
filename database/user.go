@@ -551,13 +551,13 @@ func (db *DB) UserSetStripeID(ctx context.Context, u *User, stripeID string) err
 }
 
 // UserSetTier sets the user's tier to the given value.
-func (db *DB) UserSetTier(ctx context.Context, u *User, t int) error {
+func (db *DB) UserSetTier(ctx context.Context, u *User, t int, upsert bool) error {
 	if t <= TierAnonymous || t >= TierMaxReserved {
 		return errors.New("invalid tier value")
 	}
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{"tier": t}}
-	opts := options.Update().SetUpsert(true)
+	opts := options.Update().SetUpsert(upsert)
 	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")

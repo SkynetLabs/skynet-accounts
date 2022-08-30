@@ -763,6 +763,9 @@ func (at *AccountsTester) StripePricesGET() ([]api.StripePrice, int, error) {
 func (at *AccountsTester) PromoterSetTierPOST(sub string, tier int) (int, error) {
 	body := api.PromoterSetTierPOST{tier}
 	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
 	r, err := at.Request(http.MethodPost, "/promoter/settier/"+sub, nil, bodyBytes, nil, nil)
 	return r.StatusCode, err
 }

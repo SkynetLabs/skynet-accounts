@@ -17,8 +17,8 @@ type (
 	}
 )
 
-// _promoterSetTierPOST sets the given user's tier.
-func (api *API) _promoterSetTierPOST(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+// promoterSetTierPOST sets the given user's tier.
+func (api *API) promoterSetTierPOST(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	sub := ps.ByName("sub")
 	var body PromoterSetTierPOST
 	err := parseRequestBodyJSON(req.Body, LimitBodySizeLarge, &body)
@@ -36,7 +36,7 @@ func (api *API) _promoterSetTierPOST(_ *database.User, w http.ResponseWriter, re
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
-	err = api.staticDB.UserSetTier(ctx, u, body.Tier)
+	err = api.staticDB.UserSetTier(ctx, u, body.Tier, false)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
