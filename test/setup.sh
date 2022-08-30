@@ -20,7 +20,7 @@ docker run \
 	-p $MONGO_PORT:$MONGO_PORT \
 	-e MONGO_INITDB_ROOT_USERNAME=$MONGO_USER \
 	-e MONGO_INITDB_ROOT_PASSWORD=$MONGO_PASSWORD \
-	mongo:4.4.1 mongod --port=$MONGO_PORT --replSet=$MONGO_REPLSET 1>/dev/null 2>&1
+	mongo:4.4.2 mongod --port=$MONGO_PORT --replSet=$MONGO_REPLSET 1>/dev/null 2>&1
 
 # wait for mongo to start before we try to configure it
 printf '\n==WAIT FOR MONGO TO BE ACCESSIBLE==\n'

@@ -134,58 +134,58 @@ func TokenSerialize(t jwt.Token) ([]byte, error) {
 //
 // Header:
 //
-// {
-//  "alg": "RS256",
-//  "kid": "a2aa9739-d753-4a0d-87ee-61f101050277",
-//  "typ": "JWT"
-// }
+//	{
+//	 "alg": "RS256",
+//	 "kid": "a2aa9739-d753-4a0d-87ee-61f101050277",
+//	 "typ": "JWT"
+//	}
 //
 // Payload:
 //
-// {
-//  "exp": 1607594172,
-//  "iat": 1607593272,
-//  "iss": "https://siasky.net/",
-//  "jti": "1e5872ae-71d8-49ec-a550-4fc6163cbbf2",
-//  "nbf": 1607593272,
-//  "sub": "695725d4-a345-4e68-919a-7395cb68484c"
-//  "session": {
-//    "active": true,
-//    "authenticated_at": "2020-12-09T16:09:35.004003Z",
-//    "expires_at": "2020-12-10T16:09:35.004003Z",
-//    "issued_at": "2020-12-09T16:09:35.004042Z"
-//    "id": "9911ad26-e47f-4ec4-86a1-fbbc7fd5073e",
-//    "identity": {
-//      "id": "695725d4-a345-4e68-919a-7395cb68484c",
-//      "recovery_addresses": [
-//        {
-//          "id": "e2d847e1-1885-4edf-bccb-64b527b30096",
-//          "value": "ivaylo@nebulous.tech",
-//          "via": "email"
-//        }
-//      ],
-//      "schema_id": "default",
-//      "schema_url": "https://siasky.net/secure/.ory/kratos/public/schemas/default",
-//      "traits": {
-//        "email": "ivaylo@nebulous.tech",
-//        "name": {
-//          "first": "Ivaylo",
-//          "last": "Novakov"
-//        }
-//      },
-//      "verifiable_addresses": [
-//        {
-//          "id": "953b0c1a-def9-4fa2-af23-fb36c00768d2",
-//          "status": "pending",
-//          "value": "ivaylo@nebulous.tech",
-//          "verified": false,
-//          "verified_at": null,
-//          "via": "email"
-//        }
-//      ]
-//    },
-//  },
-// }
+//	{
+//	 "exp": 1607594172,
+//	 "iat": 1607593272,
+//	 "iss": "https://siasky.net/",
+//	 "jti": "1e5872ae-71d8-49ec-a550-4fc6163cbbf2",
+//	 "nbf": 1607593272,
+//	 "sub": "695725d4-a345-4e68-919a-7395cb68484c"
+//	 "session": {
+//	   "active": true,
+//	   "authenticated_at": "2020-12-09T16:09:35.004003Z",
+//	   "expires_at": "2020-12-10T16:09:35.004003Z",
+//	   "issued_at": "2020-12-09T16:09:35.004042Z"
+//	   "id": "9911ad26-e47f-4ec4-86a1-fbbc7fd5073e",
+//	   "identity": {
+//	     "id": "695725d4-a345-4e68-919a-7395cb68484c",
+//	     "recovery_addresses": [
+//	       {
+//	         "id": "e2d847e1-1885-4edf-bccb-64b527b30096",
+//	         "value": "ivaylo@nebulous.tech",
+//	         "via": "email"
+//	       }
+//	     ],
+//	     "schema_id": "default",
+//	     "schema_url": "https://siasky.net/secure/.ory/kratos/public/schemas/default",
+//	     "traits": {
+//	       "email": "ivaylo@nebulous.tech",
+//	       "name": {
+//	         "first": "Ivaylo",
+//	         "last": "Novakov"
+//	       }
+//	     },
+//	     "verifiable_addresses": [
+//	       {
+//	         "id": "953b0c1a-def9-4fa2-af23-fb36c00768d2",
+//	         "status": "pending",
+//	         "value": "ivaylo@nebulous.tech",
+//	         "verified": false,
+//	         "verified_at": null,
+//	         "via": "email"
+//	       }
+//	     ]
+//	   },
+//	 },
+//	}
 func ValidateToken(t string) (jwt.Token, error) {
 	token, err := jwt.Parse([]byte(t), jwt.WithKeySet(AccountsPublicJWKS))
 	if err != nil {

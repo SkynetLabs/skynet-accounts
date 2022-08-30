@@ -235,7 +235,7 @@ func TestUploadedSkylinks(t *testing.T) {
 	// One upload more than 3 days ago, another more than a month ago.
 	_, err1 := changeUploadTime(at.Ctx, at.DB, id1, daysAgo(33))
 	_, err2 := changeUploadTime(at.Ctx, at.DB, id2, daysAgo(4))
-	_, err3 := changeUploadTime(at.Ctx, at.DB, id3, daysAgo(3).Add(time.Second))
+	_, err3 := changeUploadTime(at.Ctx, at.DB, id3, daysAgo(3).Add(10*time.Second))
 	if err = errors.Compose(err1, err2, err3); err != nil {
 		t.Fatal(err)
 	}

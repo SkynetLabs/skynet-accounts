@@ -72,9 +72,20 @@ type (
 		PageSize int                         `json:"pageSize"`
 		Count    int                         `json:"count"`
 	}
-	// HealthGET is the response type of GET /health
+	// HealthGET is the response type of GET /health.
+	// Primary field is only populated on error.
 	HealthGET struct {
-		DBAlive bool `json:"dbAlive"`
+		DBAlive bool   `json:"dbAlive"`
+		Error   error  `json:"error,omitempty"`
+		Primary string `json:"primary,omitempty"`
+	}
+	// ExtendedHealth is a comprehensive set of information about the health
+	// of the DB node which includes some sensitive information. That's why we
+	// only log that data and we don't return it to callers.
+	ExtendedHealth struct {
+		Health                   *HealthGET      `json:"health"`
+		Hello                    *database.Hello `json:"hello"`
+		NumberSessionsInProgress int             `json:"numberSessionsInProgress"`
 	}
 	// LimitsGET provides public information of the various limits this
 	// portal has.
@@ -147,9 +158,38 @@ type (
 
 // healthGET returns the status of the service
 func (api *API) healthGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	var status HealthGET
+	// The public status that we'll return as response to this call.
+	status := &HealthGET{
+		DBAlive: true,
+	}
+	// Extended health status that we'll log for the benefit of the service's
+	// administrators.
+	extHealth := ExtendedHealth{
+		Health:                   status,
+		NumberSessionsInProgress: api.staticDB.NumberSessionsInProgress(),
+	}
+	// Ensure that we log the extended health information after we gather as
+	// much of it as possible.
+	defer func() {
+		b, err := json.Marshal(extHealth)
+		if err != nil {
+			api.staticLogger.Warnf("Failed to serialize extended health information. Error: %v", err)
+		}
+		api.staticLogger.Info(string(b))
+	}()
+
 	err := api.staticDB.Ping(req.Context())
-	status.DBAlive = err == nil
+	if err != nil {
+		status.DBAlive = false
+		status.Error = errors.Compose(status.Error, err)
+	}
+	hello, err := api.staticDB.Hello(req.Context())
+	if err != nil {
+		status.Error = errors.Compose(status.Error, err)
+	} else {
+		extHealth.Hello = hello
+	}
+
 	api.WriteJSON(w, status)
 }
 

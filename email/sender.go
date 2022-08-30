@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"go.mongodb.org/mongo-driver/mongo"
+
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/sirupsen/logrus"
 	"gitlab.com/NebulousLabs/errors"
@@ -97,9 +99,13 @@ func NewSender(ctx context.Context, db *database.DB, logger *logrus.Logger, deps
 	if err != nil {
 		return Sender{}, errors.AddContext(err, "failed to parse email config")
 	}
+	sess, err := db.NewSession()
+	if err != nil {
+		return Sender{}, err
+	}
 	return Sender{
 		staticConfig: c,
-		staticCtx:    ctx,
+		staticCtx:    mongo.NewSessionContext(ctx, sess),
 		staticDB:     db,
 		staticDeps:   deps,
 		staticLogger: logger,
