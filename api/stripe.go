@@ -45,6 +45,9 @@ var (
 	// session does not belong to the current user. This might be a mistake or
 	// might be an attempt for fraud.
 	ErrCheckoutDoesNotBelongToUser = errors.New("checkout session does not belong to current user")
+	// ErrStripeNotConfigured is returned when Stripe is not configured for this
+	// server but we try to call Stripe.
+	ErrStripeNotConfigured = errors.New("Stripe integration is not configured")
 	// ErrSubNotActive is returned when the given subscription is not active, so
 	// we cannot do anything based on it.
 	ErrSubNotActive = errors.New("subscription not active")
@@ -203,6 +206,10 @@ func (api *API) processStripeSub(ctx context.Context, s *stripe.Subscription) er
 // them to it. If the user does not yet have a Stripe customer, one is
 // registered for them.
 func (api *API) stripeBillingHANDLER(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	if stripe.Key == "" {
+		api.WriteError(w, ErrStripeNotConfigured, http.StatusBadRequest)
+		return
+	}
 	if u.StripeID == "" {
 		id, err := api.stripeCreateCustomer(req.Context(), u)
 		if err != nil {
@@ -228,6 +235,10 @@ func (api *API) stripeBillingHANDLER(u *database.User, w http.ResponseWriter, re
 // stripeCheckoutPOST creates a checkout session with the price specified in the
 // POST parameter with the same name. It returns the ID of the created session.
 func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	if stripe.Key == "" {
+		api.WriteError(w, ErrStripeNotConfigured, http.StatusBadRequest)
+		return
+	}
 	body := struct {
 		Price string `json:"price"`
 	}{}
@@ -281,6 +292,10 @@ func (api *API) stripeCheckoutPOST(u *database.User, w http.ResponseWriter, req 
 // is successful and results in a higher tier sub than the current one, we
 // upgrade the user to the new tier.
 func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	if stripe.Key == "" {
+		api.WriteError(w, ErrStripeNotConfigured, http.StatusBadRequest)
+		return
+	}
 	checkoutSessionID := ps.ByName("checkout_id")
 	subStr := "subscription"
 	subDiscountStr := "subscription.discount"
@@ -415,6 +430,10 @@ func (api *API) stripeCreateCustomer(ctx context.Context, u *database.User) (str
 
 // stripePricesGET returns a list of plans and prices.
 func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	if stripe.Key == "" {
+		api.WriteError(w, ErrStripeNotConfigured, http.StatusBadRequest)
+		return
+	}
 	var sPrices []StripePrice
 	params := &stripe.PriceListParams{
 		Active: stripe.Bool(true),
@@ -450,6 +469,10 @@ func (api *API) stripePricesGET(_ *database.User, w http.ResponseWriter, _ *http
 // stripeWebhookPOST handles various events issued by Stripe.
 // See https://stripe.com/docs/api/events/types
 func (api *API) stripeWebhookPOST(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	if stripe.Key == "" {
+		api.WriteError(w, ErrStripeNotConfigured, http.StatusBadRequest)
+		return
+	}
 	api.staticLogger.Tracef("Webhook request: %+v", req)
 	event, code, err := readStripeEvent(w, req)
 	if err != nil {
