@@ -54,7 +54,7 @@ func (api *API) userAndTokenByAPIKey(req *http.Request, ak database.APIKey) (*da
 	if err != nil {
 		return nil, nil, err
 	}
-	t, err := jwt.TokenForUser(u.Email, u.Sub)
+	t, err := jwt.TokenForUser(u.Email, u.Sub, 0)
 	return u, t, err
 }
 

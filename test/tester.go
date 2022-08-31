@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -322,7 +323,7 @@ func (at *AccountsTester) executeRequest(req *http.Request) (*http.Response, []b
 //
 // NOTE: The Body of the returned response is already read and closed.
 func processResponse(r *http.Response) (*http.Response, []byte, error) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	_ = r.Body.Close()
 	// For convenience, whenever we have a non-OK status we'll wrap it in an
 	// error.
@@ -349,6 +350,30 @@ func (at *AccountsTester) LoginCredentialsPOST(emailAddr, password string) (*htt
 	params.Set("email", emailAddr)
 	params.Set("password", password)
 	return at.post("/login", nil, params)
+}
+
+// LoginCredentialsPOSTWithTTL logs the user in and returns a response.
+//
+// NOTE: The Body of the returned response is already read and closed.
+func (at *AccountsTester) LoginCredentialsPOSTWithTTL(emailAddr, password string, ttl int) (*http.Response, []byte, error) {
+	body := struct {
+		Email    string
+		Password string
+		TTL      int
+	}{
+		emailAddr,
+		password,
+		ttl,
+	}
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, nil, err
+	}
+	r, err := at.Request(http.MethodPost, "/login", nil, b, nil, nil)
+	if err != nil {
+		return r, nil, err
+	}
+	return processResponse(r)
 }
 
 // LoginPubKeyGET performs `GET /login`
@@ -688,7 +713,7 @@ func (at *AccountsTester) UploadedSkylinks(from, to int64) (api.SkylinksList, in
 		return api.SkylinksList{}, r.StatusCode, err
 	}
 	if r.StatusCode != http.StatusOK {
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			return api.SkylinksList{}, http.StatusInternalServerError, errors.AddContext(err, "failed to read error")
 		}
