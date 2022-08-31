@@ -48,7 +48,7 @@ func TestTokenFromRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := jwt.TokenForUser(types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"_sub")
+	tk, err := jwt.TokenForUser(types.NewEmail(t.Name()+"@siasky.net"), t.Name()+"_sub", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestTokenFromRequest(t *testing.T) {
 
 	// Token from request with a header and a cookie. Expect the header to take
 	// precedence.
-	tk2, err := jwt.TokenForUser(types.NewEmail(t.Name()+"2@siasky.net"), t.Name()+"2_sub")
+	tk2, err := jwt.TokenForUser(types.NewEmail(t.Name()+"2@siasky.net"), t.Name()+"2_sub", 0)
 	if err != nil {
 		t.Fatal(err)
 	}

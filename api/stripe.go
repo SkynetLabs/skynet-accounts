@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -542,7 +541,7 @@ func (api *API) stripeWebhookPOST(_ *database.User, w http.ResponseWriter, req *
 // signature.
 func readStripeEvent(w http.ResponseWriter, req *http.Request) (*stripe.Event, int, error) {
 	req.Body = http.MaxBytesReader(w, req.Body, MaxBodyBytes)
-	payload, err := ioutil.ReadAll(req.Body)
+	payload, err := io.ReadAll(req.Body)
 	if err != nil {
 		err = errors.AddContext(err, "error reading request body")
 		return nil, http.StatusBadRequest, err
