@@ -31,6 +31,10 @@ func testHandlerPromoterSetTierPOST(t *testing.T, at *test.AccountsTester) {
 	if err == nil || !strings.Contains(err.Error(), "invalid tier") || status != http.StatusBadRequest {
 		t.Fatalf("Expected an 'invalid tier' error and %d, got %v and %d", http.StatusBadRequest, err, status)
 	}
+	status, err = at.PromoterSetTierPOST(u.Sub, database.TierAnonymous)
+	if err == nil || !strings.Contains(err.Error(), "invalid tier") || status != http.StatusBadRequest {
+		t.Fatalf("Expected an 'invalid tier' error and %d, got %v and %d", http.StatusBadRequest, err, status)
+	}
 
 	// Call the endpoint with a bad sub.
 	badsub := hex.EncodeToString(fastrand.Bytes(16))
@@ -49,5 +53,16 @@ func testHandlerPromoterSetTierPOST(t *testing.T, at *test.AccountsTester) {
 	}
 	if u1.Tier != database.TierPremium20 {
 		t.Fatalf("Expected tier %d, got %d", database.TierPremium20, u1.Tier)
+	}
+	status, err = at.PromoterSetTierPOST(u.Sub, database.TierFree)
+	if err != nil || status != http.StatusNoContent {
+		t.Fatal(status, err)
+	}
+	u1, err = at.DB.UserBySub(at.Ctx, u.Sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u1.Tier != database.TierFree {
+		t.Fatalf("Expected tier %d, got %d", database.TierFree, u1.Tier)
 	}
 }
