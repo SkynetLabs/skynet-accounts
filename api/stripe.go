@@ -342,7 +342,7 @@ func (api *API) stripeCheckoutIDGET(u *database.User, w http.ResponseWriter, req
 	}
 	// Promote the user, if needed.
 	if tier > u.Tier {
-		err = api.staticDB.UserSetTier(req.Context(), u, tier, true)
+		err = api.staticDB.UserSetTier(req.Context(), u, tier)
 		if err != nil {
 			api.WriteError(w, errors.AddContext(err, "failed to promote user"), http.StatusInternalServerError)
 			return

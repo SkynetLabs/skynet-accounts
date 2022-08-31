@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"go.mongodb.org/mongo-driver/mongo"
+
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/lib"
 	"github.com/SkynetLabs/skynet-accounts/skynet"
@@ -614,12 +616,12 @@ func TestUserSetTier(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(user *database.User) {
-		err := db.UserDelete(ctx, user)
+		err = db.UserDelete(ctx, user)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}(u)
-	err = db.UserSetTier(ctx, u, database.TierPremium80, true)
+	err = db.UserSetTier(ctx, u, database.TierPremium80)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -629,6 +631,16 @@ func TestUserSetTier(t *testing.T) {
 	}
 	if u2.Tier != database.TierPremium80 {
 		t.Fatalf("Expected tier %d got %d.\n", database.TierPremium80, u2.Tier)
+	}
+	// Set the tier of a non-existent user. Expect this to fail.
+	sub, _ := lib.GenerateUUID()
+	uNon := &database.User{
+		Email: types.Email(t.Name() + "_non@siasky.net"),
+		Sub:   sub,
+	}
+	err = db.UserSetTier(ctx, uNon, database.TierPremium80)
+	if err == nil || !errors.Contains(err, mongo.ErrNoDocuments) {
+		t.Fatalf("Expected '%v', got '%v'", mongo.ErrNoDocuments, err)
 	}
 }
 

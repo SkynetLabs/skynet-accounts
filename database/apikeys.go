@@ -12,7 +12,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 /**
@@ -250,8 +249,7 @@ func (db *DB) APIKeyUpdate(ctx context.Context, user User, akID primitive.Object
 		"user_id": user.ID,
 	}
 	update := bson.M{"$set": bson.M{"skylinks": skylinks}}
-	opts := options.Update().SetUpsert(false)
-	ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, opts)
+	ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
 	}
@@ -283,8 +281,7 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 		update = bson.M{
 			"$addToSet": bson.M{"skylinks": bson.M{"$each": addSkylinks}},
 		}
-		opts := options.Update().SetUpsert(false)
-		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, opts)
+		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update)
 		if err != nil {
 			return err
 		}
@@ -297,8 +294,7 @@ func (db *DB) APIKeyPatch(ctx context.Context, user User, akID primitive.ObjectI
 		update = bson.M{
 			"$pull": bson.M{"skylinks": bson.M{"$in": removeSkylinks}},
 		}
-		opts := options.Update().SetUpsert(false)
-		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update, opts)
+		ur, err := db.staticAPIKeys.UpdateOne(ctx, filter, update)
 		if err != nil {
 			return err
 		}

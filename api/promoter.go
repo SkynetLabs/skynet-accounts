@@ -36,7 +36,7 @@ func (api *API) promoterSetTierPOST(_ *database.User, w http.ResponseWriter, req
 		api.WriteError(w, err, http.StatusNotFound)
 		return
 	}
-	err = api.staticDB.UserSetTier(ctx, u, body.Tier, false)
+	err = api.staticDB.UserSetTier(ctx, u, body.Tier)
 	if err != nil {
 		api.WriteError(w, err, http.StatusInternalServerError)
 		return
