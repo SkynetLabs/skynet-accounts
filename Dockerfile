@@ -1,4 +1,4 @@
-FROM golang:1.18.4 as builder
+FROM golang:1.19.0 as builder
 LABEL maintainer="SkynetLabs <devs@skynetlabs.com>"
 
 WORKDIR /root
@@ -9,7 +9,7 @@ COPY . .
 
 RUN go mod download && make release
 
-FROM alpine:3.16.1
+FROM alpine:3.16.2
 LABEL maintainer="SkynetLabs <devs@skynetlabs.com>"
 
 COPY --from=builder /go/bin/skynet-accounts /usr/bin/skynet-accounts
