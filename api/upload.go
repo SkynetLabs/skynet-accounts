@@ -41,9 +41,9 @@ type (
 	}
 )
 
-// _uploadInfoGET returns detailed information about all uploads of a given
+// uploadInfoGET returns detailed information about all uploads of a given
 // skylink.
-func (api *API) _uploadInfoGET(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) uploadInfoGET(_ *database.User, w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 	skylink := ps.ByName("skylink")
 	if !database.ValidSkylink(skylink) {
 		api.WriteError(w, database.ErrInvalidSkylink, http.StatusBadRequest)
@@ -97,8 +97,8 @@ func (api *API) _uploadInfoGET(_ *database.User, w http.ResponseWriter, req *htt
 	api.WriteJSON(w, upInfos)
 }
 
-// _uploadedSkylinksGET lists all uploads from the given time range.
-func (api *API) _uploadedSkylinksGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// uploadedSkylinksGET lists all uploads from the given time range.
+func (api *API) uploadedSkylinksGET(_ *database.User, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	from, err := parseInt64Param(req, "from")
 	if err != nil {
 		api.WriteError(w, err, http.StatusBadRequest)

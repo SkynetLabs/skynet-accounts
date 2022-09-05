@@ -354,8 +354,7 @@ func (db *DB) UserCreateEmailConfirmation(ctx context.Context, uID primitive.Obj
 			"email_confirmation_token_expiration": exp,
 		},
 	}
-	opts := options.Update().SetUpsert(false)
-	_, err = db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	_, err = db.staticUsers.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return "", err
 	}
@@ -557,10 +556,12 @@ func (db *DB) UserSetTier(ctx context.Context, u *User, t int) error {
 	}
 	filter := bson.M{"_id": u.ID}
 	update := bson.M{"$set": bson.M{"tier": t}}
-	opts := options.Update().SetUpsert(true)
-	_, err := db.staticUsers.UpdateOne(ctx, filter, update, opts)
+	ur, err := db.staticUsers.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return errors.AddContext(err, "failed to update")
+	}
+	if ur.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
 	}
 	u.Tier = t
 	return nil

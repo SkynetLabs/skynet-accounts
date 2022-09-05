@@ -78,6 +78,7 @@ func TestHandlers(t *testing.T) {
 		{name: "PublicAPIKeysUsage", test: testPublicAPIKeysUsage},
 		{name: "APIKeysAcceptance", test: testAPIKeysAcceptance},
 		{name: "UploadInfo", test: testUploadInfo},
+		{name: "PromoterSetTier", test: testHandlerPromoterSetTierPOST},
 	}
 
 	// Run subtests
@@ -313,7 +314,7 @@ func testUserPUT(t *testing.T, at *test.AccountsTester) {
 	if uNewPassHash.PasswordHash == u.PasswordHash {
 		t.Fatal("Expected the user's password to change but it did not.")
 	}
-	// Check if we can login with the new password.
+	// Check if we can log in with the new password.
 	params := url.Values{}
 	params.Set("email", u.Email.String())
 	params.Set("password", pw)
