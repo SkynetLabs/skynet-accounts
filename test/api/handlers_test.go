@@ -40,12 +40,14 @@ type subtest struct {
 
 // TestHandlers is a meta test that sets up a test instance of accounts and runs
 // a suite of tests that ensure all handlers behave as expected.
+// This test suite uses Stripe as payments handler. For testing handlers that
+// rely on Promoter as payments handler, please use TestPromoterHandlers.
 func TestHandlers(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
 	dbName := test.DBNameForTest(t.Name())
-	at, err := test.NewAccountsTester(dbName, nil)
+	at, err := test.NewAccountsTester(dbName, api.PromoterStripe, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +80,6 @@ func TestHandlers(t *testing.T) {
 		{name: "PublicAPIKeysUsage", test: testPublicAPIKeysUsage},
 		{name: "APIKeysAcceptance", test: testAPIKeysAcceptance},
 		{name: "UploadInfo", test: testUploadInfo},
-		{name: "PromoterSetTier", test: testHandlerPromoterSetTierPOST},
 	}
 
 	// Run subtests

@@ -25,18 +25,31 @@ const (
 	DBTxnRetryCount = 5
 )
 
+const (
+	// PromoterStripe defines the value we look for in order to use Stripe as
+	// payment provider
+	PromoterStripe = Promoter("stripe")
+	// PromoterPromoter defines the value we look for in order to use Promoter
+	// as payment provider
+	PromoterPromoter = Promoter("promoter")
+)
+
 type (
 	// API is the central struct which gives us access to all subsystems.
 	API struct {
 		staticDB            *database.DB
 		staticDeps          lib.Dependencies
 		staticMF            *metafetcher.MetaFetcher
+		staticPromoter      Promoter
 		staticRouter        *httprouter.Router
 		staticLogger        *logrus.Logger
 		staticMailer        *email.Mailer
 		staticTierLimits    []TierLimitsPublic
 		staticUserTierCache *userTierCache
 	}
+
+	// Promoter defines a payment processor.
+	Promoter = string
 
 	// errorWrap is a helper type for converting an `error` struct to JSON.
 	errorWrap struct {
@@ -45,13 +58,13 @@ type (
 )
 
 // New returns a new initialised API.
-func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer) (*API, error) {
-	return NewCustom(db, mf, logger, mailer, &lib.ProductionDependencies{})
+func New(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer, promoter Promoter) (*API, error) {
+	return NewCustom(db, mf, logger, mailer, promoter, &lib.ProductionDependencies{})
 }
 
 // NewCustom returns a new initialised API and allows specifying custom
 // dependencies.
-func NewCustom(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer, deps lib.Dependencies) (*API, error) {
+func NewCustom(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logger, mailer *email.Mailer, promoter Promoter, deps lib.Dependencies) (*API, error) {
 	if db == nil {
 		return nil, errors.New("no DB provided")
 	}
@@ -77,6 +90,7 @@ func NewCustom(db *database.DB, mf *metafetcher.MetaFetcher, logger *logrus.Logg
 		staticDB:            db,
 		staticDeps:          deps,
 		staticMF:            mf,
+		staticPromoter:      promoter,
 		staticRouter:        router,
 		staticLogger:        logger,
 		staticMailer:        mailer,

@@ -78,10 +78,13 @@ func NewDatabaseWithDeps(ctx context.Context, dbName string, deps lib.Dependenci
 
 // NewAccountsTester creates and starts a new AccountsTester service.
 // Use the Close method for a graceful shutdown.
-func NewAccountsTester(dbName string, deps lib.Dependencies) (*AccountsTester, error) {
+func NewAccountsTester(dbName string, promoter api.Promoter, deps lib.Dependencies) (*AccountsTester, error) {
 	// Make sure we have valid dependencies.
 	if deps == nil {
 		deps = &lib.ProductionDependencies{}
+	}
+	if promoter == "" {
+		promoter = api.PromoterStripe
 	}
 	ctx := context.Background()
 	logger := NewDiscardLogger()
@@ -113,7 +116,7 @@ func NewAccountsTester(dbName string, deps lib.Dependencies) (*AccountsTester, e
 	mf := metafetcher.New(ctxWithCancel, db, logger)
 
 	// The server API encapsulates all the modules together.
-	server, err := api.NewCustom(db, mf, logger, email.NewMailer(db), deps)
+	server, err := api.NewCustom(db, mf, logger, email.NewMailer(db), promoter, deps)
 	if err != nil {
 		cancel()
 		return nil, errors.AddContext(err, "failed to build the API")

@@ -6,10 +6,43 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/SkynetLabs/skynet-accounts/api"
+	"gitlab.com/NebulousLabs/errors"
+
 	"github.com/SkynetLabs/skynet-accounts/database"
 	"github.com/SkynetLabs/skynet-accounts/test"
 	"gitlab.com/NebulousLabs/fastrand"
 )
+
+// TestPromoterHandlers covers all handlers which are directly dependent on
+// Promoter as payments handler.
+func TestPromoterHandlers(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	dbName := test.DBNameForTest(t.Name())
+	at, err := test.NewAccountsTester(dbName, api.PromoterPromoter, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if errClose := at.Close(); errClose != nil {
+			t.Error(errors.AddContext(errClose, "failed to close account tester"))
+		}
+	}()
+
+	// Specify subtests to run
+	tests := []subtest{
+		{name: "PromoterSetTier", test: testHandlerPromoterSetTierPOST},
+	}
+
+	// Run subtests
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.test(t, at)
+		})
+	}
+}
 
 // testHandlerUserPOST tests user creation and login.
 func testHandlerPromoterSetTierPOST(t *testing.T, at *test.AccountsTester) {

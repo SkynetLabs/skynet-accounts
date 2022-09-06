@@ -29,7 +29,7 @@ func TestUserTierCache(t *testing.T) {
 		t.SkipNow()
 	}
 	dbName := test.DBNameForTest(t.Name())
-	at, err := test.NewAccountsTester(dbName, nil)
+	at, err := test.NewAccountsTester(dbName, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func testWithDBSessionGeneral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testAPI, err := api.New(db, nil, &logrus.Logger{}, nil)
+	testAPI, err := api.New(db, nil, &logrus.Logger{}, nil, "")
 	if err != nil {
 		t.Fatal("Failed to instantiate API.", err)
 	}
@@ -288,7 +288,7 @@ func testWithDBSessionRetryOnWriteConflictGoroutines(t *testing.T) {
 	// This dependency adds a delay within the transaction that updates the
 	// user, causing a WriteConflict error.
 	dep := dependencies.NewDependencyUserPutMongoDelay()
-	at, err := test.NewAccountsTester(dbName, dep)
+	at, err := test.NewAccountsTester(dbName, "", dep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +301,7 @@ func testWithDBSessionRetryOnWriteConflictGoroutines(t *testing.T) {
 	// Ensure WithDBSession works with requests without bodies.
 	// This is a regression test. It panics with a nil pointer if we cannot
 	// properly handle requests with nil bodies.
-	testAPI, err := api.New(at.DB, nil, at.Logger, nil)
+	testAPI, err := api.New(at.DB, nil, at.Logger, nil, "")
 	if err != nil {
 		t.Fatal("Failed to instantiate API.", err)
 	}
@@ -357,7 +357,7 @@ func testWithDBSessionRetryOnWriteConflictRepeatedFailures(t *testing.T) {
 	// retrying api.DBTxnRetryCount times and the next one will succeed after
 	// retrying once.
 	dep := dependencies.NewDependencyMongoWriteConflictN(api.DBTxnRetryCount + 1)
-	at, err := test.NewAccountsTester(dbName, dep)
+	at, err := test.NewAccountsTester(dbName, "", dep)
 	if err != nil {
 		t.Fatal(err)
 	}
