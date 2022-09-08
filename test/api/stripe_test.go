@@ -60,7 +60,7 @@ func TestStripe(t *testing.T) {
 		"get checkout":  testStripeCheckoutIDGET,
 	}
 
-	at, err := test.NewAccountsTester(t.Name(), nil)
+	at, err := test.NewAccountsTester(t.Name(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

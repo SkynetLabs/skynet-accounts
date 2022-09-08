@@ -77,13 +77,15 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.POST("/user/recover/request", api.WithDBSession(api.noAuth(api.userRecoverRequestPOST)))
 	api.staticRouter.POST("/user/recover", api.WithDBSession(api.noAuth(api.userRecoverPOST)))
 
-	api.staticRouter.GET("/stripe/billing", api.WithDBSession(api.withAuth(api.stripeBillingHANDLER, false)))
-	// `POST /stripe/billing` is deprecated. Please use `GET /stripe/billing`.
-	api.staticRouter.POST("/stripe/billing", api.WithDBSession(api.withAuth(api.stripeBillingHANDLER, false)))
-	api.staticRouter.POST("/stripe/checkout", api.WithDBSession(api.withAuth(api.stripeCheckoutPOST, false)))
-	api.staticRouter.GET("/stripe/checkout/:checkout_id", api.WithDBSession(api.withAuth(api.stripeCheckoutIDGET, false)))
-	api.staticRouter.GET("/stripe/prices", api.noAuth(api.stripePricesGET))
-	api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noAuth(api.stripeWebhookPOST)))
+	if api.staticPromoter == PromoterStripe {
+		api.staticRouter.GET("/stripe/billing", api.WithDBSession(api.withAuth(api.stripeBillingHANDLER, false)))
+		// `POST /stripe/billing` is deprecated. Please use `GET /stripe/billing`.
+		api.staticRouter.POST("/stripe/billing", api.WithDBSession(api.withAuth(api.stripeBillingHANDLER, false)))
+		api.staticRouter.POST("/stripe/checkout", api.WithDBSession(api.withAuth(api.stripeCheckoutPOST, false)))
+		api.staticRouter.GET("/stripe/checkout/:checkout_id", api.WithDBSession(api.withAuth(api.stripeCheckoutIDGET, false)))
+		api.staticRouter.GET("/stripe/prices", api.noAuth(api.stripePricesGET))
+		api.staticRouter.POST("/stripe/webhook", api.WithDBSession(api.noAuth(api.stripeWebhookPOST)))
+	}
 
 	api.staticRouter.GET("/.well-known/jwks.json", api.noAuth(api.wellKnownJWKSGET))
 
@@ -91,7 +93,9 @@ func (api *API) buildHTTPRoutes() {
 	api.staticRouter.GET("/uploadinfo/:skylink", api.noAuth(api.uploadInfoGET))
 	api.staticRouter.GET("/uploadedskylinks", api.noAuth(api.uploadedSkylinksGET))
 
-	api.staticRouter.POST("/promoter/settier/:sub", api.noAuth(api.promoterSetTierPOST))
+	if api.staticPromoter == PromoterPromoter {
+		api.staticRouter.POST("/promoter/settier/:sub", api.noAuth(api.promoterSetTierPOST))
+	}
 }
 
 // noAuth is a pass-through method used for decorating the request and

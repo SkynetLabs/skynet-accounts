@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/SkynetLabs/skynet-accounts/api"
 	"github.com/SkynetLabs/skynet-accounts/build"
@@ -47,6 +48,11 @@ const (
 	// envPortal holds the name of the environment variable for the portal to
 	// use to fetch skylinks and sign JWT tokens.
 	envPortal = "PORTAL_DOMAIN"
+	// envPromoter holds the name of the environment variable which controls
+	// how premium accounts will be managed. Defaults to 'stripe'.
+	// Example 1: PROMOTER=stripe
+	// Example 2: PROMOTER=promoter
+	envPromoter = "PROMOTER"
 	// envServerDomain holds the name of the environment variable for the
 	// identity of this server. Example: eu-ger-1.siasky.net
 	envServerDomain = "SERVER_DOMAIN"
@@ -67,6 +73,7 @@ type (
 		DBCreds               database.DBCredentials
 		PortalName            string
 		PortalAddressAccounts string
+		Promoter              string
 		ServerLockID          string
 		StripeKey             string
 		JWKSFile              string
@@ -133,6 +140,23 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 	config.PortalName = "https://" + portal
 	config.PortalAddressAccounts = "https://account." + portal
 
+	config.Promoter = api.PromoterStripe
+	if val, ok := os.LookupEnv(envPromoter); ok {
+		switch strings.ToLower(val) {
+		case api.PromoterStripe:
+			// nothing to do
+		case api.PromoterPromoter:
+			config.Promoter = api.PromoterPromoter
+		default:
+			return ServiceConfig{}, errors.New("invalid value for env var " + envPromoter)
+		}
+	}
+	if config.Promoter == api.PromoterStripe {
+		if sk := os.Getenv(envStripeAPIKey); sk != "" {
+			config.StripeKey = sk
+		}
+	}
+
 	config.ServerLockID = os.Getenv(envServerDomain)
 	if config.ServerLockID == "" {
 		config.ServerLockID = config.PortalName
@@ -141,9 +165,6 @@ func parseConfiguration(logger *logrus.Logger) (ServiceConfig, error) {
 			` and it's not sharing its DB with other nodes.`, envServerDomain, config.ServerLockID)
 	}
 
-	if sk := os.Getenv(envStripeAPIKey); sk != "" {
-		config.StripeKey = sk
-	}
 	if jwks := os.Getenv(envAccountsJWKSFile); jwks != "" {
 		config.JWKSFile = jwks
 	} else {
@@ -256,7 +277,7 @@ func main() {
 	// we can determine their size.
 	mf := metafetcher.New(ctx, db, logger)
 	// Start the HTTP server.
-	server, err := api.New(db, mf, logger, mailer)
+	server, err := api.New(db, mf, logger, mailer, config.Promoter)
 	if err != nil {
 		log.Fatal(errors.AddContext(err, "failed to build the API"))
 	}
