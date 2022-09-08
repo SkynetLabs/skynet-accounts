@@ -12,7 +12,7 @@ All local secrets are loaded from a `.env` file in the root directory of the pro
 Those are (example values):
 
 ```.env
-ACCOUNTS_EMAIL_URI="smtps://<email address>:<email password>@<smtp server for email>/?skip_ssl_verify=true"
+ACCOUNTS_EMAIL_URI="smtps://<email address>:<email password>@<smtp server for email>/?skip_ssl_verify=false"
 ACCOUNTS_JWKS_FILE="/accounts/conf/jwks.json"
 COOKIE_DOMAIN="siasky.net"
 COOKIE_HASH_KEY="any thirty-two byte string is ok"
