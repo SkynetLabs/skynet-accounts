@@ -50,9 +50,9 @@ const (
 	envPortal = "PORTAL_DOMAIN"
 	// envPromoter holds the name of the environment variable which controls
 	// how premium accounts will be managed. Defaults to 'stripe'.
-	// Example 1: PROMOTER=stripe
-	// Example 2: PROMOTER=promoter
-	envPromoter = "PROMOTER"
+	// Example 1: ACCOUNTS_PROMOTER=stripe
+	// Example 2: ACCOUNTS_PROMOTER=promoter
+	envPromoter = "ACCOUNTS_PROMOTER"
 	// envServerDomain holds the name of the environment variable for the
 	// identity of this server. Example: eu-ger-1.siasky.net
 	envServerDomain = "SERVER_DOMAIN"
