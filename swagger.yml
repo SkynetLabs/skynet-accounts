@@ -1,0 +1,831 @@
+openapi: 3.0.0
+servers:
+  - description: Skynet Dev Server
+    url: https://account.siasky.dev/api/
+tags:
+  - name: Login
+    description: Login and logout flows
+    # externalDocs:
+    #   description: Find out more
+    #   url: 'http://swagger.io'
+  - name: User
+    description: User information - limits, statistics, etc.
+  - name: API Keys
+    description: API keys, both sponsor and general.
+  - name: MySky
+    description: Adding, removing, and checking MySky identities attached to current account.
+info:
+  description: Accounts is a service that manages user accounts for a Skynet portal
+  version: "1.1.1"
+  title: Accounts
+  contact:
+    email: devs@skynetlabs.com
+  license:
+    name: MIT
+    url: 'https://opensource.org/licenses/MIT'
+paths:
+  /health:
+    get:
+      tags:
+        - Server
+      summary: server health
+      operationId: healthGet
+      description: Get the current server health.
+      security:
+        - { } # No authentication needed.
+      responses:
+        '200':
+          description: server health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '500':
+          description: internal server error
+  /limits:
+    get:
+      tags:
+        - Portal
+      summary: tier limits
+      operationId: limitsGet
+      description: Get the tier limits applied by this portal.
+      security:
+        - { } # No authentication needed.
+      responses:
+        '200':
+          description: tier limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Limits'
+        '500':
+          description: internal server error
+  /login:
+    get:
+      tags:
+        - User
+      summary: login with a challenge
+      operationId: loginGet
+      description: Responds with a login challenge.
+      security:
+        - { } # No authentication needed.
+      parameters:
+        - in: query
+          name: pubkey
+          schema:
+            $ref: '#/components/schemas/PubKey'
+          required: true
+      responses:
+        '200':
+          description: a login challenge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Challenge'
+        '400':
+          description: invalid input
+        '500':
+          description: internal server error
+    post:
+      summary: creates a user session
+      operationId: login
+      tags:
+        - Login
+      description: |
+        Creates a new user session by identifying the user in one of three ways:
+         - username and password
+         - challenge-response (undocumented)
+         - authorization header (undocumented)
+      security:
+        - { } # No authentication needed
+      requestBody:
+        description: Login credentials.
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ChallengeResponse'
+                - $ref: '#/components/schemas/Credentials'
+      responses:
+        '204':
+          description: login successful
+          headers:
+            Skynet-Token:
+              schema:
+                type: string
+              description: |
+                Unencrypted JWT that can be used for authentication via the 
+                `Authorization: Bearer <JWT>` header.
+            Set-Cookie:
+              schema:
+                type: string
+              description: Sets an encrypted cookie that contains the user's JWT.
+              example: skynet-jwt=abcde12345; Path=/; HttpOnly; Secure
+        '400':
+          description: invalid input
+        '401':
+          description: invalid credentials, invalid token, or failed challenge-response
+        '500':
+          description: internal server error
+  /logout:
+    post:
+      summary: ends a user session
+      operationId: logout
+      tags:
+        - Login
+      description: ends a user session by invalidating the user's cookie
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '204':
+          description: logout successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Sets an encrypted cookie that contains the user's JWT.
+        '500':
+          description: internal server error
+  /register:
+    get:
+      tags:
+        - User
+      summary: register a new user
+      operationId: registerGet
+      description: Responds with a registration challenge.
+      security:
+        - { } # No authentication needed.
+      parameters:
+        - in: query
+          name: pubkey
+          schema:
+            $ref: '#/components/schemas/PubKey'
+          required: true
+      responses:
+        '200':
+          description: a registration challenge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Challenge'
+        '400':
+          description: invalid input
+        '500':
+          description: internal server error
+    post:
+      tags:
+        - User
+      summary: register a new user
+      operationId: registerPost
+      description: |
+        Allows user registration, either via challenge-response or with a set of
+        credentials.
+      security:
+        - { } # No authentication needed.
+      requestBody:
+        description: |
+          The request body should contain either a response to a challenge or 
+          a set of credentials.
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ChallengeResponse'
+                - $ref: '#/components/schemas/Credentials'
+      responses:
+        '200':
+          description: user limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Challenge'
+        '400':
+          description: invalid input
+        '500':
+          description: internal server error
+  /track/upload/{skylink}:
+    post:
+      tags:
+        - Track
+      summary: Track an upload.
+      description: Track an upload.
+      operationId: trackUpload
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+        - { }
+      parameters:
+        - in: path
+          name: skylink
+          required: true
+          schema:
+            $ref: '#/components/schemas/Skylink'
+      requestBody:
+        description: Uploader IP.
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                ip:
+                  required: [ ip ]
+                  type: string
+                  description: The IP address of the user.
+                  example: 192.168.0.1
+      responses:
+        '204':
+          description: no content
+        '400':
+          description: bad request
+        '500':
+          description: internal server error
+  /track/download/{skylink}:
+    post:
+      tags:
+        - Track
+      summary: Track a download.
+      description: Track a download.
+      operationId: trackDownload
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      parameters:
+        - in: path
+          name: skylink
+          required: true
+          schema:
+            $ref: '#/components/schemas/Skylink'
+      requestBody:
+        description: Downloaded bytes.
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                bytes:
+                  type: number
+                  description: The number of bytes that were downloaded.
+                  example: 1024
+      responses:
+        '204':
+          description: no content
+        '400':
+          description: bad request
+        '401':
+          description: unauthorized
+        '500':
+          description: internal server error
+  /track/registry/read:
+    post:
+      tags:
+        - Track
+      summary: ( NOOP ) Track a registry read.
+      description: ( NOOP ) Track a registry read.
+      operationId: trackRegRead
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '204':
+          description: no content
+        '400':
+          description: bad request
+        '500':
+          description: internal server error
+  /track/registry/write:
+    post:
+      tags:
+        - Track
+      summary: ( NOOP ) Track a registry write.
+      description: ( NOOP ) Track a registry write.
+      operationId: trackRegWrite
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '204':
+          description: no content
+        '400':
+          description: bad request
+        '500':
+          description: internal server error
+  /user:
+    get:
+      tags:
+        - User
+      summary: user
+      operationId: user
+      description: Get user's data.
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '200':
+          description: user data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: unauthorized
+        '404':
+          description: user not found
+        '500':
+          description: internal server error
+    post:
+      summary: creates a new user using email/password
+      operationId: userCreate
+      tags:
+        - User
+      description: Creates a new user with the given email and password
+      security:
+        - { } # No authentication needed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+        description: Login credentials.
+      responses:
+        '200':
+          description: user successfully created
+          headers:
+            Skynet-Token:
+              schema:
+                type: string
+              description: |
+                Unencrypted JWT that can be used for authentication via the 
+                `Authorization: Bearer <JWT>` header.
+            Set-Cookie:
+              schema:
+                type: string
+              description: Sets an encrypted cookie that contains the user's JWT.
+              example: skynet-jwt=abcde12345; Path=/; HttpOnly; Secure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: bad request
+        '500':
+          description: internal server error
+    put:
+      summary: updates a user
+      operationId: userUpdate
+      tags:
+        - User
+      description: Updates a user with the given email, password, and StripeID
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      requestBody:
+        description: User update fields.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: user successfully updated
+          headers:
+            Skynet-Token:
+              schema:
+                type: string
+              description: |
+                Unencrypted JWT that can be used for authentication via the 
+                `Authorization: Bearer <JWT>` header.
+            Set-Cookie:
+              schema:
+                type: string
+              description: Sets an encrypted cookie that contains the user's JWT.
+              example: skynet-jwt=abcde12345; Path=/; HttpOnly; Secure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: bad request
+        '500':
+          description: internal server error
+    delete:
+      summary: deletes a user
+      operationId: userDelete
+      tags:
+        - User
+      description: Deletes a user.
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '204':
+          description: user successfully deleted
+        '404':
+          description: not found
+        '500':
+          description: internal server error
+  /user/limits:
+    get:
+      tags:
+        - User
+      summary: user limits
+      operationId: userLimits
+      description: |
+        Returns all current limits imposed on the user. These include:
+         - tier ID
+         - tier name
+         - upload and download bandwidth
+         - registry actions delay
+         - maximum size of uploaded files
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+        - { } # Authentication is optional.
+      parameters:
+        - in: query
+          name: unit
+          description: |
+            unit for bandwidth representation, either "byte" for bytes per second
+            or anything else for bits per second
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: user limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserLimits'
+  /user/limits/{skylink}:
+    get:
+      tags:
+        - User
+      summary: user limits
+      operationId: userLimitsSkylink
+      description: |
+        Returns all current limits imposed on the user. These include:
+         - tier ID
+         - tier name
+         - upload and download bandwidth
+         - registry actions delay
+         - maximum size of uploaded files
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+        - { } # Authentication is optional.
+      parameters:
+        - in: query
+          name: unit
+          description: |
+            unit for bandwidth representation, either "byte" for bytes per second
+            or anything else for bits per second
+          required: false
+          schema:
+            type: string
+        - in: path
+          name: skylink
+          required: true
+          schema:
+            $ref: '#/components/schemas/Skylink'
+      responses:
+        '200':
+          description: user limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserLimits'
+  /user/stats:
+    description: TODO get
+  /user/pubkey/{pubKey}:
+    description: TODO delete
+  /user/pubkey/register:
+    description: TODO get post
+  /user/uploads:
+    description: TODO get
+  /user/uploads/{skylink}:
+    description: TODO delete
+  /user/downloads:
+    description: TODO get
+  /user/apikeys:
+    get:
+      tags:
+        - APIKeys
+      summary: List all API keys that belong to this user.
+      description: List API keys
+      operationId: apiKeysList
+      security:
+        - apiKeyAuth: [ ]
+        - bearerAuth: [ ]
+        - cookieAuth: [ ]
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArrayOfAPIKeys'
+        '400':
+          description: invalid input
+        '401':
+          description: invalid credentials, invalid token, or failed challenge-response
+        '500':
+          description: internal server error
+    post:
+      summary: creates a new API key
+      operationId: apikeyCreate
+      tags:
+        - User
+        - API Keys
+      description: Creates a new public or private API key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APIKeyCreate'
+        description: API creation request
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKey'
+        '400':
+          description: invalid input
+        '401':
+          description: invalid credentials, invalid token, or failed challenge-response
+        '500':
+          description: internal server error
+  /user/apikeys/{id}:
+    description: TODO get put patch delete
+  /user/confirm:
+    description: TODO get
+  /user/reconfirm:
+    description: TODO post
+  /user/recover/request:
+    description: TODO post
+  /user/recover:
+    description: TODO post
+  /stripe/billing:
+    description: TODO get post
+  /stripe/checkout:
+    description: TODO post
+  /stripe/checkout/{checkout_id}:
+    description: TODO post
+  /stripe/prices:
+    description: TODO get
+  /stripe/webhook:
+    description: TODO post
+  /.well-known/jwks.json:
+    description: TODO get
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: Skynet-Api-Key
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: skynet-jwt
+  schemas:
+    Health:
+      type: object
+      description: The health status of the current server.
+      properties:
+        DBAlive:
+          type: boolean
+    Limits:
+      type: object
+      description: The limits this portal puts on accounts based on their tier.
+      properties:
+        UserLimits:
+          type: array
+          items:
+            $ref: '#/components/schemas/TierLimit'
+    TierLimit:
+      type: object
+      description: The limits applied to account of a given tier.
+      properties:
+        tierName:
+          type: string
+          example: extreme
+        uploadBandwidth:
+          type: number
+          description: The allowed upload speed in bits per second.
+          example: 83886080
+        downloadBandwidth:
+          type: number
+          description: The allowed download speed in bits per second.
+          example: 335544320
+        maxUploadSize:
+          type: number
+          description: The maximum allowed upload size in bytes.
+          example: 10995116277760
+        maxNumberUploads:
+          type: number
+          description: |
+            The maximum allowed number of individual uploads, i.e. uploaded
+            skylinks. If the user exceeds this, their speed limits will be 
+            brought down to `anonymous` level.
+          example: 500000
+        registryDelay:
+          type: number
+          description: |
+            The delay the user suffers when interacting with the registry.
+          example: 0
+        storageLimit:
+          type: number
+          description: |
+            The maximum allowed storage (in bytes) the used can use before being
+            penalized. If the user exceeds this, their speed limits will be 
+            brought down to `anonymous` level.
+          example: 21990232555520
+    Credentials:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+        password:
+          $ref: '#/components/schemas/Password'
+    Skylink:
+      type: string
+      description: Skylink - a unique identifier of the uploaded content.
+      example: XAB_xFb-zDRG0YWHbr_vmc47phAvF6b8LQM-V_mh7Ts-Kw
+    Email:
+      type: string
+      format: email
+      example: tr4@gmail.com
+    Password:
+      type: string
+      format: password
+      example: me1fzxCVXqHeu619nuiMjlVQ
+    StripeID:
+      type: string
+      example: cus_M0WOqhLQj6siQL
+    Timestamp:
+      type: string
+      format: date-time
+      example: "2021-03-18T09:57:58.146Z"
+    User:
+      type: object
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+        sub:
+          description: Unique identifier of the user
+          type: string
+          example: 3726634b-22f3-480f-9df2-51caae1c2b57
+        tier:
+          description: |
+            Numberic representation of the tier level of the user's account.
+            Examples: 0 - unauthenticated, 1 - free, 2 - plus, 3 - pro, 4 - extreme.
+          type: integer
+          example: 1
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        migratedAt:
+          $ref: '#/components/schemas/Timestamp'
+        subscribedUntil:
+          $ref: '#/components/schemas/Timestamp'
+        subscriptionStatus:
+          description: |
+            Stripe subscription status. Defined by Stripe's API.
+            Possible values: [empty], active, canceled, incomplete, incomplete_expired, past_due, trialing, unpaid.
+            This status can be [empty] (meaning that it will be an empty string) if the user is not known to Stripe,
+            which is true for some free users.
+          type: string
+          example: active
+        subscriptionCancelAt:
+          $ref: '#/components/schemas/Timestamp'
+        subscriptionCancelAtPeriodEnd:
+          description: |
+            True, if the user's subscription is not set to auto-renew after the current subscription period expires.
+          type: boolean
+          example: false
+        stripeCustomerId:
+          type: string
+          example: cus_J8cb7YkqBIoPjK
+        quotaExceeded:
+          description: |
+            True, when the user has stored either more data (as cumulative size) or number of uploads on Skynet than 
+            their tier allows.
+          type: boolean
+          example: false
+        emailConfirmed:
+          type: boolean
+          example: false
+    UserUpdate:
+      type: object
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+        password:
+          $ref: '#/components/schemas/Password'
+        StripeID:
+          $ref: '#/components/schemas/StripeID'
+    UserLimits:
+      type: object
+      properties:
+        tierID:
+          type: integer
+          example: 1
+        tierName:
+          type: string
+          example: "plus"
+        upload:
+          type: integer
+        download:
+          type: integer
+        maxUploadSize:
+          type: integer
+        registry:
+          type: integer
+    APIKeyCreate:
+      type: object
+      properties:
+        public:
+          type: boolean
+          description: |
+            specifies whether the API key is public or private. defaults to private
+          example: true
+        skylinks:
+          type: array
+          description: |
+            list of skylinks, covered by this API key. only allowed for public
+            API keys
+          items:
+            type: string
+            description: skylink
+          example: [ "AAAKvcU4_Jhzd907PyU2Tnup7INBQCh-RNr6PmvQQ0lTzQ", "_A3dyZt5FAD4Trdn800eTxAPuZVZsvQalmK-vL-l14KIsg" ]
+    APIKey:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 6228cecc2e3367f7d2690c21
+        public:
+          type: boolean
+          description: |
+            specifies whether the API key is public or private. defaults to private
+          example: true
+        key:
+          type: string
+          description: the API key itself, only shown on API key creation
+        skylinks:
+          type: array
+          description: |
+            list of skylinks, covered by this API key. only allowed for public
+            API keys
+          items:
+            type: string
+            description: skylink
+          example: [ "AAAKvcU4_Jhzd907PyU2Tnup7INBQCh-RNr6PmvQQ0lTzQ", "_A3dyZt5FAD4Trdn800eTxAPuZVZsvQalmK-vL-l14KIsg" ]
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+    ArrayOfAPIKeys:
+      type: array
+      items:
+        $ref: '#/components/schemas/APIKey'
+    PubKey:
+      type: string
+      description: The public key of the user.
+      format: hex
+      example: 9fd15482c4d10c581db5314ef00aa51c35e2b144c79c9f12c31b430cc045f886
+    Challenge:
+      type: object
+      properties:
+        challenge:
+          type: string
+          description: the challenge that needs to be solved
+          example: 818e7c0e2a3de6fbd71bebd53117dcc3959e069ffaf573724d5b27c1bc5357b4
+    ChallengeResponse:
+      type: object
+      properties:
+        response:
+          type: string
+          description: solution to the challege
+          example: 818e7c0e2a3de6fbd71bebd53117dcc3959e069ffaf573724d5b27c1bc5357b4736b796e65742d706f7274616c2d7265676973746572736961736b792e78797a
+        signature:
+          type: string
+          description: |
+            signature of the response signed with the private key of the user
+          example: f5469214e0195de537737cee0b47f2178c0e5fcb5fa3d2f1ea0cfc08c07ff5517d4424fe9f24ae9d9e6735bd1e6ff545042c23bb827d799873293c25681f9e03
